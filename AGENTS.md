@@ -90,7 +90,7 @@ Full command groupings, deny-list rules, and the tool-by-tool permission matrix 
 
 ## Dependencies
 
-Runtime deps are declared in [pyproject.toml](pyproject.toml) `[project.dependencies]`; dev-only tools (`pytest`, `pytest-asyncio`, `black`) live under `[project.optional-dependencies].dev` and install via `pip install -e '.[dev]'`. A legacy [requirements.txt](requirements.txt) mirror is kept for the Docker build. Grouped:
+Runtime deps are declared in [pyproject.toml](pyproject.toml) `[project.dependencies]`; dev-only tools (`pytest`, `pytest-asyncio`, `black`) live under `[project.optional-dependencies].dev` and install via `pip install -e '.[dev]'`. `pyproject.toml` is the single source of truth for the Docker build too — [Dockerfile](Dockerfile) runs `pip install .` (with CPU-only `torch` and `transformers`/`accelerate` pre-installed to avoid the ~1.7 GB CUDA pull). Grouped:
 
 - **TUI + rendering** — `textual`, `rich`, `art`
 - **Config** — `pydantic`, `pydantic-settings`, `python-dotenv`
