@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "name": "default",
+  "version": "1.0.0",
+  "description": "Default agent profile — full access to all built-in tools",
+  "default_model_tier": "large",
+  "required_tools": [],
+  "base": null,
+  "permissions": {
+    "allow_tools": ["builtin__*"],
+    "deny_tools": []
+  }
+}

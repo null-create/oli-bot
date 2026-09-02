@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oli-bot"
+version = "0.1.0"
+description = "An extensible, terminal-based AI agent — Textual TUI + OpenAI-compatible REST API with MCP tool integration."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "null-create" }]
+keywords = ["ai", "agent", "llm", "cli", "tui", "mcp", "ollama", "openai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Terminals",
+]
+dependencies = [
+    "textual>=8.2,<9",
+    "rich>=15.0,<16",
+    "art>=6.5",
+    "pydantic>=2.12,<3",
+    "pydantic-settings>=2.10,<3",
+    "python-dotenv>=1.0",
+    "ollama>=0.6",
+    "openai>=2.0,<3",
+    "huggingface_hub>=1.0,<2",
+    "transformers>=4.40",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "mcp>=2.0,<3",
+    "ddgs>=9.0",
+    "httpx>=0.27",
+    "beautifulsoup4>=4.13",
+    "wikipedia>=1.4",
+    "requests>=2.31",
+    "arxiv>=4.0",
+    "Pillow>=10.0",
+    "googlesearch-python>=1.2",
+    "stackapi>=0.3",
+    "search-engine-parser>=0.6",
+    "gnews>=0.4",
+    "newspaper4k>=0.9",
+    "aiohttp>=3.10",
+    "PyYAML>=6.0",
+    'exceptiongroup>=1.1; python_version < "3.11"',
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "black>=26.5.1",
+]
+
+[project.scripts]
+oli = "oli_bot.chat:main"
+oli-server = "oli_bot.api_server:main"
+
+[project.urls]
+Homepage = "https://github.com/null-create/oli-bot"
+Repository = "https://github.com/null-create/oli-bot"
+
+[tool.setuptools.packages.find]
+include = ["oli_bot*"]
+exclude = ["tests*", "venv*", "logs*", "notes*"]
+
+[tool.setuptools.package-data]
+oli_bot = [
+    "agents.yaml",
+    "profiles/**/*.md",
+    "profiles/**/*.json",
+]

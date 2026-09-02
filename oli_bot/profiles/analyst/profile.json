@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "name": "analyst",
+  "version": "1.0.0",
+  "description": "Specialist data-analyst agent — extracts claims, triangulates sources, flags tensions",
+  "default_model_tier": "large",
+  "required_tools": [
+    "builtin__read_file",
+    "builtin__glob",
+    "builtin__grep",
+    "builtin__list_directory",
+    "builtin__tree",
+    "builtin__fetch",
+    "builtin__compare",
+    "builtin__think",
+    "builtin__todowrite",
+    "builtin__notebook"
+  ],
+  "base": null,
+  "permissions": {
+    "allow_tools": [
+      "builtin__read_file",
+      "builtin__glob",
+      "builtin__grep",
+      "builtin__list_directory",
+      "builtin__tree",
+      "builtin__fetch",
+      "builtin__compare",
+      "builtin__think",
+      "builtin__todowrite",
+      "builtin__notebook"
+    ],
+    "deny_tools": [
+      "builtin__write_file",
+      "builtin__edit_file",
+      "builtin__download_file",
+      "builtin__upload_file",
+      "builtin__run_command",
+      "builtin__git",
+      "builtin__websearch",
+      "builtin__search_wikipedia",
+      "builtin__search_github",
+      "builtin__search_arxiv"
+    ]
+  }
+}

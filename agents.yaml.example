@@ -1,0 +1,19 @@
+agent-pools:
+  - name: default
+    description: |
+      The default agent pool for the system. Used to route tasks to subagents by the root orchestration agent. 
+      This pool is used when no specific agent pool is specified for a task.
+    agents:
+      - name: analyst-agent
+        model: gemma4:12b
+        profile: analyst
+        backend:
+          type: ollama
+          base_url: http://localhost:11434
+      - name: search-agent
+        model: Qwen/Qwen3.6-27B
+        profile: search-agent
+        backend:
+          type: huggingface
+          base_url: https://api-inference.huggingface.co
+          api_key: ${OLI_HUGGINGFACE_API_KEY}
