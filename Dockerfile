@@ -23,9 +23,11 @@ RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
 RUN chown -R appuser:appuser /app
 
 # ── PyTorch (CPU-only) ────────────────────────────────────────────────────────
-# Install CPU-only PyTorch BEFORE requirements.txt so the much larger CUDA
-# build (~1.7 GB) is never pulled.  torch is excluded from requirements.txt
-# and installed here instead.
+# Install CPU-only PyTorch so the much larger CUDA build (~1.7 GB) is never
+# pulled.  torch is not declared in pyproject.toml (the Transformers backend
+# imports it lazily); it is pinned and installed here instead.  Because the
+# CPU wheel is already present, the later `pip install .` will see
+# torch>=2.10 as satisfied and skip re-resolving it.
 RUN pip install --no-cache-dir \
     torch>=2.10.0 \
     --index-url https://download.pytorch.org/whl/cpu
@@ -33,12 +35,10 @@ RUN pip install --no-cache-dir \
 # ── Transformers and accelerate ───────────────────────────────────────────────
 RUN pip install --no-cache-dir transformers>=4.40 accelerate>=0.2
 
-# ── Copy remaining requirements and install ───────────────────────────────────
-COPY requirements-img.txt .
-RUN pip install --no-cache-dir -r requirements-img.txt
-
-# Copy application code and install as an editable package so the `oli` and
-# `oli-server` console scripts are available on PATH.
+# ── Install the package ───────────────────────────────────────────────────────
+# pyproject.toml is the single source of truth for all remaining dependencies.
+# Installing from source (rather than editable) bakes a real wheel into the
+# image and makes the `oli` / `oli-server` console scripts available on PATH.
 COPY . .
 RUN pip install --no-cache-dir .
 
