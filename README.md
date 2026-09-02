@@ -54,20 +54,28 @@ These aren't shipped yet, but they're the directions we think are the most genui
 - **Sensitivity-aware routing.** A per-agent `data_sensitivity` / `egress` field in `agents.yaml` (e.g. `local-only`, `redact-on-return`, `unrestricted`) that governs not just where a task runs, but what's allowed to flow back into a remote root's context — the actual enforcement mechanism behind the "frontier root, local subagent" privacy pattern.
 - **Per-dispatch cost/latency telemetry.** A `/pool stats` command surfacing spend and time by agent over a session, useful specifically because oli's pools are expected to mix free local models with paid remote ones.
 
+## Installation
+
+Requires Python 3.11+. Install the package (this adds the `oli` and
+`oli-server` entry points to your PATH):
+
+```bash
+pip install -e .        # editable dev install
+# or, from PyPI once published:
+pip install oli-bot
+```
+
 ## Quick start
 
 ```bash
-# Install
-pip install -r requirements.txt
-
 # Run (defaults to Ollama with offline mode on)
-python chat.py
+oli
 
 # Run with OpenAI
-OLI_BACKEND=openai OLI_OPENAI_API_KEY=sk-... python chat.py
+OLI_BACKEND=openai OLI_OPENAI_API_KEY=sk-... oli
 
 # Run with a profile
-python chat.py --profile search-agent
+oli --profile search-agent
 ```
 
 ### CLI flags
@@ -130,29 +138,29 @@ docker-compose up --build
 
 The Compose file mounts `./profiles` and `~/.config/oli` to persist state across restarts. It builds a single shared image and starts **two services** from it:
 
-- `api` — the OpenAI-compatible API server (`api_server.py`), published on `localhost:8000`.
-- `agent` — the interactive Textual TUI (`chat.py`), attached to the terminal with a TTY.
+- `api` — the OpenAI-compatible API server, published on `localhost:8000`.
+- `agent` — the interactive Textual TUI, attached to the terminal with a TTY.
 
 ## API server
 
 The agent harness can be exposed over an OpenAI-compatible REST API, so existing Python SDKs and HTTP callers can drive it without the TUI:
 
 ```bash
-# From source
-python api_server.py
+# From source (editable install)
+oli-server
 
 # Or configure endpoint via env
-OLI_API_HOST=0.0.0.0 OLI_API_PORT=8000 python api_server.py
+OLI_API_HOST=0.0.0.0 OLI_API_PORT=8000 oli-server
 ```
 
 It listens on `0.0.0.0:8000` by default and serves:
 
-| Endpoint                    | Description                                              |
-| --------------------------- | -------------------------------------------------------- |
-| `GET /v1/models`            | List the active model                                    |
-| `POST /v1/chat/completions` | Non-streaming chat completion                             |
+| Endpoint                                          | Description                                  |
+| ------------------------------------------------- | -------------------------------------------- |
+| `GET /v1/models`                                  | List the active model                        |
+| `POST /v1/chat/completions`                       | Non-streaming chat completion                |
 | `POST /v1/chat/completions` with `"stream": true` | Server-sent-event (SSE) streaming completion |
-| `GET /health`               | Liveness probe                                           |
+| `GET /health`                                     | Liveness probe                               |
 
 Conversations are **stateless** (like real OpenAI): each `/v1/chat/completions` request carries its full message history. The server holds a single process-private `Agent` instance (backend, tool registrations, MCP wiring) shared across requests, and serializes concurrent in-flight requests in-process. Because there is no human to prompt at permission time, the API auto-allows permission scopes for the current request; offline and dry-run gating from `AppConfig` still apply.
 
@@ -201,19 +209,19 @@ The `openai` SDK needs an `api_key`; pass a placeholder — the server does not 
 
 ### API configuration
 
-| Env var          | Default     | Description                             |
-| ---------------- | ----------- | --------------------------------------- |
-| `OLI_API_HOST`   | `0.0.0.0`   | Bind address                            |
-| `OLI_API_PORT`   | `8000`      | Listen port                             |
-| `OLI_API_PROFILE`| `default`   | Agent profile to load                   |
-| `OLI_API_MODE`   | `agent`     | Agent mode (`agent`, `ask`, `plan`, `chat`) |
+| Env var           | Default   | Description                                 |
+| ----------------- | --------- | ------------------------------------------- |
+| `OLI_API_HOST`    | `0.0.0.0` | Bind address                                |
+| `OLI_API_PORT`    | `8000`    | Listen port                                 |
+| `OLI_API_PROFILE` | `default` | Agent profile to load                       |
+| `OLI_API_MODE`    | `agent`   | Agent mode (`agent`, `ask`, `plan`, `chat`) |
 
 `max_tokens` / `temperature` request fields are accepted but best-effort: the agent tool loop reads them from `AppConfig` (configured via `OLI_*` env or `settings.json`).
 
 ## Development
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e '.[dev]'
 pytest
 ```
 
