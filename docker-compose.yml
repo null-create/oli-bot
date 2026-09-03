@@ -7,25 +7,13 @@ services:
     container_name: oli-api
     entrypoint: ["oli-server"]
     env_file: .env
+    environment:
+      - OLI_LOG_FILE=/app/logs/backend.ndjson
     ports:
-      - "8000:8000"
+      - "9734:9734"
     restart: "no"
+    working_dir: /app
     volumes:
       - ./oli_bot/profiles:/usr/local/lib/python3.12/site-packages/oli_bot/profiles
-      - ~/.config/oli:~/.config/oli
-
-  agent:
-    image: oli-bot:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: oli-bot
-    entrypoint: ["oli"]
-    env_file: .env
-    stdin_open: true
-    tty: true
-    command: ["--url", "http://localhost:11434"]
-    restart: "no"
-    volumes:
-      - ./oli_bot/profiles:/usr/local/lib/python3.12/site-packages/oli_bot/profiles
-      - ~/.config/oli:~/.config/oli
+      - ~/.config/oli:/.config/oli
+      - ./logs:/app/logs
