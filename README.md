@@ -132,14 +132,23 @@ can pick up where you left off.
 
 ## Docker
 
+The Compose file runs the OpenAI-compatible API server in a container. The API server runs its own independent agent instance and does not connect to any separate TUI agent.
+
+**Start the API server:**
+
 ```bash
 docker-compose up --build
 ```
 
-The Compose file mounts `./profiles` and `~/.config/oli` to persist state across restarts. It builds a single shared image and starts **two services** from it:
+The API server listens on `localhost:9734`, mounts `./profiles` and `~/.config/oli` to persist state across restarts, and is ready to accept OpenAI-compatible chat completions requests.
 
-- `api` — the OpenAI-compatible API server, published on `localhost:8000`.
-- `agent` — the interactive Textual TUI, attached to the terminal with a TTY.
+**Run the TUI agent locally (optional):**
+
+```bash
+oli
+```
+
+The TUI agent is a separate, interactive terminal interface. It has its own independent agent instance and does not interact with the containerized API server. Use this if you prefer an interactive terminal session instead of or in addition to the API.
 
 ## API server
 
@@ -150,10 +159,10 @@ The agent harness can be exposed over an OpenAI-compatible REST API, so existing
 oli-server
 
 # Or configure endpoint via env
-OLI_API_HOST=0.0.0.0 OLI_API_PORT=8000 oli-server
+OLI_API_HOST=0.0.0.0 OLI_API_PORT=9734 oli-server
 ```
 
-It listens on `0.0.0.0:8000` by default and serves:
+It listens on `0.0.0.0:9734` by default and serves:
 
 | Endpoint                                          | Description                                  |
 | ------------------------------------------------- | -------------------------------------------- |
@@ -168,15 +177,15 @@ Conversations are **stateless** (like real OpenAI): each `/v1/chat/completions` 
 
 ```bash
 # List models
-curl http://localhost:8000/v1/models
+curl http://localhost:9734/v1/models
 
 # Non-streaming completion
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST http://localhost:9734/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "minimax-m3:cloud", "messages": [{"role": "user", "content": "Hello"}]}'
 
 # Streaming completion
-curl -N -X POST http://localhost:8000/v1/chat/completions \
+curl -N -X POST http://localhost:9734/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "minimax-m3:cloud", "stream": true, "messages": [{"role": "user", "content": "Count to three"}]}'
 ```
@@ -186,7 +195,7 @@ curl -N -X POST http://localhost:8000/v1/chat/completions \
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="not-needed")
+client = OpenAI(base_url="http://localhost:9734/v1", api_key="not-needed")
 
 resp = client.chat.completions.create(
     model="minimax-m3:cloud",
@@ -212,7 +221,7 @@ The `openai` SDK needs an `api_key`; pass a placeholder — the server does not 
 | Env var           | Default   | Description                                 |
 | ----------------- | --------- | ------------------------------------------- |
 | `OLI_API_HOST`    | `0.0.0.0` | Bind address                                |
-| `OLI_API_PORT`    | `8000`    | Listen port                                 |
+| `OLI_API_PORT`    | `9734`    | Listen port                                 |
 | `OLI_API_PROFILE` | `default` | Agent profile to load                       |
 | `OLI_API_MODE`    | `agent`   | Agent mode (`agent`, `ask`, `plan`, `chat`) |
 

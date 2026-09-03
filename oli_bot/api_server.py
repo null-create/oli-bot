@@ -24,9 +24,11 @@ import logging
 import threading
 import time
 import uuid
+import random
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from art import text2art
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -47,6 +49,7 @@ from .models import (
 )
 from .sessions import Session, is_sensitive_path
 from .settings import SettingsManager
+from .screens.taglines import TAGLINES
 from .tools.manager import BuiltinToolManager
 
 logger = logging.getLogger(__name__)
@@ -405,18 +408,50 @@ def _initialize_state() -> None:
 _initialize_state()
 
 
+def _print_banner(backend: str, model: str, mode: str, profile: str) -> None:
+    """Print a startup banner with ASCII art logo and server config."""
+    tagline = random.choice(TAGLINES)
+    url = f"http://{API_HOST}:{API_PORT}"
+
+    info_rows = [
+        ("backend", backend),
+        ("model",   model),
+        ("mode",    mode),
+        ("profile", profile),
+        ("url",     url),
+    ]
+
+    key_w = max(len(k) for k, _ in info_rows)
+
+    print()
+    print(text2art("oli", font="tarty1").rstrip())
+    print("  API Server\n")
+    for key, val in info_rows:
+        print(f"  {key:<{key_w}}  {val}")
+    print(f"\n  {tagline}")
+    print()
+
+
 def main() -> None:
     import uvicorn
 
     setup_logging(log_path=app.state.config.log_file)
+
+    backend = app.state.config.backend
+    model   = str(app.state.agent.backend.model or "(default)")
+    mode    = app.state.agent.mode
+    profile = app.state.agent.profile_name
+
+    _print_banner(backend, model, mode, profile)
+
     logger.info(
         "starting api server host=%s port=%s backend=%s model=%s mode=%s profile=%s",
         API_HOST,
         API_PORT,
-        app.state.config.backend,
-        app.state.agent.backend.model,
-        app.state.agent.mode,
-        app.state.agent.profile_name,
+        backend,
+        model,
+        mode,
+        profile,
     )
     uvicorn.run(app, host=API_HOST, port=API_PORT, log_level="info")
 

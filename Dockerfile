@@ -20,7 +20,8 @@ RUN apt-get update && apt-get install -y \
 
 # Set up user permissions
 RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
-RUN chown -R appuser:appuser /app
+RUN mkdir -p /app/logs /workspace/logs && \
+    chown -R appuser:appuser /app /workspace/logs 2>/dev/null || true
 
 # ── PyTorch (CPU-only) ────────────────────────────────────────────────────────
 # Install CPU-only PyTorch so the much larger CUDA build (~1.7 GB) is never
@@ -43,6 +44,8 @@ COPY . .
 RUN pip install --no-cache-dir .
 
 USER appuser
+
+EXPOSE 9734
 
 # Each compose service picks its own console script entrypoint.
 ENTRYPOINT []

@@ -128,7 +128,7 @@ oli [--model MODEL] [--url URL] [--profile PROFILE] \
 | `--verify-offline` | Startup diagnostic — warn if any outbound calls are configured |
 | `--use-pool` | Enable agent pooling (root can dispatch to sub-agents in [agents.yaml](oli_bot/agents.yaml)) |
 
-Run the API server with `oli-server` (uvicorn on `0.0.0.0:8000`). Env vars: `OLI_API_HOST`, `OLI_API_PORT`, `OLI_API_PROFILE`, `OLI_API_MODE`. Both TUI and API can run side by side via `docker-compose up --build` (`api` + `agent` services share one image).
+Run the API server with `oli-server` (uvicorn on `0.0.0.0:9734`). Env vars: `OLI_API_HOST`, `OLI_API_PORT`, `OLI_API_PROFILE`, `OLI_API_MODE`. The API server runs its own independent agent instance and does not connect to a separate TUI agent.
 
 ## Configuration
 
