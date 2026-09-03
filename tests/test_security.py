@@ -11,13 +11,22 @@ from oli_bot.tools.web import _check_ssrf
 # ---------- shell allowlist ---------------------------------------------------
 
 
-def test_git_is_rejected_because_it_is_not_allowlisted():
+def test_git_read_only_subcommands_are_allowed():
+    assert _is_command_allowed("git status") is None
+    assert _is_command_allowed("git diff HEAD~1") is None
+    assert _is_command_allowed("git log --oneline -5") is None
+
+
+def test_git_mutating_subcommands_are_rejected():
     err = _is_command_allowed("git push origin main")
     assert err is not None
-    assert "git" in err and "allowlist" in err
-    err = _is_command_allowed("git status")
+    assert "push" in err and "escape-hatch" in err
+    err = _is_command_allowed("git commit -am 'msg'")
     assert err is not None
-    assert "git" in err and "allowlist" in err
+    assert "commit" in err and "escape-hatch" in err
+    err = _is_command_allowed("git reset --hard")
+    assert err is not None
+    assert "reset" in err and "escape-hatch" in err
 
 
 def test_find_delete_hits_denied_args_table():
@@ -74,12 +83,15 @@ def test_line_continuation_is_rejected_with_explanatory_error():
     assert "OK" not in err
 
 
-def test_smuggled_second_command_after_newline_hits_allowlist():
-    # If the shlex parse in the first segment ever gets more permissive,
-    # the second segment's `rm` must still trip the allowlist.
+def test_smuggled_second_command_after_newline_is_rejected():
+    # A literal newline is used to smuggle a second command. _segments no
+    # longer splits on bare \n (it's not a shell operator), so
+    # _has_unquoted_dangerous_chars catches it as a forbidden literal
+    # newline before we ever reach the allowlist check. Either way the
+    # command must be rejected.
     err = _is_command_allowed("ls\nrm -rf /")
     assert err is not None
-    assert "rm" in err and "allowlist" in err
+    assert "newline" in err.lower() or ("rm" in err and "allowlist" in err)
 
 
 def test_forbidden_control_char_rejected_explicitly():
@@ -331,6 +343,28 @@ def test_shell_allows_python_dash_c_by_design():
     # Once an interpreter is allowlisted the sandbox for it is advisory —
     # `-c` is explicitly allowed (documented trade-off).
     assert _is_command_allowed('python -c "print(1)"') is None
+
+
+def test_shell_allows_python_dash_c_with_semicolons_and_single_quotes_inside_double_quotes():
+    # Regression: _segments() used to split on ';' without respecting quote
+    # context, causing the segment after ';' to have an unmatched '"' and
+    # trigger "Error: Unmatched quote."
+    cmd = """python3 -c "import json; lines=open('./data.json').read().splitlines(); print('done')" """
+    assert _is_command_allowed(cmd) is None
+
+
+def test_shell_allows_python_dash_c_with_single_quote_outer():
+    # Same logic but with outer single-quotes and inner double-quotes.
+    cmd = """python3 -c 'import json; d={"key": "val"}; print(d)'"""
+    assert _is_command_allowed(cmd) is None
+
+
+def test_shell_still_splits_unquoted_semicolons():
+    # An unquoted ';' must still produce separate segments, so a smuggled
+    # non-allowlisted command is caught.
+    err = _is_command_allowed("python -m pytest ; rm -rf /tmp/x")
+    assert err is not None
+    assert "rm" in err and "allowlist" in err
 
 
 def test_shell_still_rejects_smuggled_rm_after_python():

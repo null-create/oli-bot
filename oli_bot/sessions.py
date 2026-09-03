@@ -104,7 +104,6 @@ class Session:
             "list_directory",
             "tree",
             "run_command",
-            "git",
         ):
             if self.workspace is None:
                 if SCOPE_READ_OUTSIDE not in self._session_grants:
@@ -139,9 +138,6 @@ class Session:
         if tool_name == "run_command":
             cmd = arguments.get("command", "?")
             return f"Run command: {cmd} (in {path})"
-        if tool_name == "git":
-            sub = arguments.get("subcommand", "?")
-            return f"Run git {sub} in {path}"
         if tool_name == "download_file":
             url = arguments.get("url", "?")
             return f"Download from {url} to {path}"
@@ -171,8 +167,6 @@ class Session:
             path_str = arguments.get("path", ".")
         elif tool_name == "run_command":
             path_str = arguments.get("workdir", ".")
-        elif tool_name == "git":
-            path_str = arguments.get("path", ".")
         if path_str:
             if tool_name == "view_image" and str(path_str).lower().startswith(
                 ("http://", "https://")

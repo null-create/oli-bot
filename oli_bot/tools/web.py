@@ -276,24 +276,6 @@ def register_tools(manager: BuiltinToolManager) -> None:
     )
 
     manager.register_tool(
-        name="top_hacker_news_stories",
-        description="Fetch the top stories currently on Hacker News. "
-        "Returns a list of stories with titles and URLs.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "max_results": {
-                    "type": "number",
-                    "description": "Maximum number of stories to return. Defaults to 5.",
-                    "default": 5,
-                },
-            },
-            "required": [],
-        },
-        handler=_top_hacker_news_handler,
-    )
-
-    manager.register_tool(
         name="extract_article",
         description="Extract the full text of an article from a URL using newspaper4k. "
         "Returns the title, authors, publish date, and a text preview.",
@@ -773,40 +755,6 @@ def _search_open_library_sync(query: str, max_results: int = 5) -> str:
     except Exception as e:
         logger.exception("Open Library search failed")
         return f"Error: Open Library search failed: {e}"
-
-
-async def _top_hacker_news_handler(max_results: int = 5):
-    return await asyncio.to_thread(_top_hacker_news_sync, max_results)
-
-
-def _top_hacker_news_sync(max_results: int = 5) -> str:
-    try:
-        ids_url = "https://hacker-news.firebaseio.com/v0/topstories.json"
-        ssrf_err = _check_ssrf(ids_url)
-        if ssrf_err:
-            return ssrf_err
-        ids_resp = httpx.get(ids_url, timeout=_FETCH_TIMEOUT)
-        ids_resp.raise_for_status()
-        records = []
-        for item_id in ids_resp.json()[:max_results]:
-            item_url = f"https://hacker-news.firebaseio.com/v0/item/{item_id}.json"
-            ssrf_err = _check_ssrf(item_url)
-            if ssrf_err:
-                continue
-            item_resp = httpx.get(item_url, timeout=_FETCH_TIMEOUT)
-            item_resp.raise_for_status()
-            item = item_resp.json()
-            records.append(
-                {
-                    "title": item.get("title"),
-                    "url": item.get("url"),
-                    "source": "Hacker News",
-                }
-            )
-        return _format_result_lines(records)
-    except Exception as e:
-        logger.exception("Top Hacker News fetch failed")
-        return f"Error: Top Hacker News fetch failed: {e}"
 
 
 async def _extract_article_handler(url: str):

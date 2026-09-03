@@ -15,7 +15,6 @@
     "builtin__search_bing",
     "builtin__search_open_library",
     "builtin__search_hacker_news",
-    "builtin__top_hacker_news_stories",
     "builtin__search_gnews",
     "builtin__extract_article",
     "builtin__think",
@@ -39,7 +38,6 @@
       "builtin__search_bing",
       "builtin__search_open_library",
       "builtin__search_hacker_news",
-      "builtin__top_hacker_news_stories",
       "builtin__search_gnews",
       "builtin__extract_article",
       "builtin__think",
@@ -57,8 +55,7 @@
       "builtin__edit_file",
       "builtin__download_file",
       "builtin__upload_file",
-      "builtin__run_command",
-      "builtin__git"
+      "builtin__run_command"
     ]
   }
 }
