@@ -4,12 +4,9 @@ import asyncio
 import re
 import shlex
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 from .manager import BuiltinToolManager
-
-if TYPE_CHECKING:
-    from ..sessions import Session
 
 
 # Filesystem read + navigation (no writers here — see DENIED_ARGS for `find -delete` etc.).
@@ -41,6 +38,9 @@ _ALLOWED_TEXT_SEARCH: frozenset[str] = frozenset(
         "ack",
     }
 )
+
+# Read-only VCS inspection. Mutating subcommands are blocked via DENIED_ARGS below.
+_ALLOWED_VCS: frozenset[str] = frozenset({"git"})
 
 # Text/data manipulation. In-place edit flags are blocked in DENIED_ARGS.
 _ALLOWED_TEXT_PROCESSING: frozenset[str] = frozenset(
@@ -179,6 +179,7 @@ ALLOWED_COMMANDS: frozenset[str] = (
     | _ALLOWED_UTILITIES
     | _ALLOWED_SYSTEM_INFO
     | _ALLOWED_RUNTIME_COMMANDS
+    | _ALLOWED_VCS
 )
 
 # Per-command argument denylist. Any occurrence of a denied argument in the
@@ -204,6 +205,37 @@ DENIED_ARGS: dict[str, tuple[str, ...]] = {
     "awk": ("-i", "--in-place", "-f", "--file"),
     "gawk": ("-i", "--in-place", "-f", "--file"),
     "nawk": ("-i", "--in-place", "-f", "--file"),
+    # Mutating/state-changing subcommands; status/diff/log/show/blame/grep/etc. remain usable.
+    "git": (
+        "push",
+        "pull",
+        "fetch",
+        "commit",
+        "reset",
+        "checkout",
+        "restore",
+        "clean",
+        "rebase",
+        "merge",
+        "cherry-pick",
+        "revert",
+        "add",
+        "rm",
+        "mv",
+        "stash",
+        "tag",
+        "branch",
+        "remote",
+        "config",
+        "submodule",
+        "apply",
+        "am",
+        "gc",
+        "reflog",
+        "worktree",
+        "init",
+        "clone",
+    ),
 }
 
 # Commands whose in-place edit or scripting flags have a prefix form we must
@@ -269,8 +301,11 @@ def register_tools(manager: BuiltinToolManager) -> None:
         "workspace is set and the target resolves inside it (`/workspace set` first). "
         "Stderr redirects `2>&1` / `2>&-` (fd duplication/close) and writes to "
         "`/dev/null`, `/dev/stderr`, `/dev/stdout` are always allowed. "
-        "The `git` binary is intentionally NOT available here — use the dedicated "
-        "`git` tool for repository operations. "
+        "`git` is allowed for read-only inspection (status, diff, log, show, blame, "
+        "grep, etc.) — mutating subcommands (push, pull, fetch, commit, reset, checkout, "
+        "restore, clean, rebase, merge, cherry-pick, revert, add, rm, mv, stash, tag, "
+        "branch, remote, config, submodule, apply, am, gc, reflog, worktree, init, clone) "
+        "are blocked. "
         "Blocked: input redirects (<), subshells `()`, backticks/`$()`, sed/awk in-place "
         "edit (`-i`), awk `-f` script files, `xargs` invoking a non-allowlisted command, "
         "and `find -exec`/`-delete` (use `xargs` with an allowlisted command instead).",
@@ -296,45 +331,50 @@ def register_tools(manager: BuiltinToolManager) -> None:
         handler=run_command_handler,
     )
 
-    manager.register_tool(
-        name="git",
-        description="Run common Git operations such as status, diff, log, show, and blame.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "subcommand": {
-                    "type": "string",
-                    "description": "Git subcommand to run.",
-                    "enum": ["status", "diff", "log", "show", "blame"],
-                },
-                "path": {
-                    "type": "string",
-                    "description": "Repository path. Defaults to current directory.",
-                },
-                "target": {
-                    "type": "string",
-                    "description": "Target branch, commit, or file path for diff/show/blame.",
-                },
-                "max_entries": {
-                    "type": "number",
-                    "description": "Maximum number of log entries to return.",
-                    "default": 20,
-                },
-                "line_range": {
-                    "type": "string",
-                    "description": "Line range for blame, e.g. '1,40'.",
-                },
-            },
-            "required": ["subcommand"],
-        },
-        handler=_git_handler,
-    )
-
 
 def _segments(command: str) -> list[str]:
-    for sep in ("|&", "||", "&&", ";", "|"):
-        command = command.replace(sep, "\n")
-    return [s.strip() for s in command.split("\n") if s.strip()]
+    """Split on |, ||, |&, &&, ; — but only when outside of quotes."""
+    segments: list[str] = []
+    current: list[str] = []
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(command):
+        c = command[i]
+
+        # Honour backslash escapes outside single quotes (same logic as
+        # _has_unquoted_dangerous_chars so the two functions stay in sync).
+        if c == "\\" and not in_single and i + 1 < len(command):
+            current.append(c)
+            current.append(command[i + 1])
+            i += 2
+            continue
+
+        if c == "'" and not in_double:
+            in_single = not in_single
+        elif c == '"' and not in_single:
+            in_double = not in_double
+
+        if not in_single and not in_double:
+            # Check two-char separators before single-char ones.
+            two = command[i : i + 2]
+            if two in ("|&", "||", "&&"):
+                segments.append("".join(current).strip())
+                current = []
+                i += 2
+                continue
+            if c in (";", "|"):
+                segments.append("".join(current).strip())
+                current = []
+                i += 1
+                continue
+
+        current.append(c)
+        i += 1
+
+    if current:
+        segments.append("".join(current).strip())
+    return [s for s in segments if s]
 
 
 def _has_unquoted_dangerous_chars(segment: str) -> Optional[str]:
@@ -596,84 +636,6 @@ async def _run_command_handler(command, timeout=30, workdir=None, workspace=None
     if stderr:
         output += stderr
 
-    if len(output) > 100_000:
-        output = output[:100_000] + "\n\n... [truncated at 100000 characters]"
-    return output
-
-
-async def _git_handler(
-    subcommand, path=".", target=None, max_entries=20, line_range=None
-):
-    repo_path = Path(path).expanduser().resolve()
-    if not repo_path.exists():
-        return f"Error: Repository path does not exist: {path}"
-    if not (repo_path / ".git").exists():
-        return f"Error: Not a Git repository: {repo_path}"
-
-    if target:
-        try:
-            Path(target).resolve().relative_to(repo_path)
-        except ValueError:
-            return f"Error: Target path is outside the repository: {target}"
-
-    if subcommand == "status":
-        cmd = ["git", "-C", str(repo_path), "status", "--short"]
-    elif subcommand == "diff":
-        cmd = ["git", "-C", str(repo_path), "diff"]
-        if target:
-            cmd.append(target)
-    elif subcommand == "log":
-        cmd = [
-            "git",
-            "-C",
-            str(repo_path),
-            "log",
-            "--oneline",
-            "--decorate",
-            f"--max-count={max_entries}",
-        ]
-        if target:
-            cmd.append(target)
-    elif subcommand == "show":
-        if not target:
-            return "Error: 'show' requires a target commit or path."
-        cmd = ["git", "-C", str(repo_path), "show", target]
-    elif subcommand == "blame":
-        if not target:
-            return "Error: 'blame' requires a target file path."
-        cmd = ["git", "-C", str(repo_path), "blame"]
-        if line_range:
-            cmd.extend(["-L", line_range])
-        cmd.append(target)
-    else:
-        return f"Error: Unsupported git subcommand: {subcommand}"
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except OSError as e:
-        return f"Error: Failed to run git: {e}"
-
-    try:
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=30)
-    except asyncio.TimeoutError:
-        try:
-            proc.kill()
-        except ProcessLookupError:
-            pass
-        return "Error: Git command timed out."
-
-    stdout = stdout_b.decode("utf-8", errors="replace") if stdout_b else ""
-    stderr = stderr_b.decode("utf-8", errors="replace") if stderr_b else ""
-
-    output = f"Exit code: {proc.returncode}\n"
-    if stdout:
-        output += stdout
-    if stderr:
-        output += stderr
     if len(output) > 100_000:
         output = output[:100_000] + "\n\n... [truncated at 100000 characters]"
     return output

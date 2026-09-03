@@ -36,7 +36,6 @@
       "builtin__download_file",
       "builtin__upload_file",
       "builtin__run_command",
-      "builtin__git",
       "builtin__websearch",
       "builtin__search_wikipedia",
       "builtin__search_github",

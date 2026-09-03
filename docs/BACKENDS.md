@@ -55,7 +55,7 @@ Supports two modes controlled by `huggingface_remote`:
 
 ## Transformers
 
-Runs models locally via the HuggingFace `transformers` library with lazy model loading, GPU/CPU support, and XML-tag-based tool calling. Requires `transformers`, `torch`, and `accelerate` packages (included in `requirements.txt`). A GPU is recommended but CPU is supported.
+Runs models locally via the HuggingFace `transformers` library with lazy model loading, GPU/CPU support, and XML-tag-based tool calling. Requires `transformers`, `torch`, and `accelerate` packages (declared in `pyproject.toml`). A GPU is recommended but CPU is supported.
 
 | Setting               | Default  | Env var                   |
 | --------------------- | -------- | ------------------------- |

@@ -16,7 +16,6 @@ from oli_bot.tools.web import _check_ssrf
 NEW_SEARCH_TOOLS = {
     "search_stackoverflow",
     "search_open_library",
-    "top_hacker_news_stories",
     "extract_article",
 }
 
@@ -52,8 +51,6 @@ async def test_offline_mode_blocks_each_new_network_tool(tool):
     args = {"query": "x"}
     if tool in {"extract_article"}:
         args = {"url": "https://example.com/a"}
-    elif tool in {"top_hacker_news_stories"}:
-        args = {}
 
     result = await m.call_tool(tool, args)
     assert "offline" in result.lower()
@@ -73,8 +70,4 @@ def test_extract_article_rejects_loopback_url():
 
 def test_fixed_search_endpoints_are_ssrf_clean():
     # Maintainer-defined public endpoints must not be refused by the guard.
-    for url in (
-        "https://openlibrary.org/search.json",
-        "https://hacker-news.firebaseio.com/v0/topstories.json",
-    ):
-        assert _check_ssrf(url) is None, url
+    assert _check_ssrf("https://openlibrary.org/search.json") is None

@@ -24,7 +24,6 @@ DESTRUCTIVE_TOOLS: set[str] = {
     "download_file",
     "upload_file",
     "run_command",
-    "git",
 }
 
 NETWORK_TOOLS: set[str] = {
@@ -37,7 +36,6 @@ NETWORK_TOOLS: set[str] = {
     "search_arxiv",
     "search_stackoverflow",
     "search_open_library",
-    "top_hacker_news_stories",
     "extract_article",
 }
 
@@ -49,14 +47,12 @@ READ_ONLY_TOOLS: set[str] = {
     "list_directory",
     "tree",
     "run_command",
-    "git",
     "websearch",
     "fetch",
     "think",
     "compare",
     "search_stackoverflow",
     "search_open_library",
-    "top_hacker_news_stories",
     "extract_article",
 }
 # Used by "plan" mode: research tools plus notebook/todowrite for drafting

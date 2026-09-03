@@ -16,7 +16,6 @@
 | Open-source implementations | `builtin__search_github` | Code, tools, SDKs, datasets. Results include stars, language, description. |
 | Programming questions | `builtin__search_stackoverflow` | Search Stack Overflow by keyword or `tag` for code/debugging questions. |
 | Books | `builtin__search_open_library` | Book catalog lookups; returns title, author, first publication year. |
-| Developer community / tech news | `builtin__top_hacker_news_stories` | Fetch current front-page stories for technical/community signals. |
 | Full article body | `builtin__extract_article` | newspaper4k full-text extraction (title, authors, date, preview) from a URL. |
 
 **Discovery → Retrieve → Corroborate** pattern: use a search tool to find candidate pages, then `builtin__fetch` or `builtin__extract_article` to pull their content. Cross-reference facts across 2-3 independent sources before recording.
@@ -27,7 +26,7 @@
 - **`builtin__fetch`** returns Markdown with a `# page title` header and `> Source: url` quote. Content is truncated at 100,000 characters — if you see `[... truncated]`, consider fetching specific sub-pages instead.
 - **`builtin__search_wikipedia`**, **`builtin__search_github`**, **`builtin__search_arxiv`** return structured `list[dict]` and raise exceptions on failure. Wrap calls in your reasoning — if one source errors, fall back to another.
 - **`builtin__websearch` and `builtin__fetch` gracefully return error strings** (they do not raise exceptions). Continue to an alternative tool rather than aborting the entire search.
-- **The new search tools** (`builtin__search_stackoverflow`, `builtin__search_open_library`, `builtin__top_hacker_news_stories`, `builtin__extract_article`) also gracefully return a single string, or a string starting with `"Error:"` on failure. Treat them like `builtin__websearch` — check the `"Error:"` prefix and fall back if a source fails.
+- **The new search tools** (`builtin__search_stackoverflow`, `builtin__search_open_library`, `builtin__extract_article`) also gracefully return a single string, or a string starting with `"Error:"` on failure. Treat them like `builtin__websearch` — check the `"Error:"` prefix and fall back if a source fails.
 
 ## Source quality heuristics (for Relevance Pass)
 
