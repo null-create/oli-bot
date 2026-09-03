@@ -45,6 +45,7 @@ dependencies = [
     "arxiv>=4.0",
     "Pillow>=10.0",
     "newspaper4k>=0.9",
+    "stackapi>=0.3",
     "aiohttp>=3.10",
     "PyYAML>=6.0",
     'exceptiongroup>=1.1; python_version < "3.11"',
