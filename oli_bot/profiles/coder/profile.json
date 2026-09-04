@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "name": "coder",
+  "version": "1.0.0",
+  "description": "Software-engineer profile — read, write, and run access for end-to-end development workflows",
+  "default_model_tier": "large",
+  "base": null,
+  "required_tools": [
+    "builtin__read_file",
+    "builtin__write_file",
+    "builtin__edit_file",
+    "builtin__glob",
+    "builtin__grep",
+    "builtin__list_directory",
+    "builtin__tree",
+    "builtin__run_command",
+    "builtin__compare",
+    "builtin__think",
+    "builtin__todowrite",
+    "builtin__notebook"
+  ],
+  "permissions": {
+    "allow_tools": [
+      "builtin__read_file",
+      "builtin__write_file",
+      "builtin__edit_file",
+      "builtin__glob",
+      "builtin__grep",
+      "builtin__list_directory",
+      "builtin__tree",
+      "builtin__run_command",
+      "builtin__compare",
+      "builtin__view_image",
+      "builtin__think",
+      "builtin__todowrite",
+      "builtin__notebook",
+      "builtin__websearch",
+      "builtin__fetch",
+      "builtin__search_stackoverflow",
+      "builtin__search_github",
+      "builtin__extract_article"
+    ],
+    "deny_tools": [
+      "builtin__download_file",
+      "builtin__upload_file",
+      "builtin__search_wikipedia",
+      "builtin__search_arxiv",
+      "builtin__search_open_library"
+    ]
+  }
+}

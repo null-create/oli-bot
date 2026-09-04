@@ -16,12 +16,15 @@ When a profile is loaded, both `AGENTS.md` and `SKILLS.md` are combined into the
 
 ## Built-in profiles
 
-| Profile         | Purpose                                                                                                              |
-| --------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `default`       | General-purpose assistant with access to all built-in tools                                                          |
-| `search-agent`  | Specialist web-research agent -- high recall/high precision discovery with structured JSON output                    |
-| `analyst`       | Specialist data-analyst agent -- extracts claims, triangulates across sources, flags tensions                        |
-| `bug-hunter`    | Cybersecurity audit agent -- identifies vulnerabilities, logic flaws, and security defects                           |
+| Profile        | Purpose                                                                                       |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| `default`      | General-purpose assistant with access to all built-in tools                                   |
+| `search-agent` | Specialist web-research agent — high recall/high precision discovery with structured JSON output |
+| `analyst`      | Specialist data-analyst agent — extracts claims, triangulates across sources, flags tensions  |
+| `coder`        | Software-engineer profile — read, write, and run access for end-to-end development workflows |
+| `reviewer`     | Code-review profile — read-only analysis with test/lint execution; no file modifications     |
+| `writer`       | Technical writer profile — prose, documentation, READMEs, changelogs, and guides             |
+| `planner`      | Planning agent — decomposes goals into structured, saved plans; no file modifications        |
 
 ## profile.json manifest
 

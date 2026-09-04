@@ -8,7 +8,6 @@ from typing import Optional
 
 from .manager import BuiltinToolManager
 
-
 # Filesystem read + navigation (no writers here — see DENIED_ARGS for `find -delete` etc.).
 _ALLOWED_FILESYSTEM_READ: frozenset[str] = frozenset(
     {

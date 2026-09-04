@@ -48,6 +48,10 @@ Built-in profiles:
 | `default` | General-purpose assistant with access to all built-in tools |
 | `search-agent` | Web-research specialist — high recall/precision discovery with structured JSON output |
 | `analyst` | Data-analyst specialist — extracts claims, triangulates sources, flags tensions |
+| `coder` | Software-engineer profile — read, write, and run access for end-to-end development workflows |
+| `reviewer` | Code-review profile — read-only analysis with test/lint execution; no file modifications |
+| `writer` | Technical writer profile — prose, documentation, READMEs, changelogs, and guides |
+| `planner` | Planning agent — decomposes goals into structured, saved plans; no file modifications |
 
 `/profile create <name>` generates a fresh `AGENTS.md` under the loaded model, then leaves activation to a subsequent `/profile load`. Full detail (manifest fields, permission layering, base inheritance) is in [docs/PROFILES.md](docs/PROFILES.md).
 

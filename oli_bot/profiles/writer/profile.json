@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "name": "writer",
+  "version": "1.0.0",
+  "description": "Technical writer profile — prose, documentation, READMEs, changelogs, and guides",
+  "default_model_tier": "large",
+  "base": null,
+  "required_tools": [
+    "builtin__read_file",
+    "builtin__write_file",
+    "builtin__edit_file",
+    "builtin__glob",
+    "builtin__grep",
+    "builtin__list_directory",
+    "builtin__tree",
+    "builtin__think",
+    "builtin__todowrite",
+    "builtin__notebook"
+  ],
+  "permissions": {
+    "allow_tools": [
+      "builtin__read_file",
+      "builtin__write_file",
+      "builtin__edit_file",
+      "builtin__glob",
+      "builtin__grep",
+      "builtin__list_directory",
+      "builtin__tree",
+      "builtin__compare",
+      "builtin__view_image",
+      "builtin__fetch",
+      "builtin__websearch",
+      "builtin__search_wikipedia",
+      "builtin__search_open_library",
+      "builtin__extract_article",
+      "builtin__think",
+      "builtin__todowrite",
+      "builtin__notebook"
+    ],
+    "deny_tools": [
+      "builtin__run_command",
+      "builtin__download_file",
+      "builtin__upload_file",
+      "builtin__search_github",
+      "builtin__search_arxiv",
+      "builtin__search_stackoverflow"
+    ]
+  }
+}

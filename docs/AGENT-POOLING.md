@@ -64,7 +64,7 @@ Each pool:
 
 | Key           | Description                                                       |
 | ------------- | ----------------------------------------------------------------- |
-| `name`        | Pool name. Only the `default` pool is wired for delegation in v1. |
+| `name`        | Pool name. `"default"` is used when no `pool` is specified in a dispatch task. |
 | `description` | Free-form text describing the pool's purpose.                     |
 | `agents`      | List of agent configs (1 to `agent_pool_size`, default max 5).    |
 
@@ -117,15 +117,29 @@ A pool with zero agents, or more agents than `agent_pool_size`, raises a
 
 ## The dispatch tool
 
-When pooling is enabled and the `default` pool contains at least one
-delegate-able agent, a `dispatch` built-in tool is registered. Its schema
-exposes the pool's agent names as an enum:
+When pooling is enabled and at least one delegate-able agent exists across all
+configured pools, a `dispatch` built-in tool is registered.
+
+**Single-pool schema** (the `pool` field is omitted to keep things simple):
 
 ```json
 {
   "tasks": [
     { "agent": "search-agent", "task": "Find recent news about X" },
-    { "agent": "analyst", "task": "Summarize findings" }
+    { "agent": "analyst-agent", "task": "Summarize findings" }
+  ]
+}
+```
+
+**Multi-pool schema** (an optional `pool` field is added when multiple pools
+are configured, defaulting to `"default"` when omitted):
+
+```json
+{
+  "tasks": [
+    { "agent": "search-agent", "pool": "default",  "task": "Find recent papers on X" },
+    { "agent": "code-writer",  "pool": "coding",   "task": "Write a Python parser for the results" },
+    { "agent": "code-reviewer","pool": "coding",   "task": "Review the parser for correctness" }
   ]
 }
 ```
@@ -137,6 +151,12 @@ exposes the pool's agent names as an enum:
   recursion, so sub-agents cannot re-dispatch.
 - Per-agent errors are caught and reported as `Error: <message>` in that
   agent's section rather than failing the whole batch.
+- The `agent` field is an enum of **all agents across all pools** so the model
+  always has a complete, validated list. The `pool` field (when present) is an
+  enum of pool names; mismatched `pool`/`agent` combinations are caught at
+  runtime and reported as per-task errors.
+- `pool` is optional and always defaults to `"default"` — single-pool configs
+  require no changes when additional pools are added later.
 
 ## Live monitoring
 
@@ -148,6 +168,87 @@ modal that replays that agent's streaming text, thinking, and tool calls in real
 time via `agent.stream_sub_agent_run()` into a `SubAgentRun`; `Esc` or the
 "Back to root" button returns to the main chat. Runs are kept in the tree for
 review until the next `dispatch` call replaces them.
+
+## Configuring multiple pools
+
+The `agent-pools` key is a **list**, so you can declare as many named pools as
+you like in a single `agents.yaml`. Each pool is independent — it has its own
+`name`, `description`, and `agents` list — and `AgentPool` loads all of them
+into its internal registry at startup (keyed by pool name).
+
+```yaml
+agent-pools:
+  # ── Pool 1 ──────────────────────────────────────────────────────────────────
+  - name: default
+    description: |
+      General-purpose pool used by the root agent for everyday research and
+      analysis tasks.
+    agents:
+      - name: search-agent
+        model: gemini-2.0-flash
+        profile: search-agent
+        backend:
+          type: openai
+          base_url: ${GCP_GATEWAY_URL}
+          api_key: ${OLI_OPENAI_API_KEY}
+
+      - name: analyst-agent
+        model: claude-haiku-4-5
+        profile: analyst
+        backend:
+          type: openai
+          base_url: ${AWS_GATEWAY_URL}
+          api_key: ${OLI_OPENAI_API_KEY}
+
+  # ── Pool 2 ──────────────────────────────────────────────────────────────────
+  - name: coding
+    description: |
+      Specialist pool for code-generation and review tasks. Agents here target
+      a locally-hosted Ollama instance to keep code off external APIs.
+    agents:
+      - name: code-writer
+        model: codellama:13b
+        profile: coding
+        backend:
+          type: ollama
+          base_url: http://localhost:11434
+
+      - name: code-reviewer
+        model: deepseek-coder:6.7b
+        profile: coding
+        backend:
+          type: ollama
+          base_url: http://localhost:11434
+
+  # ── Pool 3 ──────────────────────────────────────────────────────────────────
+  - name: research
+    description: |
+      High-capacity pool for long-running research tasks using larger, slower
+      frontier models.
+    agents:
+      - name: deep-researcher
+        model: gpt-4o
+        profile: research
+        backend:
+          type: openai
+          base_url: ${OPENAI_BASE_URL}
+          api_key: ${OPENAI_API_KEY}
+```
+
+A few things worth noting:
+
+- **Agent names must be unique within a pool**, but the same name can appear in
+  different pools (e.g. a `search-agent` in both `default` and `research`).
+- **Each pool is validated independently** — the `agent_pool_size` cap applies
+  per-pool, not across all pools combined.
+- **`AgentPool.select_agent(pool_name, agent_name)` and
+  `AgentPool.list_agents(pool_name)`** accept the pool name as their first
+  argument, so all registered pools are fully accessible programmatically.
+- **The `dispatch` tool targets the correct pool per task** — each task item
+  carries an optional `pool` field that is forwarded directly to
+  `select_agent()`. Omitting `pool` routes the task to `"default"`.
+
+---
 
 ## Example: mixed-vendor pool
 
