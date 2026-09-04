@@ -4,7 +4,7 @@ TAGLINES = [
     "Your helpful AI agent",
     "Powered by vibes and a suspicious number of if-statements",
     "Turing-approved, mostly",
-    "99% helpful, 1% unhinged, 100% terminal-based",
+    "99% helpful, 1% unhinged",
     "Now with fewer hallucinations than yesterday",
     "I am but a humble tensor, doing my best",
     "Compiled with love, deployed with regret",
