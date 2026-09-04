@@ -84,6 +84,7 @@ from .logger import setup_logging
 MESSAGE_BOX = box.ROUNDED
 PRIMARY_HEX = "#2ecc71"
 MUTED_HEX = "#6b7d74"
+LOGO = text2art("oli", font="tarty1").strip()
 
 setup_logging(log_path=configs.log_file)
 logger = logging.getLogger(__name__)
@@ -410,7 +411,6 @@ class OliBot(App):
             profile_version = f" v{m.version}"
             if m.base:
                 profile_version += f" \\<- {m.base}"
-        logo = text2art("oli", font="tarty1").strip()
         ws_label = (
             f"[bold {PRIMARY_HEX}]{self.session.workspace}[/bold {PRIMARY_HEX}]"
             if self.session.workspace
@@ -419,7 +419,7 @@ class OliBot(App):
 
         tagline = rich_escape(random.choice(TAGLINES))
         left = RichText.from_markup(
-            f"[bold {PRIMARY_HEX}]{logo}[/bold {PRIMARY_HEX}]\n\n"
+            f"[bold {PRIMARY_HEX}]{LOGO}[/bold {PRIMARY_HEX}]\n\n"
             f"[dim]{tagline}[/dim]\n\n"
             "Type a message to start chatting,\n"
             f"or [bold {PRIMARY_HEX}]/help[/bold {PRIMARY_HEX}] for commands."
@@ -2585,6 +2585,7 @@ def main() -> None:
 
     app.run()
 
+    print(f"\n{LOGO}\n")
     print(f"Resume this session with: -s {app.current_session_id} or --resume-last")
 
 
