@@ -160,6 +160,7 @@ class SubAgentRun:
     task_id: str
     agent_name: str
     task: str
+    pool_name: str = "default"
     status: str = "running"
     activity: str = ""
     events: List[Any] = field(default_factory=list)

@@ -451,9 +451,6 @@ class Agent:
                 yield Done(full_text=full_response)
 
 
-_ROOT_AGENT_NAMES = {"root-agent", "root"}
-
-
 def _expand_env(
     value: Optional[str],
     extra_env: Optional[Dict[str, str]] = None,
@@ -527,7 +524,7 @@ class AgentPool:
     def __init__(self, mcp_manager: MCPClientManager):
         self.agent_pool: dict[str, dict[str, Agent]] = {}
         self.mcp_manager = mcp_manager
-        self._build_agent_pool()
+        self._build_agent_pools()
 
     def select_agent(self, agent_pool_name: str, agent_name: str) -> Agent:
         if agent_pool_name not in self.agent_pool:
@@ -543,7 +540,7 @@ class AgentPool:
         """Return the delegate-able agent names in a pool (root agent excluded)."""
         return list(self.agent_pool.get(agent_pool_name, {}).keys())
 
-    def _build_agent_pool(self) -> None:
+    def _build_agent_pools(self) -> None:
         configs_file = os.path.join(
             os.path.abspath(os.path.dirname(__file__)), "agents.yaml"
         )
@@ -575,7 +572,7 @@ class AgentPool:
                         "Skipping agent config with no name: %s", agent_config
                     )
                     continue
-                if role in _ROOT_AGENT_NAMES:
+                if role in ("root-agent", "root"):
                     logger.debug(
                         "Skipping '%s' — root agent is not a delegate target", role
                     )
@@ -602,6 +599,7 @@ class AgentPool:
                     )
                     continue
 
+                profile_name = agent_config.get("profile") or "default"
                 backend_url = _expand_env(backend_cfg.get("base_url"), extra_env)
                 backend_api_key = _expand_env(backend_cfg.get("api_key"), extra_env)
 
@@ -617,6 +615,7 @@ class AgentPool:
                         ),
                         mcp_manager=self.mcp_manager,
                         config=configs,
+                        profile_name=profile_name,
                     )
                 except Exception as e:
                     logger.error("Failed to build agent '%s': %s", role, e)

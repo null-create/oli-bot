@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "name": "reviewer",
+  "version": "1.0.0",
+  "description": "Code-review profile — read-only analysis with test/lint execution; no file modifications",
+  "default_model_tier": "large",
+  "base": null,
+  "required_tools": [
+    "builtin__read_file",
+    "builtin__glob",
+    "builtin__grep",
+    "builtin__list_directory",
+    "builtin__tree",
+    "builtin__run_command",
+    "builtin__compare",
+    "builtin__think",
+    "builtin__todowrite",
+    "builtin__notebook"
+  ],
+  "permissions": {
+    "allow_tools": [
+      "builtin__read_file",
+      "builtin__glob",
+      "builtin__grep",
+      "builtin__list_directory",
+      "builtin__tree",
+      "builtin__run_command",
+      "builtin__compare",
+      "builtin__think",
+      "builtin__todowrite",
+      "builtin__notebook"
+    ],
+    "deny_tools": [
+      "builtin__write_file",
+      "builtin__edit_file",
+      "builtin__download_file",
+      "builtin__upload_file",
+      "builtin__websearch",
+      "builtin__fetch",
+      "builtin__search_wikipedia",
+      "builtin__search_github",
+      "builtin__search_arxiv",
+      "builtin__search_stackoverflow",
+      "builtin__search_open_library",
+      "builtin__extract_article",
+      "builtin__view_image"
+    ]
+  }
+}

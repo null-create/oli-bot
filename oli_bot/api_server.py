@@ -415,10 +415,10 @@ def _print_banner(backend: str, model: str, mode: str, profile: str) -> None:
 
     info_rows = [
         ("backend", backend),
-        ("model",   model),
-        ("mode",    mode),
+        ("model", model),
+        ("mode", mode),
         ("profile", profile),
-        ("url",     url),
+        ("url", url),
     ]
 
     key_w = max(len(k) for k, _ in info_rows)
@@ -438,8 +438,8 @@ def main() -> None:
     setup_logging(log_path=app.state.config.log_file)
 
     backend = app.state.config.backend
-    model   = str(app.state.agent.backend.model or "(default)")
-    mode    = app.state.agent.mode
+    model = str(app.state.agent.backend.model or "(default)")
+    mode = app.state.agent.mode
     profile = app.state.agent.profile_name
 
     _print_banner(backend, model, mode, profile)

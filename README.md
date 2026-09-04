@@ -38,7 +38,7 @@ Concretely, that means:
 ## Features
 
 - **Multi-backend support** — Ollama, OpenAI, HuggingFace (remote or local), and Transformers (local GPU/CPU). Switch at runtime.
-- **Agent profiles** — drop-in system prompts with permission manifests, base-profile inheritance, and auto-generated profiles via `/profile create`.
+- **Agent profiles** — drop-in system prompts with permission manifests, base-profile inheritance, and auto-generated profiles via `/profile create`. Bundled profiles: `default`, `coder`, `reviewer`, `writer`, `planner`, `search-agent`, `analyst`.
 - **Rich built-in tool set** — file ops, shell access, web search/fetch, Wikipedia/GitHub/arXiv search, Git, task tracking, reasoning scratchpad, notebook, and more. Sandbox-locked with shell allowlists, SSRF protection, and sensitive-file gating.
 - **MCP integration** — add stdio or HTTP MCP servers at runtime for custom tools.
 - **Agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in [agents.yaml](agents.yaml) via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
@@ -77,6 +77,20 @@ OLI_BACKEND=openai OLI_OPENAI_API_KEY=sk-... oli
 # Run with a profile
 oli --profile search-agent
 ```
+
+### Bundled profiles
+
+| Profile        | Write? | Shell? | Web? | Best for                                   |
+| -------------- | :----: | :----: | :--: | ------------------------------------------ |
+| `default`      | ✅     | ✅     | ✅   | General-purpose tasks                      |
+| `coder`        | ✅     | ✅     | ✅   | Software development end-to-end            |
+| `reviewer`     | ❌     | ✅     | ❌   | Code review, quality analysis              |
+| `writer`       | ✅     | ❌     | ✅   | Docs, READMEs, changelogs, prose           |
+| `planner`      | ❌     | ❌     | ✅   | Roadmaps, task decomposition, saved plans  |
+| `search-agent` | ❌     | ❌     | ✅   | Web research with structured JSON output   |
+| `analyst`      | ❌     | ❌     | ✅   | Cross-source claim extraction and analysis |
+
+See [docs/PROFILES.md](docs/PROFILES.md) for the full manifest schema, permission layering, and how to create your own.
 
 ### CLI flags
 
