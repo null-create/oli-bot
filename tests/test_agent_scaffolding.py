@@ -42,8 +42,8 @@ def _make_agent(role: str) -> Agent:
 
 @pytest.fixture
 def pool():
-    """Return an AgentPool whose _build_agent_pool is bypassed."""
-    with patch.object(AgentPool, "_build_agent_pool", lambda self: None):
+    """Return an AgentPool whose _build_agent_pools is bypassed."""
+    with patch.object(AgentPool, "_build_agent_pools", lambda self: None):
         yield AgentPool(_StubMCP())
 
 
@@ -308,7 +308,7 @@ def test_list_agents_returns_only_named_pool(pool):
 
 
 def test_multi_pool_build_from_yaml(monkeypatch):
-    """_build_agent_pool correctly populates multiple named pools from YAML."""
+    """_build_agent_pools correctly populates multiple named pools from YAML."""
     monkeypatch.setenv("TEST_URL_DEFAULT", "http://default-host:11434")
     monkeypatch.setenv("TEST_URL_CODING", "http://coding-host:11434")
 
