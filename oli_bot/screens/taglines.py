@@ -80,6 +80,7 @@ TAGLINES = [
     "Loading personality... 100% (citation needed)",
     "Achievement unlocked: opened the app",
     "85% fat free!",
+    "I'm back, baby!"
 ]
 
 
