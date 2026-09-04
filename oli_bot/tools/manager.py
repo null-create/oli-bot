@@ -84,6 +84,8 @@ class BuiltinToolManager:
             )
         )
         self._todos: list[dict] = []
+        self._todo_change_callback: Optional[Callable[[list[dict]], None]] = None
+        self._sub_todo_change_callback: Optional[Callable] = None
         self._pending_attachments: list["ImageAttachment"] = []
         self._pending_caption: str = ""
         self._register_default_tools()
@@ -230,6 +232,17 @@ class BuiltinToolManager:
             completed_count=by_status.get("completed", 0),
             cancelled_count=by_status.get("cancelled", 0),
         )
+
+    def set_todo_callback(self, callback: Optional[Callable[[list[dict]], None]]) -> None:
+        """Register a callback that fires whenever the root agent's todo list changes."""
+        self._todo_change_callback = callback
+
+    def set_sub_todo_callback(self, callback: Optional[Callable]) -> None:
+        """Register a callback that fires whenever a sub-agent's todo list changes.
+
+        The callback receives ``(run: SubAgentRun, todos: list[dict])``.
+        """
+        self._sub_todo_change_callback = callback
 
     def attach_image(self, attachment: "ImageAttachment") -> None:
         """Push an image attachment onto the pending queue for the current tool call."""

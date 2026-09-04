@@ -155,6 +155,8 @@ class SubAgentRun:
     ``events`` collects every ``AgentEvent`` yielded by the sub-agent's
     ``Agent.process()`` in arrival order so the TUI can replay / render the
     work in real time. ``status`` is one of ``running``, ``done``, ``error``.
+    ``todos`` holds the most recent todo list written by the sub-agent via
+    ``builtin__todowrite``; the tree node UI reflects this in real time.
     """
 
     task_id: str
@@ -166,6 +168,7 @@ class SubAgentRun:
     events: List[Any] = field(default_factory=list)
     full_text: str = ""
     started_at: str = ""
+    todos: List[dict] = field(default_factory=list)
 
 
 class AgentRole(Enum):

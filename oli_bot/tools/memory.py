@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
 from .manager import BuiltinToolManager
+
+# Populated by _dispatch_tasks in chat.py for each concurrent sub-agent task.
+# asyncio.gather copies the current context into each spawned Task, so each
+# sub-agent sees its own isolated value without any locking needed.
+_current_sub_run: ContextVar = ContextVar("_current_sub_run", default=None)
 
 
 def register_tools(manager: BuiltinToolManager) -> None:
@@ -115,11 +121,29 @@ def _todowrite_handler(
     if not todos:
         return "Todo list is empty."
 
-    # Update the manager's internal todo list so the TUI widget can access it
-    if manager is not None:
-        manager._todos = todos
+    sub_run = _current_sub_run.get()
 
-    by_status = {}
+    if sub_run is not None:
+        # ── Sub-agent path ──────────────────────────────────────────────
+        # Store todos on the run object so the tree UI can reflect them.
+        sub_run.todos = todos
+        if manager is not None and manager._sub_todo_change_callback is not None:
+            try:
+                manager._sub_todo_change_callback(sub_run, todos)
+            except Exception:
+                pass  # never let a UI callback crash the tool
+    else:
+        # ── Root-agent path ─────────────────────────────────────────────
+        # Update the manager's internal todo list so the TUI widget can access it.
+        if manager is not None:
+            manager._todos = todos
+            if manager._todo_change_callback is not None:
+                try:
+                    manager._todo_change_callback(todos)
+                except Exception:
+                    pass  # never let a UI callback crash the tool
+
+    by_status: dict[str, int] = {}
     for t in todos:
         by_status[t["status"]] = by_status.get(t["status"], 0) + 1
 

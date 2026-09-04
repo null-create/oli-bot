@@ -55,6 +55,7 @@ from .agent import (
 from .config import configs
 from .models import SubAgentRun
 from .tools.manager import BuiltinToolManager
+from .tools.memory import _current_sub_run
 from .mcp_client import MCPClientManager
 from .server_manager import ServerManager
 from .sessions import (
@@ -76,6 +77,7 @@ from .screens import (
     SessionListScreen,
     SubAgentViewScreen,
     ConfigScreen,
+    TodoWidget,
     TAGLINES,
 )
 
@@ -150,13 +152,33 @@ class OliBot(App):
         overflow-y: scroll;
     }
 
-    #sub-agent-tree {
+    #right-panel {
         width: 1fr;
+        height: 1fr;
+        display: none;
+    }
+
+    #sub-agent-tree {
+        width: 100%;
+        height: 1fr;
         margin: 0 1 0 0;
         overflow-y: scroll;
         border: solid $primary;
         border-title-color: $primary;
         border-title-style: bold;
+    }
+
+    #todo-panel {
+        width: 100%;
+        height: auto;
+        max-height: 50vh;
+        margin: 0 1 1 0;
+        overflow-y: auto;
+        border: solid $primary;
+        border-title-color: $primary;
+        border-title-style: bold;
+        display: none;
+        padding: 0 0 1 0;
     }
 
     #bottom-bar {
@@ -315,6 +337,7 @@ class OliBot(App):
         self._last_tool_widget: Static | None = None
         self._sub_runs: list[SubAgentRun] = []
         self._sub_tree_nodes: dict = {}
+        self._sub_todo_nodes: dict[str, list] = {}  # task_id -> list of TreeNode
         self._sub_tree_timer = None
         self._command_matches: list[str] = []
         self._suggestion_index: int = 0
@@ -364,8 +387,10 @@ class OliBot(App):
             with Vertical(id="chat-column"):
                 with VerticalScroll(id="chat-log"):
                     yield self._render_welcome()
-            if self.agent_pool is not None:
-                yield Tree("Root", id="sub-agent-tree")
+            with Vertical(id="right-panel"):
+                if self.agent_pool is not None:
+                    yield Tree("Root", id="sub-agent-tree")
+                yield TodoWidget(id="todo-panel")
         with Vertical(id="bottom-bar"):
             yield ListView(id="command-suggestions")
             yield Input(placeholder="Send a message...", id="chat-input")
@@ -479,6 +504,17 @@ class OliBot(App):
         self.update_header()
         if self.agent_pool is not None:
             self.query_one("#sub-agent-tree", Tree).border_title = "Active Sub-Agents"
+            # Right panel is always visible when the agent pool is active
+            self.query_one("#right-panel").display = True
+
+        # Wire up the todo-change callback so updates fire immediately
+        self._builtin_tools.set_todo_callback(self._on_todos_changed)
+        self._builtin_tools.set_sub_todo_callback(self._on_sub_todos_changed)
+
+        # Set border title for the todo panel
+        todo_panel = self.query_one("#todo-panel", TodoWidget)
+        todo_panel.border_title = "Tasks"
+
         self.query_one("#chat-input", Input).focus()
         for w in self.mcp_manager.pop_warnings():
             self.notify(w, severity="warning", timeout=5)
@@ -951,6 +987,7 @@ class OliBot(App):
         )
         self.current_session_id = session_id
         self.query_one("#chat-log").remove_children()
+        self._clear_todo_widget()
         self._add_message("System", f"Switched to session [bold]{data['name']}[/bold].")
         non_system = [m for m in self.messages if m.role != "system"]
         for msg in non_system:
@@ -1924,6 +1961,7 @@ class OliBot(App):
                 Message(role="system", content=self.agent.system_prompt)
             )
         self.query_one("#chat-log").remove_children()
+        self._clear_todo_widget()
         self._add_message("System", "Conversation cleared.")
         self._save_session()
 
@@ -2307,6 +2345,46 @@ class OliBot(App):
         except Exception:
             logger.debug("Failed to remove welcome widget")
 
+    def _on_todos_changed(self, todos: list[dict]) -> None:
+        """Called by the BuiltinToolManager whenever ``builtin__todowrite`` fires.
+
+        Updates the live todo widget and shows/hides the right panel as needed.
+        This runs synchronously inside Textual's event loop (the @work task),
+        so direct widget mutations are safe.
+        """
+        try:
+            todo_state = self._builtin_tools.get_todos()
+            todo_panel = self.query_one("#todo-panel", TodoWidget)
+            right_panel = self.query_one("#right-panel")
+
+            todo_panel.update_todos(todo_state)
+
+            has_todos = bool(todos)
+            todo_panel.display = has_todos
+            # Show the right panel if there are todos OR the pool is active
+            if has_todos or self.agent_pool is not None:
+                right_panel.display = True
+            elif not has_todos and self.agent_pool is None:
+                right_panel.display = False
+        except Exception:
+            logger.debug("Failed to update todo widget", exc_info=True)
+
+    def _clear_todo_widget(self) -> None:
+        """Hide the todo panel and clear internal todo state.
+
+        Called on chat clear and session switch so stale todos don't persist.
+        """
+        self._builtin_tools._todos = []
+        self._sub_todo_nodes = {}
+        try:
+            todo_panel = self.query_one("#todo-panel", TodoWidget)
+            todo_panel.display = False
+            # Only hide the right panel if there is no agent pool tree to show
+            if self.agent_pool is None:
+                self.query_one("#right-panel").display = False
+        except Exception:
+            logger.debug("Failed to clear todo widget", exc_info=True)
+
     async def _permission_callback(self, description: str) -> str:
         """Shared confirm-callback for the root agent and any dispatched
         sub-agents. Serialized with a lock so concurrent sub-agents queue
@@ -2453,6 +2531,10 @@ class OliBot(App):
 
         async def run_task(idx: int) -> tuple[str, str]:
             run = self._sub_runs[idx]
+            # Tag the asyncio task context so _todowrite_handler knows which
+            # sub-agent run is active.  asyncio.gather copies the context into
+            # each spawned Task, so concurrent sub-agents stay isolated.
+            _current_sub_run.set(run)
             try:
                 result = await run_one(idx)
                 return run.agent_name, result
@@ -2480,7 +2562,34 @@ class OliBot(App):
             "error": "[bold red]✗[/bold red] error",
         }.get(run.status, run.status)
         activity = run.activity or "queued"
-        return f"{run.agent_name}  {status}  [dim]({activity})[/dim]"
+        label = f"{run.agent_name}  {status}  [dim]({activity})[/dim]"
+        if run.todos:
+            total = len(run.todos)
+            done = sum(1 for t in run.todos if t.get("status") == "completed")
+            label += f"  [dim]{done}/{total} tasks[/dim]"
+        return label
+
+    @staticmethod
+    def _todo_node_label(todo: dict) -> str:
+        """Rich markup label for a single todo item shown as a tree child node."""
+        status = todo.get("status", "pending")
+        priority = todo.get("priority", "medium")
+        content = todo.get("content", "")
+
+        priority_dot = {
+            "high": "[#ff6b6b]●[/#ff6b6b]",
+            "medium": "[#ffd93d]●[/#ffd93d]",
+            "low": "[#95e1d3]●[/#95e1d3]",
+        }.get(priority, "·")
+
+        status_icon, style_open, style_close = {
+            "pending":     ("○", "[#6b7d74]", "[/#6b7d74]"),
+            "in_progress": ("▶", "[bold #2ecc71]", "[/bold #2ecc71]"),
+            "completed":   ("✓", "[dim #a9dfbf]", "[/dim #a9dfbf]"),
+            "cancelled":   ("✗", "[dim]", "[/dim]"),
+        }.get(status, ("·", "[dim]", "[/dim]"))
+
+        return f"{priority_dot} {status_icon} {style_open}{content}{style_close}"
 
     def _sync_sub_agent_tree(self) -> None:
         if self.agent_pool is None:
@@ -2493,11 +2602,47 @@ class OliBot(App):
         tree.root.data = None
         tree.clear()
         self._sub_tree_nodes = {}
+        self._sub_todo_nodes = {}
         for run in self._sub_runs:
             node = tree.root.add(self._run_label(run), data=run)
             self._sub_tree_nodes[run.task_id] = node
+            # Restore any todos that arrived before the tree was rebuilt
+            if run.todos:
+                self._attach_todo_children(node, run)
         tree.root.expand()
         tree.refresh()
+
+    def _attach_todo_children(self, node, run: SubAgentRun) -> None:
+        """Replace all todo child nodes under *node* with the current run.todos."""
+        # Remove previously tracked todo children
+        for child in self._sub_todo_nodes.get(run.task_id, []):
+            try:
+                child.remove()
+            except Exception:
+                pass
+        new_children = []
+        for todo in run.todos:
+            child = node.add_leaf(self._todo_node_label(todo))
+            new_children.append(child)
+        self._sub_todo_nodes[run.task_id] = new_children
+        node.expand()
+
+    def _on_sub_todos_changed(self, run: SubAgentRun, todos: list[dict]) -> None:
+        """Called by the BuiltinToolManager when a sub-agent calls todowrite.
+
+        Updates the relevant tree node's children to reflect the latest todo
+        state.  Runs synchronously inside Textual's event loop (@work task),
+        so direct widget mutations are safe.
+        """
+        try:
+            node = self._sub_tree_nodes.get(run.task_id)
+            if node is None:
+                return
+            node.label = self._run_label(run)
+            self._attach_todo_children(node, run)
+            self.query_one("#sub-agent-tree", Tree).refresh()
+        except Exception:
+            logger.debug("Failed to update sub-agent todo nodes", exc_info=True)
 
     def _refresh_sub_agent_tree(self) -> None:
         if self.agent_pool is None or not self._sub_runs:
