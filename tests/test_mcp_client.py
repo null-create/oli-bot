@@ -212,6 +212,103 @@ async def test_builtin_tool_routing_uses_builtin_manager(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_update_server_mutates_fields_and_persists(tmp_path, monkeypatch):
+    """update_server replaces the config for an existing server and writes to disk."""
+    m = _manager(tmp_path, monkeypatch)
+    m.add_server("srv", command="old-cmd", args=["--old"], env={"K": "V"})
+
+    m.update_server(
+        "srv",
+        command="new-cmd",
+        args=["--new", "arg"],
+        env={"X": "Y"},
+        transport="stdio",
+    )
+
+    cfg = m.servers["srv"]
+    assert cfg.command == "new-cmd"
+    assert cfg.args == ["--new", "arg"]
+    assert cfg.env == {"X": "Y"}
+
+    # Reload from disk to confirm persistence.
+    m2 = _manager(tmp_path, monkeypatch)
+    assert m2.servers["srv"].command == "new-cmd"
+    assert m2.servers["srv"].args == ["--new", "arg"]
+
+
+@pytest.mark.asyncio
+async def test_update_server_switches_transport_to_http(tmp_path, monkeypatch):
+    """update_server can change a stdio server over to HTTP transport."""
+    m = _manager(tmp_path, monkeypatch)
+    m.add_server("srv", command="echo")
+
+    m.update_server("srv", transport="http", url="http://localhost:9999/mcp")
+
+    cfg = m.servers["srv"]
+    assert cfg.transport == "http"
+    assert cfg.url == "http://localhost:9999/mcp"
+    assert cfg.command == ""  # command cleared
+
+
+@pytest.mark.asyncio
+async def test_update_server_invalidates_tool_cache(tmp_path, monkeypatch):
+    """update_server must clear the cached tool list for the server."""
+    fake = FakeClient("stdio", list_result=SimpleNamespace(tools=[_tool(name="old")]))
+    m = _manager(tmp_path, monkeypatch)
+
+    async def fake_get(name):
+        return fake
+
+    monkeypatch.setattr(m, "_get_client", fake_get)
+    m.add_server("srv", command="echo")
+
+    # Warm the cache.
+    await m.get_available_tools()
+    assert "srv" in m._tool_cache
+
+    m.update_server("srv", command="new-cmd")
+
+    assert "srv" not in m._tool_cache
+
+    # Next call should re-fetch from the (now-updated) server.
+    fake.list_result = SimpleNamespace(tools=[_tool(name="new")])
+    tools = await m.get_available_tools()
+    assert fake.list_call_count == 2
+    assert any(t["name"] == "srv__new" for t in tools)
+
+
+@pytest.mark.asyncio
+async def test_update_server_evicts_live_client(tmp_path, monkeypatch):
+    """update_server drops any open client so the next call opens a fresh one."""
+    make = lambda target: FakeClient(
+        target, list_result=SimpleNamespace(tools=[_tool()])
+    )
+    m = _manager(tmp_path, monkeypatch, make=make)
+    m.add_server("srv", command="echo")
+
+    # Establish a live client.
+    old_client = await m._get_client("srv")
+    assert "srv" in m._clients
+
+    m.update_server("srv", command="new-cmd")
+
+    # Live client entry must be removed.
+    assert "srv" not in m._clients
+
+    # Requesting a new client should create a fresh one.
+    new_client = await m._get_client("srv")
+    assert new_client is not old_client
+
+
+def test_update_server_raises_for_unknown_name(tmp_path, monkeypatch):
+    """update_server raises ValueError when the server name doesn't exist."""
+    m = _manager(tmp_path, monkeypatch)
+
+    with pytest.raises(ValueError, match="not found"):
+        m.update_server("ghost", command="echo")
+
+
+@pytest.mark.asyncio
 async def test_get_plan_tools_combines_mcp_and_builtin_plan_tools(
     tmp_path, monkeypatch
 ):
