@@ -71,6 +71,31 @@ class MCPClientManager:
         self._invalidate_tool_cache(name)
         self._save_config()
 
+    def update_server(
+        self,
+        name: str,
+        command: str = "",
+        args: Optional[List[str]] = None,
+        env: Optional[Dict[str, str]] = None,
+        transport: str = "stdio",
+        url: str = "",
+    ) -> None:
+        if name not in self.servers:
+            raise ValueError(f"Server '{name}' not found")
+        # Drop any live client so the next call reopens a fresh connection.
+        if name in self._clients:
+            del self._clients[name]
+        self.servers[name] = MCPServerConfig(
+            name=name,
+            transport=transport,
+            command=command,
+            args=args or [],
+            env=env,
+            url=url,
+        )
+        self._invalidate_tool_cache(name)
+        self._save_config()
+
     def remove_server(self, name: str) -> None:
         if name not in self.servers:
             raise ValueError(f"Server '{name}' not found")

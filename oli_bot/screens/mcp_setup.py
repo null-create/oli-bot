@@ -61,13 +61,31 @@ class MCPSetupScreen(ModalScreen[Optional[Dict[str, Any]]]):
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
+    def __init__(self, existing: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
+        """Create an MCP setup screen.
+
+        Parameters
+        ----------
+        existing:
+            When provided the form is pre-populated for editing an existing
+            server.  The dict should contain the same keys that ``dismiss``
+            produces (``name``, ``transport``, and transport-specific fields).
+            The name field is made read-only in edit mode so the server
+            identity cannot be accidentally changed.
+        """
+        super().__init__(**kwargs)
+        self._existing = existing
+
     def compose(self) -> ComposeResult:
+        is_edit = self._existing is not None
+        title = "Edit MCP Server" if is_edit else "Add MCP Server"
         with Container(id="mcp-setup-container") as self._form:
-            yield Label("Add MCP Server", id="mcp-setup-title")
+            yield Label(title, id="mcp-setup-title")
             yield Input(
                 placeholder="Server name (e.g., filesystem)",
                 id="mcp-name",
                 classes="mcp-input",
+                disabled=is_edit,
             )
             yield Label("Transport:", id="mcp-transport-label")
             yield RadioSet(
@@ -103,7 +121,33 @@ class MCPSetupScreen(ModalScreen[Optional[Dict[str, Any]]]):
 
     def on_mount(self) -> None:
         rs = self.query_one("#mcp-transport", RadioSet)
-        rs.index = 0
+        existing = self._existing
+
+        if existing is None:
+            # Default to stdio for new servers
+            rs.index = 0
+            self._form.classes = "transport-stdio"
+            return
+
+        # Pre-populate fields for edit mode
+        transport = existing.get("transport", "stdio")
+
+        self.query_one("#mcp-name", Input).value = existing.get("name", "")
+
+        if transport == "http":
+            rs.index = 1
+            self._form.classes = "transport-http"
+            self.query_one("#mcp-url", Input).value = existing.get("url", "")
+        else:
+            rs.index = 0
+            self._form.classes = "transport-stdio"
+            self.query_one("#mcp-cmd", Input).value = existing.get("command", "")
+            args = existing.get("args", [])
+            self.query_one("#mcp-args", Input).value = " ".join(args) if args else ""
+            env = existing.get("env") or {}
+            self.query_one("#mcp-env", Input).value = " ".join(
+                f"{k}={v}" for k, v in env.items()
+            )
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         transport = event.pressed.label if event.pressed else "stdio"

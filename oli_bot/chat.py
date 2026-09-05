@@ -718,6 +718,7 @@ class OliBot(App):
                 "  [bold]/servers <name> use-model <model>[/bold] — set default model for a server\n"
                 "  [bold]/mcp add[/bold]               — add MCP server\n"
                 "  [bold]/mcp list[/bold]              — list MCP servers\n"
+                "  [bold]/mcp edit <name>[/bold]       — edit a configured MCP server\n"
                 "  [bold]/mcp remove <name>[/bold]     — remove MCP server\n"
                 "  [bold]/mode [ask|agent|chat|plan][/bold] — switch mode (ask=read-only tools, agent=all tools, chat=no tools, plan=research + save a plan)\n"
                 "  [bold]/profile list[/bold]           — list available profiles\n"
@@ -788,12 +789,15 @@ class OliBot(App):
             self._mcp_list()
         elif sub == "remove" and len(parts) > 2:
             self._mcp_remove(parts[2])
+        elif sub == "edit" and len(parts) > 2:
+            self._mcp_edit(parts[2])
         else:
             self._add_message(
                 "System",
                 "Usage:\n"
                 "  /mcp add             — add a new MCP server\n"
                 "  /mcp list            — list configured MCP servers\n"
+                "  /mcp edit <name>     — edit a configured MCP server\n"
                 "  /mcp remove <name>   — remove an MCP server",
             )
 
@@ -813,6 +817,41 @@ class OliBot(App):
             )
             self._add_message(
                 "System", f"MCP server [bold]{result['name']}[/bold] added."
+            )
+        except ValueError as e:
+            self._add_message("System", f"[red]{e}[/red]")
+
+    @work(exclusive=False)
+    async def _mcp_edit(self, name: str) -> None:
+        servers = {s.name: s for s in self.mcp_manager.list_servers()}
+        if name not in servers:
+            self._add_message(
+                "System", f"[red]MCP server '{name}' not found.[/red]"
+            )
+            return
+        cfg = servers[name]
+        existing = {
+            "name": cfg.name,
+            "transport": cfg.transport,
+            "command": cfg.command,
+            "args": cfg.args,
+            "env": cfg.env or {},
+            "url": cfg.url,
+        }
+        result = await self.push_screen_wait(MCPSetupScreen(existing=existing))
+        if result is None:
+            return
+        try:
+            self.mcp_manager.update_server(
+                name=name,
+                command=result.get("command", ""),
+                args=result.get("args", []),
+                env=result.get("env"),
+                transport=result.get("transport", "stdio"),
+                url=result.get("url", ""),
+            )
+            self._add_message(
+                "System", f"MCP server [bold]{name}[/bold] updated."
             )
         except ValueError as e:
             self._add_message("System", f"[red]{e}[/red]")
