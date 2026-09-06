@@ -11,6 +11,7 @@ from ..models import (
     TextChunk,
     ThinkingChunk,
     ToolCallChunk,
+    UsageChunk,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,16 @@ logger = logging.getLogger(__name__)
 MAX_TOKENS = configs.max_tokens
 TEMPERATURE = configs.temperature
 
-StreamEvent = TextChunk | ToolCallChunk | ThinkingChunk
+StreamEvent = TextChunk | ToolCallChunk | ThinkingChunk | UsageChunk
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough token estimate for providers that do not report usage.
+
+    Mirrors the heuristic used by the OpenAI-compatible API layer (~4 chars per
+    token), so numbers stay consistent everywhere estimation is needed.
+    """
+    return max(1, (len(text) + 3) // 4)
 
 
 class ModelBackend(ABC):
@@ -51,6 +61,7 @@ __all__ = [
     "MAX_TOKENS",
     "TEMPERATURE",
     "StreamEvent",
+    "estimate_tokens",
     "logger",
     "Any",
     "AsyncIterator",

@@ -246,7 +246,8 @@ async def test_text_only_response_yields_no_tool_call_chunk():
     events = [ev async for ev in _make_backend(chunks).stream_generate([], tools=[])]
 
     kinds = [type(e).__name__ for e in events]
-    assert kinds == ["TextChunk", "TextChunk"]
+    assert kinds == ["TextChunk", "TextChunk", "UsageChunk"]
+    assert not any(isinstance(e, ToolCallChunk) for e in events)
     assert "".join(e.text for e in events if isinstance(e, TextChunk)) == "hello world"
 
 

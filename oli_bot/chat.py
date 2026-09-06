@@ -53,7 +53,7 @@ from .agent import (
 )
 
 from .config import configs
-from .models import SubAgentRun
+from .models import SubAgentRun, UsageEvent
 from .tools.manager import BuiltinToolManager
 from .tools.memory import _current_sub_run
 from .mcp_client import MCPClientManager
@@ -293,6 +293,8 @@ class OliBot(App):
         if self.backend.model is None or not self.backend.model:
             self.backend.model = self._get_large_model() or None
         self.messages: list[Message] = []
+        self.total_tokens = 0
+        self.tokens_estimated = False
         cwd = Path.cwd()
         if is_sensitive_path(cwd):
             self.session = Session(workspace=None)
@@ -351,6 +353,8 @@ class OliBot(App):
                     [_message_from_dict(m) for m in data.get("messages", [])]
                 )
                 self.current_session_id = data["id"]
+                self.total_tokens = data.get("total_tokens", 0) or 0
+                self.tokens_estimated = bool(data.get("total_tokens_estimated", False))
                 if data.get("model"):
                     self.backend.model = data["model"]
                 loaded = True
@@ -365,6 +369,10 @@ class OliBot(App):
                         [_message_from_dict(m) for m in data.get("messages", [])]
                     )
                     self.current_session_id = data["id"]
+                    self.total_tokens = data.get("total_tokens", 0) or 0
+                    self.tokens_estimated = bool(
+                        data.get("total_tokens_estimated", False)
+                    )
                     if data.get("model"):
                         self.backend.model = data["model"]
                     loaded = True
@@ -560,6 +568,8 @@ class OliBot(App):
             messages=self.messages,
             model=self.backend.model or "",
             profile=self.agent.profile_name or "",
+            total_tokens=self.total_tokens,
+            tokens_estimated=self.tokens_estimated,
         )
         if new_id != self.current_session_id:
             logger.info(
@@ -585,6 +595,9 @@ class OliBot(App):
             f"{self._status_badges()}  {model_part} "
             f"[dim]:: {self.agent.profile_name}{server_part}[/dim]"
         )
+        if self.total_tokens > 0:
+            est = "~" if self.tokens_estimated else ""
+            info += f"  [dim]·[/dim] {est}{self.total_tokens:,} tok"
         status.add_row(hints, info)
         self.query_one("#status-bar", Static).update(status)
 
@@ -825,9 +838,7 @@ class OliBot(App):
     async def _mcp_edit(self, name: str) -> None:
         servers = {s.name: s for s in self.mcp_manager.list_servers()}
         if name not in servers:
-            self._add_message(
-                "System", f"[red]MCP server '{name}' not found.[/red]"
-            )
+            self._add_message("System", f"[red]MCP server '{name}' not found.[/red]")
             return
         cfg = servers[name]
         existing = {
@@ -850,9 +861,7 @@ class OliBot(App):
                 transport=result.get("transport", "stdio"),
                 url=result.get("url", ""),
             )
-            self._add_message(
-                "System", f"MCP server [bold]{name}[/bold] updated."
-            )
+            self._add_message("System", f"MCP server [bold]{name}[/bold] updated.")
         except ValueError as e:
             self._add_message("System", f"[red]{e}[/red]")
 
@@ -919,6 +928,9 @@ class OliBot(App):
             self.messages.append(
                 Message(role="system", content=self.agent.system_prompt)
             )
+        self.total_tokens = 0
+        self.tokens_estimated = False
+        self.update_header()
         self.query_one("#chat-log").remove_children()
         self._add_message("System", "New session created.")
 
@@ -1025,6 +1037,9 @@ class OliBot(App):
             [_message_from_dict(m) for m in data.get("messages", [])]
         )
         self.current_session_id = session_id
+        self.total_tokens = data.get("total_tokens", 0) or 0
+        self.tokens_estimated = bool(data.get("total_tokens_estimated", False))
+        self.update_header()
         self.query_one("#chat-log").remove_children()
         self._clear_todo_widget()
         self._add_message("System", f"Switched to session [bold]{data['name']}[/bold].")
@@ -1058,6 +1073,9 @@ class OliBot(App):
                     self.messages.append(
                         Message(role="system", content=self.agent.system_prompt)
                     )
+                self.total_tokens = 0
+                self.tokens_estimated = False
+                self.update_header()
                 self.query_one("#chat-log").remove_children()
                 self._add_message(
                     "System", "Current session was deleted. New session created."
@@ -1113,6 +1131,9 @@ class OliBot(App):
             profile=self.agent.profile_name or "",
             system_prompt=self.agent.system_prompt or "",
         )
+        self.total_tokens = 0
+        self.tokens_estimated = False
+        self.update_header()
         self.query_one("#chat-log").remove_children()
         self._add_message(
             "System",
@@ -1999,6 +2020,9 @@ class OliBot(App):
             self.messages.append(
                 Message(role="system", content=self.agent.system_prompt)
             )
+        self.total_tokens = 0
+        self.tokens_estimated = False
+        self.update_header()
         self.query_one("#chat-log").remove_children()
         self._clear_todo_widget()
         self._add_message("System", "Conversation cleared.")
@@ -2009,6 +2033,9 @@ class OliBot(App):
             return
         self._save_session()
         self.messages.clear()
+        self.total_tokens = 0
+        self.tokens_estimated = False
+        self.update_header()
         chat_log = self.query_one("#chat-log")
         try:
             welcome = chat_log.query_one("#welcome")
@@ -2288,6 +2315,10 @@ class OliBot(App):
                             )
                         except Exception:
                             logger.warning("Failed to update error panel")
+                    case UsageEvent(usage):
+                        self.total_tokens += usage.total_tokens
+                        self.tokens_estimated = self.tokens_estimated or usage.estimated
+                        self.update_header()
                     case AgentDone(full_text):
                         stop_spinner()
                         if think_widget is not None:
@@ -2478,13 +2509,10 @@ class OliBot(App):
             )
         )
 
-        agent_description = (
-            "Name of the sub-agent to run this task. "
-            + (
-                f"Each agent belongs to a specific pool — {pool_summary}."
-                if has_multiple_pools
-                else f"Available: {', '.join(all_agent_names)}."
-            )
+        agent_description = "Name of the sub-agent to run this task. " + (
+            f"Each agent belongs to a specific pool — {pool_summary}."
+            if has_multiple_pools
+            else f"Available: {', '.join(all_agent_names)}."
         )
 
         task_item_properties: dict = {
@@ -2622,10 +2650,10 @@ class OliBot(App):
         }.get(priority, "·")
 
         status_icon, style_open, style_close = {
-            "pending":     ("○", "[#6b7d74]", "[/#6b7d74]"),
+            "pending": ("○", "[#6b7d74]", "[/#6b7d74]"),
             "in_progress": ("▶", "[bold #2ecc71]", "[/bold #2ecc71]"),
-            "completed":   ("✓", "[dim #a9dfbf]", "[/dim #a9dfbf]"),
-            "cancelled":   ("✗", "[dim]", "[/dim]"),
+            "completed": ("✓", "[dim #a9dfbf]", "[/dim #a9dfbf]"),
+            "cancelled": ("✗", "[dim]", "[/dim]"),
         }.get(status, ("·", "[dim]", "[/dim]"))
 
         return f"{priority_dot} {status_icon} {style_open}{content}{style_close}"

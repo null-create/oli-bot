@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -12,9 +13,17 @@ from ..models import (
     ThinkingChunk,
     ToolCall,
     ToolCallChunk,
+    Usage,
+    UsageChunk,
 )
 
-from .base import MAX_TOKENS, TEMPERATURE, ModelBackend, StreamEvent
+from .base import (
+    MAX_TOKENS,
+    TEMPERATURE,
+    ModelBackend,
+    StreamEvent,
+    estimate_tokens,
+)
 from .messages import _format_messages, _format_tools
 from .streaming import _StreamingThinkParser
 
@@ -73,10 +82,29 @@ class OllamaBackend(ModelBackend):
                     for i, tc in enumerate(response.message.tool_calls)
                 ]
 
+            usage = None
+            if (
+                getattr(response, "prompt_eval_count", None) is not None
+                and getattr(response, "eval_count", None) is not None
+            ):
+                usage = Usage(
+                    prompt_tokens=response.prompt_eval_count or 0,
+                    completion_tokens=response.eval_count or 0,
+                )
+            else:
+                usage = Usage(
+                    prompt_tokens=estimate_tokens(
+                        json.dumps(_format_messages(messages, image_style="ollama"))
+                    ),
+                    completion_tokens=estimate_tokens(response.message.content or ""),
+                    estimated=True,
+                )
+
             return ModelResponse(
                 content=response.message.content or "",
                 tool_calls=tool_calls,
                 finish_reason="stop",
+                usage=usage,
             )
         except Exception as e:
             logger.exception(
@@ -103,12 +131,20 @@ class OllamaBackend(ModelBackend):
             stream = await self.client.chat(**kwargs)
             yielded = False
             parser = _StreamingThinkParser()
+            streamed_text = ""
+            prompt_eval = None
+            eval_count = None
             async for chunk in stream:
+                if getattr(chunk, "prompt_eval_count", None) is not None:
+                    prompt_eval = chunk.prompt_eval_count
+                if getattr(chunk, "eval_count", None) is not None:
+                    eval_count = chunk.eval_count
                 thinking_field = getattr(chunk.message, "thinking", None)
                 if thinking_field:
                     yield ThinkingChunk(thinking_field)
                     yielded = True
                 if chunk.message.content:
+                    streamed_text += chunk.message.content
                     for kind, text in parser.feed(chunk.message.content):
                         if text:
                             yield (
@@ -139,6 +175,17 @@ class OllamaBackend(ModelBackend):
                 if text:
                     yield ThinkingChunk(text) if kind == "thinking" else TextChunk(text)
                     yielded = True
+            if prompt_eval is not None and eval_count is not None:
+                usage = Usage(prompt_tokens=prompt_eval, completion_tokens=eval_count)
+            else:
+                usage = Usage(
+                    prompt_tokens=estimate_tokens(
+                        json.dumps(_format_messages(messages, image_style="ollama"))
+                    ),
+                    completion_tokens=estimate_tokens(streamed_text),
+                    estimated=True,
+                )
+            yield UsageChunk(usage)
             if not yielded:
                 logger.warning(
                     "Ollama stream completed with no content or tool calls (model=%s)",

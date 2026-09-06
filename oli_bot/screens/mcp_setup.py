@@ -61,7 +61,9 @@ class MCPSetupScreen(ModalScreen[Optional[Dict[str, Any]]]):
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(self, existing: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
+    def __init__(
+        self, existing: Optional[Dict[str, Any]] = None, **kwargs: Any
+    ) -> None:
         """Create an MCP setup screen.
 
         Parameters

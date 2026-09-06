@@ -318,6 +318,8 @@ class ConversationStore:
             "server": server,
             "model": model or "",
             "profile": profile or "",
+            "total_tokens": 0,
+            "total_tokens_estimated": False,
             "messages": [],
         }
         if system_prompt:
@@ -336,6 +338,8 @@ class ConversationStore:
         messages: List[Message],
         model: str,
         profile: str,
+        total_tokens: int = 0,
+        tokens_estimated: bool = False,
     ) -> str:
         """Persist a session; return the (possibly new) session id.
 
@@ -380,6 +384,11 @@ class ConversationStore:
         data["model"] = model or data.get("model", "")
         data["profile"] = profile or data.get("profile", "")
         data["messages"] = [_message_to_dict(m) for m in messages]
+        if created_new:
+            total_tokens = 0
+            tokens_estimated = False
+        data["total_tokens"] = int(total_tokens or 0)
+        data["total_tokens_estimated"] = bool(tokens_estimated)
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         if created_new:
             logger.info("Session recreated under new id: %s", session_id)

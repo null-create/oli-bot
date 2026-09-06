@@ -13,9 +13,17 @@ from ..models import (
     ThinkingChunk,
     ToolCall,
     ToolCallChunk,
+    Usage,
+    UsageChunk,
 )
 
-from .base import MAX_TOKENS, TEMPERATURE, ModelBackend, StreamEvent
+from .base import (
+    MAX_TOKENS,
+    TEMPERATURE,
+    ModelBackend,
+    StreamEvent,
+    estimate_tokens,
+)
 from .messages import _format_messages, _format_tools
 from .streaming import _StreamingThinkParser
 
@@ -86,10 +94,29 @@ class HuggingFaceBackend(ModelBackend):
                     )
                     for i, tc in enumerate(message.tool_calls)
                 ]
+            usage = None
+            usage_field = getattr(response, "usage", None)
+            if (
+                usage_field is not None
+                and getattr(usage_field, "prompt_tokens", None) is not None
+            ):
+                usage = Usage(
+                    prompt_tokens=usage_field.prompt_tokens,
+                    completion_tokens=getattr(usage_field, "completion_tokens", 0) or 0,
+                )
+            else:
+                usage = Usage(
+                    prompt_tokens=estimate_tokens(
+                        json.dumps(_format_messages(messages, stringify_arguments=True))
+                    ),
+                    completion_tokens=estimate_tokens(message.content or ""),
+                    estimated=True,
+                )
             return ModelResponse(
                 content=message.content or "",
                 tool_calls=tool_calls or None,
                 finish_reason=response.choices[0].finish_reason or "stop",
+                usage=usage,
             )
         except Exception as e:
             logger.exception(
@@ -113,13 +140,17 @@ class HuggingFaceBackend(ModelBackend):
             tool_calls_acc: Dict[int, dict] = {}
             flushed = False
             parser = _StreamingThinkParser()
+            streamed_text = ""
+            chunk_usage = None
             async for chunk in stream:
+                chunk_usage = getattr(chunk, "usage", None) or chunk_usage
                 if chunk.choices and chunk.choices[0].delta:
                     delta = chunk.choices[0].delta
                     reasoning = getattr(delta, "reasoning_content", None)
                     if reasoning:
                         yield ThinkingChunk(reasoning)
                     if delta.content:
+                        streamed_text += delta.content
                         for kind, text in parser.feed(delta.content):
                             if text:
                                 yield (
@@ -192,6 +223,21 @@ class HuggingFaceBackend(ModelBackend):
                     for data in tool_calls_acc.values()
                 ]
                 yield ToolCallChunk(tool_calls)
+
+            if chunk_usage is not None:
+                usage = Usage(
+                    prompt_tokens=getattr(chunk_usage, "prompt_tokens", 0) or 0,
+                    completion_tokens=getattr(chunk_usage, "completion_tokens", 0) or 0,
+                )
+            else:
+                usage = Usage(
+                    prompt_tokens=estimate_tokens(
+                        json.dumps(_format_messages(messages, stringify_arguments=True))
+                    ),
+                    completion_tokens=estimate_tokens(streamed_text),
+                    estimated=True,
+                )
+            yield UsageChunk(usage)
         except Exception as e:
             logger.exception(
                 "Error in %s.stream_generate: %s", self.__class__.__name__, str(e)

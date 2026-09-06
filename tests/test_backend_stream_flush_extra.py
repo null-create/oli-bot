@@ -106,7 +106,7 @@ async def test_ollama_yields_text_then_tool_call_in_the_same_chunk_order():
     b = _make_ollama(chunks)
     events = [ev async for ev in b.stream_generate([], tools=[])]
     kinds = [type(e).__name__ for e in events]
-    assert kinds == ["TextChunk", "ToolCallChunk"]
+    assert kinds == ["TextChunk", "ToolCallChunk", "UsageChunk"]
 
 
 @pytest.mark.asyncio
