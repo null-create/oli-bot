@@ -13,9 +13,11 @@ from ..models import (
     ThinkingChunk,
     ToolCall,
     ToolCallChunk,
+    Usage,
+    UsageChunk,
 )
 
-from .base import MAX_TOKENS, TEMPERATURE, ModelBackend, StreamEvent
+from .base import MAX_TOKENS, TEMPERATURE, ModelBackend, StreamEvent, estimate_tokens
 from .messages import _append_image_placeholder_text
 from .streaming import _StreamingThinkParser
 
@@ -262,6 +264,10 @@ class TransformersBackend(ModelBackend):
                 content=clean_text,
                 tool_calls=tool_calls or None,
                 finish_reason="stop",
+                usage=Usage(
+                    prompt_tokens=int(encoded["input_ids"].shape[1]),
+                    completion_tokens=int(new_tokens.shape[0]),
+                ),
             )
         except Exception as e:
             logger.exception(
@@ -333,6 +339,14 @@ class TransformersBackend(ModelBackend):
                 tool_calls = self._parse_tool_calls(accumulated)
                 if tool_calls:
                     yield ToolCallChunk(tool_calls)
+
+            yield UsageChunk(
+                Usage(
+                    prompt_tokens=int(encoded["input_ids"].shape[1]),
+                    completion_tokens=estimate_tokens(accumulated),
+                    estimated=True,
+                )
+            )
 
         except Exception as e:
             logger.exception(

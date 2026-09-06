@@ -233,7 +233,9 @@ class BuiltinToolManager:
             cancelled_count=by_status.get("cancelled", 0),
         )
 
-    def set_todo_callback(self, callback: Optional[Callable[[list[dict]], None]]) -> None:
+    def set_todo_callback(
+        self, callback: Optional[Callable[[list[dict]], None]]
+    ) -> None:
         """Register a callback that fires whenever the root agent's todo list changes."""
         self._todo_change_callback = callback
 

@@ -30,6 +30,9 @@ from .models import (
     StreamChunk,
     SubAgentRun,
     ThinkingChunk,
+    Usage,
+    UsageChunk,
+    UsageEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,6 +44,7 @@ AgentEvent = (
     | AssistantResponse
     | StreamChunk
     | ThinkingChunk
+    | UsageEvent
     | Error
     | Done
 )
@@ -111,6 +115,15 @@ def sanitize_tool_history(messages: List[Message]) -> List[Message]:
         kept.append(m)
         i += 1
     return kept
+
+
+def _merge_usage(acc: Usage, u: Usage) -> Usage:
+    """Sum per-call usage into a cumulative run total (flag estimated if any)."""
+    return Usage(
+        prompt_tokens=acc.prompt_tokens + u.prompt_tokens,
+        completion_tokens=acc.completion_tokens + u.completion_tokens,
+        estimated=acc.estimated or u.estimated,
+    )
 
 
 class Agent:
@@ -287,6 +300,7 @@ class Agent:
         tools: Optional[List[Dict[str, Any]]],
         confirm_callback: Optional[Callable[[str], Any]],
     ) -> AsyncIterator[AgentEvent]:
+        run_usage = Usage()
         for _ in range(self.config.max_tool_iterations):
             stream = self.backend.stream_generate(
                 messages, tools=tools if tools else []
@@ -310,6 +324,8 @@ class Agent:
                         yield StreamChunk(event.text)
                     elif isinstance(event, ThinkingChunk):
                         yield event
+                    elif isinstance(event, UsageChunk):
+                        run_usage = _merge_usage(run_usage, event.usage)
                     elif isinstance(event, ToolCallChunk):
                         tool_calls = event.tool_calls
                         for tc in tool_calls:
@@ -344,6 +360,8 @@ class Agent:
                 return
 
             if not tool_calls:
+                if run_usage.total_tokens:
+                    yield UsageEvent(usage=run_usage)
                 yield Done(full_text=full_response)
                 return
 
@@ -410,6 +428,7 @@ class Agent:
     ) -> AsyncIterator[AgentEvent]:
         full_response = ""
         errored = False
+        usage = Usage()
         try:
             # Forward tools so backends that require a matching tool schema
             # for any toolUse/toolResult blocks in history (e.g. Bedrock via
@@ -428,6 +447,8 @@ class Agent:
                     yield StreamChunk(event.text)
                 elif isinstance(event, ThinkingChunk):
                     yield event
+                elif isinstance(event, UsageChunk):
+                    usage = _merge_usage(usage, event.usage)
         except asyncio.TimeoutError:
             err_text = (
                 f"Response timed out (no data for "
@@ -448,6 +469,8 @@ class Agent:
             else:
                 if not full_response:
                     full_response = "The model completed all tool calls but did not produce a final summary."
+                if usage.total_tokens:
+                    yield UsageEvent(usage=usage)
                 yield Done(full_text=full_response)
 
 

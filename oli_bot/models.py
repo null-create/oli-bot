@@ -40,11 +40,29 @@ class ToolCall:
 
 
 @dataclass
+class Usage:
+    """Token counts for a single model call.
+
+    ``estimated`` is True when any count was derived heuristically (e.g. the
+    transformers/stream fallback) rather than reported by the provider.
+    """
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    estimated: bool = False
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
+@dataclass
 class ModelResponse:
     content: str
     tool_calls: Optional[List[ToolCall]] = None
     finish_reason: str = "stop"
     error: str = ""
+    usage: Optional[Usage] = None
 
 
 @dataclass
@@ -70,6 +88,11 @@ class MCPServerConfig:
 @dataclass
 class ToolCallChunk:
     tool_calls: List[ToolCall]
+
+
+@dataclass
+class UsageChunk:
+    usage: Usage
 
 
 @dataclass
@@ -102,6 +125,13 @@ class Error:
 @dataclass
 class Done:
     full_text: str
+
+
+@dataclass
+class UsageEvent:
+    """Cumulative token usage for a single agent run (one user turn)."""
+
+    usage: Usage
 
 
 @dataclass

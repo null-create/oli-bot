@@ -290,7 +290,9 @@ def test_select_agent_wrong_pool_raises(pool):
     pool.agent_pool["coding"] = {"code-writer": _make_agent("code-writer")}
 
     # code-writer lives in coding, not default
-    with pytest.raises(ValueError, match="code-writer not found in agent pool 'default'"):
+    with pytest.raises(
+        ValueError, match="code-writer not found in agent pool 'default'"
+    ):
         pool.select_agent("default", "code-writer")
 
 
@@ -353,8 +355,14 @@ def test_multi_pool_build_from_yaml(monkeypatch):
     assert set(built_pool.agent_pool.keys()) == {"default", "coding"}
     assert built_pool.list_agents("default") == ["search-agent"]
     assert built_pool.list_agents("coding") == ["code-writer"]
-    assert built_pool.agent_pool["default"]["search-agent"].backend.base_url == "http://default-host:11434"
-    assert built_pool.agent_pool["coding"]["code-writer"].backend.base_url == "http://coding-host:11434"
+    assert (
+        built_pool.agent_pool["default"]["search-agent"].backend.base_url
+        == "http://default-host:11434"
+    )
+    assert (
+        built_pool.agent_pool["coding"]["code-writer"].backend.base_url
+        == "http://coding-host:11434"
+    )
 
 
 def test_sub_agent_run_pool_name_defaults_to_default():
@@ -369,5 +377,7 @@ def test_sub_agent_run_pool_name_can_be_set():
     """SubAgentRun.pool_name stores the pool when explicitly provided."""
     from oli_bot.models import SubAgentRun
 
-    run = SubAgentRun(task_id="t", agent_name="code-writer", task="write code", pool_name="coding")
+    run = SubAgentRun(
+        task_id="t", agent_name="code-writer", task="write code", pool_name="coding"
+    )
     assert run.pool_name == "coding"

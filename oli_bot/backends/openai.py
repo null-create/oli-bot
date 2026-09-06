@@ -14,9 +14,17 @@ from ..models import (
     ThinkingChunk,
     ToolCall,
     ToolCallChunk,
+    Usage,
+    UsageChunk,
 )
 
-from .base import MAX_TOKENS, TEMPERATURE, ModelBackend, StreamEvent
+from .base import (
+    MAX_TOKENS,
+    TEMPERATURE,
+    ModelBackend,
+    StreamEvent,
+    estimate_tokens,
+)
 from .messages import _format_messages, _format_tools, _validate_message_content_blocks
 from .streaming import _StreamingThinkParser
 
@@ -85,10 +93,25 @@ class OpenAIBackend(ModelBackend):
                                 parameters=json.loads(call.function.arguments or "{}"),
                             )
                         )
+            usage = None
+            if response.usage is not None:
+                usage = Usage(
+                    prompt_tokens=response.usage.prompt_tokens or 0,
+                    completion_tokens=response.usage.completion_tokens or 0,
+                )
+            else:
+                usage = Usage(
+                    prompt_tokens=estimate_tokens(json.dumps(formatted)),
+                    completion_tokens=estimate_tokens(
+                        response.choices[0].message.content or ""
+                    ),
+                    estimated=True,
+                )
             return ModelResponse(
                 content=response.choices[0].message.content,
                 tool_calls=tool_calls,
                 finish_reason="stop",
+                usage=usage,
             )
         except Exception as e:
             logger.exception(
@@ -115,23 +138,44 @@ class OpenAIBackend(ModelBackend):
             )
             _validate_message_content_blocks(formatted_messages)
 
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=formatted_messages,
-                tools=_format_tools(tools) if tools else [],
-                tool_choice="auto" if tools else "none",
-                stream=True,
-            )
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=formatted_messages,
+                    tools=_format_tools(tools) if tools else [],
+                    tool_choice="auto" if tools else "none",
+                    stream=True,
+                    stream_options={"include_usage": True},
+                )
+            except Exception as e:
+                # Some OpenAI-compatible providers (Bedrock proxies, LM Studio,
+                # older vLLM, ...) reject the stream_options param. Retry once
+                # without it; usage then falls back to estimation.
+                logger.debug(
+                    "Provider rejected stream_options, retrying without usage: %s", e
+                )
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=formatted_messages,
+                    tools=_format_tools(tools) if tools else [],
+                    tool_choice="auto" if tools else "none",
+                    stream=True,
+                )
             tool_calls_acc: Dict[int, dict] = {}
             flushed = False
             parser = _StreamingThinkParser()
+            streamed_text = ""
+            chunk_usage = None
             async for chunk in response:
                 delta = chunk.choices[0].delta if chunk.choices else None
+                if getattr(chunk, "usage", None) is not None:
+                    chunk_usage = chunk.usage
                 if delta:
                     reasoning = getattr(delta, "reasoning_content", None)
                     if reasoning:
                         yield ThinkingChunk(reasoning)
                     if delta.content:
+                        streamed_text += delta.content
                         for kind, text in parser.feed(delta.content):
                             if text:
                                 yield (
@@ -205,6 +249,19 @@ class OpenAIBackend(ModelBackend):
                     for data in tool_calls_acc.values()
                 ]
                 yield ToolCallChunk(tool_calls)
+
+            if chunk_usage is not None:
+                usage = Usage(
+                    prompt_tokens=chunk_usage.prompt_tokens or 0,
+                    completion_tokens=chunk_usage.completion_tokens or 0,
+                )
+            else:
+                usage = Usage(
+                    prompt_tokens=estimate_tokens(json.dumps(formatted_messages)),
+                    completion_tokens=estimate_tokens(streamed_text),
+                    estimated=True,
+                )
+            yield UsageChunk(usage)
 
         except Exception as e:
             logger.exception(

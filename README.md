@@ -44,6 +44,7 @@ Concretely, that means:
 - **Agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in [agents.yaml](agents.yaml) via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
 - **Permission system** — write operations and sensitive reads require user approval. Session grants, workspace scoping, and profile-level allow/deny lists.
 - **Streaming Markdown** responses in a Textual TUI, with in-app model/server/session/profile management.
+- **Session token counter** — the TUI status bar tracks cumulative session token usage (exact where the provider reports counts, `~`-prefixed estimates otherwise), persisted per session and summed from OpenAI/`stream_options`, Ollama eval counts, HuggingFace usage, and Transformers runs. Reset on `/clear`, `/home`, and new-session flows.
 - **OpenAI-compatible API server** — run the same agent harness behind `/v1/models` and `/v1/chat/completions` (streaming + non-streaming) so any workflow that speaks the OpenAI wire protocol (the `openai` Python SDK, curl, or plain REST) can drive the agent.
 
 ## Roadmap / areas of active exploration
