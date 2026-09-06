@@ -2491,7 +2491,7 @@ class OliBot(App):
         has_multiple_pools = len(all_pool_names) > 1
 
         # Human-readable summary used in descriptions, e.g.:
-        #   "default: search-agent, analyst-agent; coding: code-writer"
+        #   "default: researcher, analyst-agent; coding: code-writer"
         pool_summary = "; ".join(
             f"{pool}: {', '.join(agents)}"
             for pool, agents in pool_agent_map.items()

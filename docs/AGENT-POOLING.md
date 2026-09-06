@@ -45,9 +45,9 @@ agent-pools:
     description: |
       Used to route tasks to subagents by the root orchestration agent.
     agents:
-      - name: search-agent
+      - name: researcher
         model: nemotron3
-        profile: search-agent
+        profile: researcher
         backend:
           type: ollama
           base_url: http://localhost:11434
@@ -86,7 +86,7 @@ values: `openai`, `ollama`, `huggingface`, `transformers` (see
 The optional `backend.base_url` and `backend.api_key` are **per-agent
 overrides** that take precedence over the global `configs.*` values when
 provided. This lets each pooled agent target its own vendor/credentials
-independent of the app-wide backend settings — e.g. a `search-agent` running on
+independent of the app-wide backend settings — e.g. a `researcher` running on
 a local Ollama server while the root agent talks to a hosted OpenAI-compatible
 endpoint.
 
@@ -125,7 +125,7 @@ configured pools, a `dispatch` built-in tool is registered.
 ```json
 {
   "tasks": [
-    { "agent": "search-agent", "task": "Find recent news about X" },
+    { "agent": "researcher", "task": "Find recent news about X" },
     { "agent": "analyst-agent", "task": "Summarize findings" }
   ]
 }
@@ -137,7 +137,7 @@ are configured, defaulting to `"default"` when omitted):
 ```json
 {
   "tasks": [
-    { "agent": "search-agent", "pool": "default",  "task": "Find recent papers on X" },
+    { "agent": "researcher", "pool": "default",  "task": "Find recent papers on X" },
     { "agent": "code-writer",  "pool": "coding",   "task": "Write a Python parser for the results" },
     { "agent": "code-reviewer","pool": "coding",   "task": "Review the parser for correctness" }
   ]
@@ -184,9 +184,9 @@ agent-pools:
       General-purpose pool used by the root agent for everyday research and
       analysis tasks.
     agents:
-      - name: search-agent
+      - name: researcher
         model: gemini-2.0-flash
-        profile: search-agent
+        profile: researcher
         backend:
           type: openai
           base_url: ${GCP_GATEWAY_URL}
@@ -238,7 +238,7 @@ agent-pools:
 A few things worth noting:
 
 - **Agent names must be unique within a pool**, but the same name can appear in
-  different pools (e.g. a `search-agent` in both `default` and `research`).
+  different pools (e.g. a `researcher` in both `default` and `research`).
 - **Each pool is validated independently** — the `agent_pool_size` cap applies
   per-pool, not across all pools combined.
 - **`AgentPool.select_agent(pool_name, agent_name)` and
@@ -257,7 +257,7 @@ agent-pools:
   - name: default
     description: Mixed-vendor research pool.
     agents:
-      - name: search-agent
+      - name: researcher
         model: nemotron3
         backend:
           type: ollama
@@ -271,5 +271,5 @@ agent-pools:
 ```
 
 With this config, the root agent can fan out a web-research task to
-`search-agent` (local Ollama) while a hosted OpenAI model drafts the analysis —
+`researcher` (local Ollama) while a hosted OpenAI model drafts the analysis —
 both dispatched in parallel via a single `dispatch` call.

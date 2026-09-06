@@ -274,19 +274,19 @@ def test_agent_pool_last_agent_wins_on_duplicate_name(pool):
 
 def test_select_agent_from_non_default_pool(pool):
     """Agents in non-default pools are reachable via select_agent."""
-    default_agent = _make_agent("search-agent")
+    default_agent = _make_agent("researcher")
     coding_agent = _make_agent("code-writer")
 
-    pool.agent_pool["default"] = {"search-agent": default_agent}
+    pool.agent_pool["default"] = {"researcher": default_agent}
     pool.agent_pool["coding"] = {"code-writer": coding_agent}
 
-    assert pool.select_agent("default", "search-agent") is default_agent
+    assert pool.select_agent("default", "researcher") is default_agent
     assert pool.select_agent("coding", "code-writer") is coding_agent
 
 
 def test_select_agent_wrong_pool_raises(pool):
     """Requesting an agent from the wrong pool raises ValueError, not KeyError."""
-    pool.agent_pool["default"] = {"search-agent": _make_agent("search-agent")}
+    pool.agent_pool["default"] = {"researcher": _make_agent("researcher")}
     pool.agent_pool["coding"] = {"code-writer": _make_agent("code-writer")}
 
     # code-writer lives in coding, not default
@@ -298,13 +298,13 @@ def test_select_agent_wrong_pool_raises(pool):
 
 def test_list_agents_returns_only_named_pool(pool):
     """list_agents is scoped to the requested pool and never leaks agents from other pools."""
-    pool.agent_pool["default"] = {"search-agent": _make_agent("search-agent")}
+    pool.agent_pool["default"] = {"researcher": _make_agent("researcher")}
     pool.agent_pool["coding"] = {
         "code-writer": _make_agent("code-writer"),
         "code-reviewer": _make_agent("code-reviewer"),
     }
 
-    assert pool.list_agents("default") == ["search-agent"]
+    assert pool.list_agents("default") == ["researcher"]
     assert pool.list_agents("coding") == ["code-writer", "code-reviewer"]
     assert pool.list_agents("nonexistent") == []
 
@@ -320,7 +320,7 @@ def test_multi_pool_build_from_yaml(monkeypatch):
                 "name": "default",
                 "agents": [
                     {
-                        "name": "search-agent",
+                        "name": "researcher",
                         "model": "gemini-flash",
                         "backend": {
                             "type": "ollama",
@@ -353,10 +353,10 @@ def test_multi_pool_build_from_yaml(monkeypatch):
         built_pool = AgentPool(_StubMCP())
 
     assert set(built_pool.agent_pool.keys()) == {"default", "coding"}
-    assert built_pool.list_agents("default") == ["search-agent"]
+    assert built_pool.list_agents("default") == ["researcher"]
     assert built_pool.list_agents("coding") == ["code-writer"]
     assert (
-        built_pool.agent_pool["default"]["search-agent"].backend.base_url
+        built_pool.agent_pool["default"]["researcher"].backend.base_url
         == "http://default-host:11434"
     )
     assert (
@@ -369,7 +369,7 @@ def test_sub_agent_run_pool_name_defaults_to_default():
     """SubAgentRun.pool_name defaults to 'default' for backwards compatibility."""
     from oli_bot.models import SubAgentRun
 
-    run = SubAgentRun(task_id="t", agent_name="search-agent", task="find X")
+    run = SubAgentRun(task_id="t", agent_name="researcher", task="find X")
     assert run.pool_name == "default"
 
 

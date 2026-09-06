@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "name": "search-agent",
+  "name": "researcher",
   "version": "1.0.0",
   "description": "Specialist web-research agent — high recall and high precision for structured research tasks",
   "default_model_tier": "small",
