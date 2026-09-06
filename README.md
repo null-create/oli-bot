@@ -83,13 +83,13 @@ oli --profile search-agent
 
 | Profile        | Write? | Shell? | Web? | Best for                                   |
 | -------------- | :----: | :----: | :--: | ------------------------------------------ |
-| `default`      | ✅     | ✅     | ✅   | General-purpose tasks                      |
-| `coder`        | ✅     | ✅     | ✅   | Software development end-to-end            |
-| `reviewer`     | ❌     | ✅     | ❌   | Code review, quality analysis              |
-| `writer`       | ✅     | ❌     | ✅   | Docs, READMEs, changelogs, prose           |
-| `planner`      | ❌     | ❌     | ✅   | Roadmaps, task decomposition, saved plans  |
-| `search-agent` | ❌     | ❌     | ✅   | Web research with structured JSON output   |
-| `analyst`      | ❌     | ❌     | ✅   | Cross-source claim extraction and analysis |
+| `default`      |   ✅   |   ✅   |  ✅  | General-purpose tasks                      |
+| `coder`        |   ✅   |   ✅   |  ✅  | Software development end-to-end            |
+| `reviewer`     |   ❌   |   ✅   |  ❌  | Code review, quality analysis              |
+| `writer`       |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose           |
+| `planner`      |   ❌   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans  |
+| `search-agent` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output   |
+| `analyst`      |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis |
 
 See [docs/PROFILES.md](docs/PROFILES.md) for the full manifest schema, permission layering, and how to create your own.
 
@@ -123,7 +123,7 @@ can pick up where you left off.
 | `/config`                                                | Open the configuration screen                                                            |
 | `/context`                                               | Show current server, model, profile                                                      |
 | `/servers add\|list\|remove\|default\|switch\|use-model` | Manage Ollama servers                                                                    |
-| `/mcp add\|list\|remove`                                 | Manage MCP servers                                                                       |
+| `/mcp add\|list\|edit\|remove`                           | Manage MCP servers                                                                       |
 | `/mode [ask\|agent\|chat\|plan]`                         | Switch mode (ask=read-only, agent=all tools, chat=no tools, plan=research + save a plan) |
 | `/profile list\|load\|create`                            | Manage agent profiles                                                                    |
 | `/sessions list\|switch\|delete\|rename\|purge`          | Manage conversation sessions                                                             |
