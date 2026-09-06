@@ -46,7 +46,7 @@ Built-in profiles:
 | Profile | Purpose |
 |---------|---------|
 | `default` | General-purpose assistant with access to all built-in tools |
-| `search-agent` | Web-research specialist — high recall/precision discovery with structured JSON output |
+| `researcher` | Web-research specialist — high recall/precision discovery with structured JSON output |
 | `analyst` | Data-analyst specialist — extracts claims, triangulates sources, flags tensions |
 | `coder` | Software-engineer profile — read, write, and run access for end-to-end development workflows |
 | `reviewer` | Code-review profile — read-only analysis with test/lint execution; no file modifications |

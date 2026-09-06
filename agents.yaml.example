@@ -10,9 +10,9 @@ agent-pools:
         backend:
           type: ollama
           base_url: http://localhost:11434
-      - name: search-agent
+      - name: researcher
         model: Qwen/Qwen3.6-27B
-        profile: search-agent
+        profile: researcher
         backend:
           type: huggingface
           base_url: https://api-inference.huggingface.co
