@@ -16,4 +16,7 @@ services:
     volumes:
       - ./oli_bot/profiles:/usr/local/lib/python3.12/site-packages/oli_bot/profiles
       - ~/.config/oli:/.config/oli
-      - ./logs:/app/logs
+      - oli-logs:/app/logs
+
+volumes:
+  oli-logs:

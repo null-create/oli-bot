@@ -330,8 +330,6 @@ class OliBot(App):
                 logger.error("Failed to build agent pool: %s", e)
                 self.agent_pool = None
 
-        if self.agent.permission_enforcer is not None:
-            self._builtin_tools._permission_enforcer = self.agent.permission_enforcer
         self._builtin_tools.model_tier = self.model_size
         self.store = ConversationStore()
         self.workspace_manager = WorkspaceManager()
@@ -1340,8 +1338,6 @@ class OliBot(App):
         except ValueError as e:
             self._add_message("System", f"[red]{e}[/red]")
             return
-        if self.agent.permission_enforcer is not None:
-            self._builtin_tools._permission_enforcer = self.agent.permission_enforcer
         self._save_session()
         self.messages.clear()
         self.query_one("#chat-log").remove_children()

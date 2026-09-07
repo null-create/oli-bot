@@ -8,7 +8,10 @@ except ImportError:
     pass  # Python 3.11+ has BaseExceptionGroup as a builtin
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from .profiles.permissions import ProfilePermissionEnforcer
 
 from mcp.client import Client
 from mcp.client.stdio import stdio_client, StdioServerParameters
@@ -158,6 +161,7 @@ class MCPClientManager:
         tool_name: str,
         arguments: Dict[str, Any],
         confirm_callback: Optional[Callable[[str], Any]] = None,
+        permission_enforcer: Optional["ProfilePermissionEnforcer"] = None,
     ) -> str:
         server_name, sep, actual_name = tool_name.partition("__")
         if not server_name or not sep:
@@ -166,7 +170,8 @@ class MCPClientManager:
             if self._builtin_tools is None:
                 return "Error: No built-in tools are registered"
             return await self._builtin_tools.call_tool(
-                actual_name, arguments, confirm_callback=confirm_callback
+                actual_name, arguments, confirm_callback=confirm_callback,
+                permission_enforcer=permission_enforcer,
             )
         if server_name not in self.servers:
             return f"Error: Unknown server: {server_name}"

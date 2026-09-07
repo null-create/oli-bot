@@ -148,8 +148,6 @@ def _build_agent(config: AppConfig, mode: str, profile: str) -> Agent:
         config=config,
     )
     agent.set_mode(mode)
-    if agent.permission_enforcer is not None:
-        builtin_tools._permission_enforcer = agent.permission_enforcer
     agent._session = session
     return agent
 
@@ -425,7 +423,7 @@ def _print_banner(backend: str, model: str, mode: str, profile: str) -> None:
 
     print()
     print(text2art("oli", font="tarty1").rstrip())
-    print("  API Server\n")
+    print("  The API Server\n")
     for key, val in info_rows:
         print(f"  {key:<{key_w}}  {val}")
     print(f"\n  {tagline}")
