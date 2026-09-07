@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, e.g. "0.2.0"
+        required: true
+        type: string
+      draft:
+        description: Create release as a draft
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: Mark release as a prerelease
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create release v${{ inputs.version }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Verify tag does not exist
+        run: |
+          if git rev-parse --verify "refs/tags/v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag v${{ inputs.version }} already exists"
+            exit 1
+          fi
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
+          git push origin "refs/tags/v${{ inputs.version }}"
+
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.draft }}" = "true" ]; then FLAGS="$FLAGS --draft"; fi
+          if [ "${{ inputs.prerelease }}" = "true" ]; then FLAGS="$FLAGS --prerelease"; fi
+          gh release create "v${{ inputs.version }}" dist/* \
+            --generate-notes \
+            --title "v${{ inputs.version }}" \
+            $FLAGS
