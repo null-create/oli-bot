@@ -109,13 +109,13 @@ class _StubMCP:
     def __init__(self):
         self.calls: list[tuple[str, dict]] = []
 
-    async def call_tool(self, name, params, confirm_callback=None):
+    async def call_tool(self, name, params, confirm_callback=None, **kwargs):
         self.calls.append((name, params))
         return f"result-of-{name}"
 
 
 class _RaisingMCP:
-    async def call_tool(self, name, params, confirm_callback=None):
+    async def call_tool(self, name, params, confirm_callback=None, **kwargs):
         raise RuntimeError("mcp exploded")
 
 

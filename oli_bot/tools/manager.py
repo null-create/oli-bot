@@ -267,8 +267,11 @@ class BuiltinToolManager:
         name: str,
         arguments: Dict[str, Any],
         confirm_callback: Optional[Callable[[str], Any]] = None,
+        permission_enforcer: Optional["ProfilePermissionEnforcer"] = None,
     ) -> str:
-        decision = self._gate.evaluate(name, arguments)
+        decision = self._gate.evaluate(
+            name, arguments, permission_enforcer=permission_enforcer
+        )
 
         if decision.outcome == "deny":
             return f"Error: {decision.reason}"
@@ -285,7 +288,10 @@ class BuiltinToolManager:
                     case _:
                         return "Error: Permission denied by user"
             # Re-run with the session gate skipped so we don't prompt again.
-            decision = self._gate.evaluate(name, arguments, skip_session=True)
+            decision = self._gate.evaluate(
+                name, arguments, skip_session=True,
+                permission_enforcer=permission_enforcer,
+            )
             if decision.outcome == "deny":
                 return f"Error: {decision.reason}"
 

@@ -87,6 +87,7 @@ class PermissionGate:
         name: str,
         arguments: Dict[str, Any],
         skip_session: bool = False,
+        permission_enforcer: Optional["ProfilePermissionEnforcer"] = None,
     ) -> PermissionDecision:
         if name not in self._known_tools:
             decision = PermissionDecision(
@@ -97,9 +98,10 @@ class PermissionGate:
             logger.info("permission deny: tool=%s source=%s", name, decision.source)
             return decision
 
-        if self._enforcer is not None:
+        enforcer = permission_enforcer or self._enforcer
+        if enforcer is not None:
             tool_full_name = f"builtin__{name}"
-            if not self._enforcer.check_tool(tool_full_name):
+            if not enforcer.check_tool(tool_full_name):
                 decision = PermissionDecision(
                     outcome="deny",
                     reason=(

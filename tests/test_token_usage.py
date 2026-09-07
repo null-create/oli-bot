@@ -205,7 +205,7 @@ class _UsageToolStub:
 
 
 class _StubMCP:
-    async def call_tool(self, name, params, confirm_callback=None):
+    async def call_tool(self, name, params, confirm_callback=None, **kwargs):
         return "ok"
 
 

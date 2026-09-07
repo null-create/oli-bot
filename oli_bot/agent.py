@@ -394,6 +394,7 @@ class Agent:
                         tc.name,
                         tc.parameters,
                         confirm_callback=confirm_callback,
+                        permission_enforcer=self.permission_enforcer,
                     )
                 except Exception as e:
                     result = f"Error: {e}"

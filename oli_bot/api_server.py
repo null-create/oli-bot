@@ -148,8 +148,6 @@ def _build_agent(config: AppConfig, mode: str, profile: str) -> Agent:
         config=config,
     )
     agent.set_mode(mode)
-    if agent.permission_enforcer is not None:
-        builtin_tools._permission_enforcer = agent.permission_enforcer
     agent._session = session
     return agent
 

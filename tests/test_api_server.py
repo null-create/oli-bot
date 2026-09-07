@@ -56,7 +56,7 @@ class _RaisingStub:
 
 
 class _StubMCP:
-    async def call_tool(self, name, params, confirm_callback=None):
+    async def call_tool(self, name, params, confirm_callback=None, **kwargs):
         return "result-of-echo"
 
     protocol_version = None
