@@ -425,7 +425,7 @@ def _print_banner(backend: str, model: str, mode: str, profile: str) -> None:
 
     print()
     print(text2art("oli", font="tarty1").rstrip())
-    print("  API Server\n")
+    print("  The API Server\n")
     for key, val in info_rows:
         print(f"  {key:<{key_w}}  {val}")
     print(f"\n  {tagline}")
