@@ -81,6 +81,7 @@ TAGLINES = [
     "Achievement unlocked: opened the app",
     "85% fat free!",
     "I'm back, baby!",
+    "The terminal app"
 ]
 
 
