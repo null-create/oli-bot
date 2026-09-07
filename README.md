@@ -81,15 +81,15 @@ oli --profile researcher
 
 ### Bundled profiles
 
-| Profile        | Write? | Shell? | Web? | Best for                                   |
-| -------------- | :----: | :----: | :--: | ------------------------------------------ |
-| `default`      |   ✅   |   ✅   |  ✅  | General-purpose tasks                      |
-| `coder`        |   ✅   |   ✅   |  ✅  | Software development end-to-end            |
-| `reviewer`     |   ❌   |   ✅   |  ❌  | Code review, quality analysis              |
-| `writer`       |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose           |
-| `planner`      |   ❌   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans  |
-| `researcher`   |   ❌   |   ❌   |  ✅  | Web research with structured JSON output   |
-| `analyst`      |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis |
+| Profile      | Write? | Shell? | Web? | Best for                                   |
+| ------------ | :----: | :----: | :--: | ------------------------------------------ |
+| `default`    |   ✅   |   ✅   |  ✅  | General-purpose tasks                      |
+| `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end            |
+| `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis              |
+| `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose           |
+| `planner`    |   ❌   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans  |
+| `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output   |
+| `analyst`    |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis |
 
 See [docs/PROFILES.md](docs/PROFILES.md) for the full manifest schema, permission layering, and how to create your own.
 
@@ -144,6 +144,7 @@ can pick up where you left off.
 | [docs/BACKENDS.md](docs/BACKENDS.md)           | Backend setup (Ollama, OpenAI, HuggingFace, Transformers), model tier switching |
 | [docs/PROFILES.md](docs/PROFILES.md)           | Profile structure, manifests, built-in profiles, creating and loading profiles  |
 | [docs/AGENT-POOLING.md](docs/AGENT-POOLING.md) | Agent pooling configuration, parsing, and usage                                 |
+| [docs/SECURITY.md](docs/SECURITY.md)           | Security precidence and settings                                                |
 
 ## Docker
 
