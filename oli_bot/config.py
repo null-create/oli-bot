@@ -30,7 +30,7 @@ class AppConfig(BaseSettings):
         populate_by_name=True,
     )
 
-    # Backend selection: "ollama", "openai", or "huggingface"
+    # Backend selection: "ollama", "openai", "huggingface", or "transformers"
     backend: str = Field(default="ollama")
 
     # OpenAI configuration
@@ -42,6 +42,9 @@ class AppConfig(BaseSettings):
     # Bedrock-native {"image": {"format", "source": {"bytes"}}} blocks for
     # OpenAI-compatible proxies that pass content through to Bedrock unchanged.
     openai_vision_style: str = Field(default="openai")
+    # Optional headers to include in OpenAI API requests. This can be used to
+    # pass additional headers required by certain OpenAI-compatible endpoints.
+    openai_optional_headers: Optional[dict] = Field(default={})
 
     # Ollama
     ollama_base_url: str = Field(default="http://localhost:11434")

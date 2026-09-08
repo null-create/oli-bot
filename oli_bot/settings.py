@@ -18,6 +18,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "large_model": "gpt-5",
         "small_model": "gpt-5-mini",
         "vision_style": "openai",
+        "optional_headers": {},
     },
     "ollama": {
         "base_url": "http://localhost:11434",
@@ -289,6 +290,7 @@ class SettingsManager:
             openai_model=op.get("large_model", "gpt-5"),
             openai_small_model=op.get("small_model", "gpt-5-mini"),
             openai_vision_style=op.get("vision_style", "openai"),
+            openai_optional_headers=json.dumps(op.get("optional_headers", "{}")),
             ollama_base_url=ol.get("base_url", "http://localhost:11434"),
             ollama_model=ol.get("large_model", ""),
             ollama_small_model=ol.get("small_model", ""),
@@ -338,6 +340,7 @@ class SettingsManager:
         settings["openai"]["large_model"] = config.openai_model
         settings["openai"]["small_model"] = config.openai_small_model
         settings["openai"]["vision_style"] = config.openai_vision_style
+        settings["openai"]["optional_headers"] = config.openai_optional_headers
         settings["ollama"]["base_url"] = config.ollama_base_url
         settings["ollama"]["large_model"] = config.ollama_model
         settings["ollama"]["small_model"] = config.ollama_small_model

@@ -18,6 +18,8 @@ from ..models import (
     UsageChunk,
 )
 
+from ..config import configs
+
 from .base import (
     MAX_TOKENS,
     TEMPERATURE,
@@ -29,6 +31,8 @@ from .messages import _format_messages, _format_tools, _validate_message_content
 from .streaming import _StreamingThinkParser
 
 logger = logging.getLogger(__name__)
+
+_OPTIONAL_HEADERS = json.loads(configs.get("openai_optional_headers", "{}"))
 
 
 class OpenAIBackend(ModelBackend):
@@ -45,11 +49,15 @@ class OpenAIBackend(ModelBackend):
         # "openai" keeps the standard image_url payload; "bedrock" emits
         # Bedrock-native image blocks
         self.vision_style = vision_style
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self.client = AsyncOpenAI(
+            api_key=api_key, base_url=base_url, default_headers=_OPTIONAL_HEADERS
+        )
 
     def set_base_url(self, url: str) -> None:
         self.base_url = url
-        self.client = AsyncOpenAI(api_key=self.api_key, base_url=url)
+        self.client = AsyncOpenAI(
+            api_key=self.api_key, base_url=url, default_headers=_OPTIONAL_HEADERS
+        )
 
     async def generate(
         self,
