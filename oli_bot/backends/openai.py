@@ -32,7 +32,13 @@ from .streaming import _StreamingThinkParser
 
 logger = logging.getLogger(__name__)
 
-_OPTIONAL_HEADERS = json.loads(configs.get("openai_optional_headers", "{}"))
+_raw_headers = configs.openai_optional_headers
+if isinstance(_raw_headers, str):
+    _OPTIONAL_HEADERS = json.loads(_raw_headers)
+elif isinstance(_raw_headers, dict):
+    _OPTIONAL_HEADERS = _raw_headers
+else:
+    _OPTIONAL_HEADERS = {}
 
 
 class OpenAIBackend(ModelBackend):
