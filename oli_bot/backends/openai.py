@@ -46,8 +46,6 @@ class OpenAIBackend(ModelBackend):
         self.model = model
         self.api_key = api_key
         self.base_url = base_url
-        # "openai" keeps the standard image_url payload; "bedrock" emits
-        # Bedrock-native image blocks
         self.vision_style = vision_style
         self.client = AsyncOpenAI(
             api_key=api_key, base_url=base_url, default_headers=_OPTIONAL_HEADERS
