@@ -3,13 +3,12 @@
 oli — a Multi-Backend AI Chat Agent with a Textual-based TUI chat interface.
 """
 
+import re
+import time
 import argparse
 import asyncio
 import logging
 import random
-import re
-import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
@@ -164,6 +166,12 @@ class ConfigScreen(ModalScreen[dict | None]):
                         RadioButton("openai", id="vs-openai"),
                         RadioButton("bedrock", id="vs-bedrock"),
                         id="cfg-openai-vision-style",
+                    )
+                    yield Input(
+                        placeholder='Optional headers (JSON, e.g. {"X-Token": "..."})',
+                        id="cfg-openai-optional-headers",
+                        classes="config-input",
+                        value=json.dumps(op.get("optional_headers", {})),
                     )
 
                 yield Label(
@@ -504,6 +512,9 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "large_model": self._val("#cfg-openai-large-model"),
                 "small_model": self._val("#cfg-openai-small-model"),
                 "vision_style": vision_style,
+                "optional_headers": self._json(
+                    "#cfg-openai-optional-headers"
+                ),
             },
             "ollama": {
                 "base_url": self._val("#cfg-ollama-base-url"),
@@ -584,6 +595,15 @@ class ConfigScreen(ModalScreen[dict | None]):
 
     def _bool(self, selector: str) -> bool:
         return self.query_one(selector, Checkbox).value
+
+    def _json(self, selector: str) -> dict:
+        try:
+            value = json.loads(self._val(selector) or "{}")
+            if isinstance(value, dict):
+                return value
+            return {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
 
     @staticmethod
     def _radio_label(rs: RadioSet, default: str) -> str:
