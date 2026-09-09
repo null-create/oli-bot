@@ -122,7 +122,7 @@ can pick up where you left off.
 | `/model set-large\|set-small <name>`                     | Set per-server large/small model and switch                                              |
 | `/config`                                                | Open the configuration screen                                                            |
 | `/context`                                               | Show current server, model, profile                                                      |
-| `/servers add\|list\|remove\|default\|switch\|use-model` | Manage Ollama servers                                                                    |
+| `/servers add\|list\|remove\|default\|switch\|use-model` | Manage API endpoints                                                                   |
 | `/mcp add\|list\|edit\|remove`                           | Manage MCP servers                                                                       |
 | `/mode [ask\|agent\|chat\|plan]`                         | Switch mode (ask=read-only, agent=all tools, chat=no tools, plan=research + save a plan) |
 | `/profile list\|load\|create`                            | Manage agent profiles                                                                    |
