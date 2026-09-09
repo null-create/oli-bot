@@ -11,11 +11,12 @@ services:
       - OLI_LOG_FILE=/app/logs/backend.ndjson
     ports:
       - "9734:9734"
-    restart: "no"
+    restart: "unless-stopped"
     working_dir: /app
     volumes:
-      - ./oli_bot/profiles:/usr/local/lib/python3.12/site-packages/oli_bot/profiles
       - ~/.config/oli:/.config/oli
+      - ./oli_bot/profiles:/usr/local/lib/python3.12/site-packages/oli_bot/profiles
+      - ./notes:/app/notes
       - oli-logs:/app/logs
 
 volumes:
