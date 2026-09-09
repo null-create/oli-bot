@@ -98,7 +98,7 @@ See [docs/PROFILES.md](docs/PROFILES.md) for the full manifest schema, permissio
 | Flag                   | Description                                                                                      |
 | ---------------------- | ------------------------------------------------------------------------------------------------ |
 | `--model`              | Model to use (inherits from server config if available)                                          |
-| `--url`                | Ollama server URL (default `http://localhost:11434`)                                             |
+| `--url`                | API endpoint URL (defaults to Ollama `http://localhost:11434`)                                             |
 | `--profile`            | Agent profile (default `default`)                                                                |
 | `--resume-last`        | Resume the most recent session on startup (mutually exclusive with `-s`/`--load-session`)        |
 | `-s`, `--load-session` | Load a specific session by UUID on startup (mutually exclusive with `--resume-last`)             |
