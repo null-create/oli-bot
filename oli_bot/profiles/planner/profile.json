@@ -17,7 +17,11 @@
   ],
   "permissions": {
     "allow_tools": [
+      "builtin__run_command",
+      "builtin__view_image",
       "builtin__read_file",
+      "builtin__write_file",
+      "builtin__edit_file",
       "builtin__glob",
       "builtin__grep",
       "builtin__list_directory",
@@ -34,12 +38,8 @@
       "builtin__notebook"
     ],
     "deny_tools": [
-      "builtin__write_file",
-      "builtin__edit_file",
       "builtin__download_file",
       "builtin__upload_file",
-      "builtin__run_command",
-      "builtin__view_image",
       "builtin__search_stackoverflow",
       "builtin__search_open_library"
     ]

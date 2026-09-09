@@ -87,7 +87,7 @@ oli --profile researcher
 | `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end            |
 | `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis              |
 | `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose           |
-| `planner`    |   ❌   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans  |
+| `planner`    |   ✅   |   ✅   |  ✅  | Roadmaps, task decomposition, saved plans  |
 | `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output   |
 | `analyst`    |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis |
 
@@ -98,7 +98,7 @@ See [docs/PROFILES.md](docs/PROFILES.md) for the full manifest schema, permissio
 | Flag                   | Description                                                                                      |
 | ---------------------- | ------------------------------------------------------------------------------------------------ |
 | `--model`              | Model to use (inherits from server config if available)                                          |
-| `--url`                | Ollama server URL (default `http://localhost:11434`)                                             |
+| `--url`                | API endpoint URL (defaults to Ollama `http://localhost:11434`)                                             |
 | `--profile`            | Agent profile (default `default`)                                                                |
 | `--resume-last`        | Resume the most recent session on startup (mutually exclusive with `-s`/`--load-session`)        |
 | `-s`, `--load-session` | Load a specific session by UUID on startup (mutually exclusive with `--resume-last`)             |
@@ -122,7 +122,7 @@ can pick up where you left off.
 | `/model set-large\|set-small <name>`                     | Set per-server large/small model and switch                                              |
 | `/config`                                                | Open the configuration screen                                                            |
 | `/context`                                               | Show current server, model, profile                                                      |
-| `/servers add\|list\|remove\|default\|switch\|use-model` | Manage Ollama servers                                                                    |
+| `/servers add\|list\|remove\|default\|switch\|use-model` | Manage API endpoints                                                                   |
 | `/mcp add\|list\|edit\|remove`                           | Manage MCP servers                                                                       |
 | `/mode [ask\|agent\|chat\|plan]`                         | Switch mode (ask=read-only, agent=all tools, chat=no tools, plan=research + save a plan) |
 | `/profile list\|load\|create`                            | Manage agent profiles                                                                    |

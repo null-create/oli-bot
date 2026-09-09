@@ -47,5 +47,5 @@ USER appuser
 
 EXPOSE 9734
 
-# Each compose service picks its own console script entrypoint.
-ENTRYPOINT []
+# Launch API Server
+ENTRYPOINT ["oli-server"]
