@@ -5,7 +5,6 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: oli-api
-    entrypoint: ["oli-server"]
     env_file: .env
     environment:
       - OLI_OLLAMA_BASE_URL=http://host.docker.internal:11434
