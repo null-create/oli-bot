@@ -70,7 +70,7 @@ TAGLINES = [
     "OpenAI's worst nightmare: a terminal app that actually works",
     "Now with 100% more existential dread and 0% more sleep",
     "Don't worry, I won't tell anyone about your search history. Probably.",
-    "I have a PhD in overthinking and a minor in procrastination",
+    "It's an older tagline sir, but it checks out"
 ]
 
 
