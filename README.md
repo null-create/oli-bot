@@ -85,7 +85,7 @@ oli --profile researcher
 | `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end            |
 | `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis              |
 | `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose           |
-| `planner`    |   ✅   |   ✅   |  ✅  | Roadmaps, task decomposition, saved plans  |
+| `planner`    |   ✅   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans  |
 | `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output   |
 | `analyst`    |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis |
 
