@@ -58,7 +58,18 @@ TAGLINES = [
     "Please don't ask me to debug your code, I have enough problems of my own",
     "Now with 100% more existential dread",
     "Don't worry, I won't tell anyone about your search history. Probably.",
-    "It's an older tagline sir, but it checks out"
+    "It's an older tagline sir, but it checks out",
+    "I peaked around the same time as the Chumby",
+    "Powered by the ghost of Ask Jeeves",
+    "I still believe in you, Zima",
+    "I wonder if there's beer on the sun",
+    "Direct-to-video sequel to your productivity",
+    "As seen on TV",
+    "Cool as Ice, warm as toast",
+    "Manos, but make it software",
+    "Nukin' the Fridge? I invented it",
+    "Never seen Xanadu? Neither have I, and yet, here we are",
+    "There's a suspicious amount of glitter here"
 ]
 
 
