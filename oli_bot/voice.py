@@ -47,13 +47,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 from .config import configs as _configs
 
-WHISPER_MODEL_SIZE   = _configs.voice_whisper_model
-PIPER_MODEL_PATH     = _configs.voice_piper_model
-SAMPLE_RATE          = _configs.voice_sample_rate
-FRAME_DURATION_MS    = _configs.voice_frame_duration_ms
-VAD_AGGRESSIVENESS   = _configs.voice_vad_aggressiveness
-SILENCE_TIMEOUT_MS   = _configs.voice_silence_timeout_ms
-MAX_RECORD_SECONDS   = _configs.voice_max_record_seconds
+WHISPER_MODEL_SIZE = _configs.voice_whisper_model
+PIPER_MODEL_PATH = _configs.voice_piper_model
+SAMPLE_RATE = _configs.voice_sample_rate
+FRAME_DURATION_MS = _configs.voice_frame_duration_ms
+VAD_AGGRESSIVENESS = _configs.voice_vad_aggressiveness
+SILENCE_TIMEOUT_MS = _configs.voice_silence_timeout_ms
+MAX_RECORD_SECONDS = _configs.voice_max_record_seconds
 
 
 class VoiceEngine:
@@ -77,18 +77,18 @@ class VoiceEngine:
         silence_timeout_ms: int = SILENCE_TIMEOUT_MS,
         max_record_seconds: int = MAX_RECORD_SECONDS,
     ) -> None:
-        self.whisper_model_size  = whisper_model_size
-        self.piper_model_path    = piper_model_path
-        self.sample_rate         = sample_rate
-        self.frame_duration_ms   = frame_duration_ms
-        self.vad_aggressiveness  = vad_aggressiveness
-        self.silence_timeout_ms  = silence_timeout_ms
-        self.max_record_seconds  = max_record_seconds
+        self.whisper_model_size = whisper_model_size
+        self.piper_model_path = piper_model_path
+        self.sample_rate = sample_rate
+        self.frame_duration_ms = frame_duration_ms
+        self.vad_aggressiveness = vad_aggressiveness
+        self.silence_timeout_ms = silence_timeout_ms
+        self.max_record_seconds = max_record_seconds
 
-        self._whisper = None   # faster_whisper.WhisperModel  (set by load())
-        self._piper   = None   # piper.PiperVoice              (set by load())
-        self._vad     = None   # webrtcvad.Vad                 (set by load())
-        self._loaded  = False
+        self._whisper = None  # faster_whisper.WhisperModel  (set by load())
+        self._piper = None  # piper.PiperVoice              (set by load())
+        self._vad = None  # webrtcvad.Vad                 (set by load())
+        self._loaded = False
 
     # ------------------------------------------------------------------
     # Model loading
@@ -180,11 +180,13 @@ class VoiceEngine:
                 "Install it with:  pip install 'oli-bot[voice]'"
             ) from exc
 
-        chunk    = int(self.sample_rate * self.frame_duration_ms / 1000)  # frames per chunk
+        chunk = int(
+            self.sample_rate * self.frame_duration_ms / 1000
+        )  # frames per chunk
         channels = 1
-        fmt      = pyaudio.paInt16
+        fmt = pyaudio.paInt16
 
-        mic    = pyaudio.PyAudio()
+        mic = pyaudio.PyAudio()
         stream = mic.open(
             format=fmt,
             channels=channels,
@@ -193,10 +195,10 @@ class VoiceEngine:
             frames_per_buffer=chunk,
         )
 
-        max_frames            = int(self.max_record_seconds * 1000 / self.frame_duration_ms)
+        max_frames = int(self.max_record_seconds * 1000 / self.frame_duration_ms)
         silence_frames_needed = self.silence_timeout_ms // self.frame_duration_ms
 
-        triggered     = False   # True once we've heard the first speech frame
+        triggered = False  # True once we've heard the first speech frame
         silence_count = 0
         frames: list[bytes] = []
 
@@ -204,7 +206,7 @@ class VoiceEngine:
             for _ in range(max_frames):
                 if stop_event is not None and stop_event.is_set():
                     return None
-                frame     = stream.read(chunk, exception_on_overflow=False)
+                frame = stream.read(chunk, exception_on_overflow=False)
                 is_speech = self._vad.is_speech(frame, self.sample_rate)
 
                 if not triggered:
@@ -236,7 +238,9 @@ class VoiceEngine:
             wf.setframerate(self.sample_rate)
             wf.writeframes(b"".join(frames))
 
-        logger.debug("VoiceEngine.record: saved %d frames to %s.", len(frames), tmp.name)
+        logger.debug(
+            "VoiceEngine.record: saved %d frames to %s.", len(frames), tmp.name
+        )
         return tmp.name
 
     # ------------------------------------------------------------------

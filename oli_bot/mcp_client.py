@@ -170,7 +170,9 @@ class MCPClientManager:
             if self._builtin_tools is None:
                 return "Error: No built-in tools are registered"
             return await self._builtin_tools.call_tool(
-                actual_name, arguments, confirm_callback=confirm_callback,
+                actual_name,
+                arguments,
+                confirm_callback=confirm_callback,
                 permission_enforcer=permission_enforcer,
             )
         if server_name not in self.servers:

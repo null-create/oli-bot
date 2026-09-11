@@ -289,7 +289,9 @@ class BuiltinToolManager:
                         return "Error: Permission denied by user"
             # Re-run with the session gate skipped so we don't prompt again.
             decision = self._gate.evaluate(
-                name, arguments, skip_session=True,
+                name,
+                arguments,
+                skip_session=True,
                 permission_enforcer=permission_enforcer,
             )
             if decision.outcome == "deny":
