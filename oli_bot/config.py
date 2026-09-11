@@ -66,6 +66,20 @@ class AppConfig(BaseSettings):
     transformers_dtype: str = Field(default="auto")
     transformers_is_multi_model: bool = Field(default=False)
 
+    # Voice mode (/voice command) — see oli_bot/voice.py
+    voice_whisper_model: str = Field(default="base")
+    voice_piper_model: str = Field(default="en_US-lessac-medium.onnx")
+    # Sample rate required by WebRTC VAD
+    voice_sample_rate: int = Field(default=16000)
+    # WebRTC VAD constraint: 10 | 20 | 30
+    voice_frame_duration_ms: int = Field(default=30)
+    # 0–3; higher = more aggressive noise rejection
+    voice_vad_aggressiveness: int = Field(default=2, ge=0, le=3)
+    # Stop recording after this many ms of consecutive silence
+    voice_silence_timeout_ms: int = Field(default=800, gt=0)
+    # Hard cap to prevent runaway recordings
+    voice_max_record_seconds: int = Field(default=15, gt=0)
+
     # General Agent configs
     use_agent_pool: bool = Field(default=False)
     agent_pool_size: int = Field(default=5)

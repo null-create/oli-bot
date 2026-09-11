@@ -369,6 +369,51 @@ class ConfigScreen(ModalScreen[dict | None]):
                     value=str(mp.get("agent_pool_size", 5)),
                 )
 
+                vo = s.get("voice", {})
+                yield Label("Voice", classes="section-title")
+                yield Input(
+                    placeholder=f"Whisper model ({vo.get('whisper_model', 'base')})",
+                    id="cfg-voice-whisper-model",
+                    classes="config-input",
+                    value=vo.get("whisper_model", "base"),
+                )
+                yield Input(
+                    placeholder="Piper model path (.onnx)",
+                    id="cfg-voice-piper-model",
+                    classes="config-input",
+                    value=vo.get("piper_model", "en_US-lessac-medium.onnx"),
+                )
+                yield Input(
+                    placeholder=f"Sample rate ({vo.get('sample_rate', 16000)})",
+                    id="cfg-voice-sample-rate",
+                    classes="config-input",
+                    value=str(vo.get("sample_rate", 16000)),
+                )
+                yield Input(
+                    placeholder=f"Frame duration ms, 10|20|30 ({vo.get('frame_duration_ms', 30)})",
+                    id="cfg-voice-frame-duration-ms",
+                    classes="config-input",
+                    value=str(vo.get("frame_duration_ms", 30)),
+                )
+                yield Input(
+                    placeholder=f"VAD aggressiveness 0-3 ({vo.get('vad_aggressiveness', 2)})",
+                    id="cfg-voice-vad-aggressiveness",
+                    classes="config-input",
+                    value=str(vo.get("vad_aggressiveness", 2)),
+                )
+                yield Input(
+                    placeholder=f"Silence timeout ms ({vo.get('silence_timeout_ms', 800)})",
+                    id="cfg-voice-silence-timeout-ms",
+                    classes="config-input",
+                    value=str(vo.get("silence_timeout_ms", 800)),
+                )
+                yield Input(
+                    placeholder=f"Max record seconds ({vo.get('max_record_seconds', 15)})",
+                    id="cfg-voice-max-record-seconds",
+                    classes="config-input",
+                    value=str(vo.get("max_record_seconds", 15)),
+                )
+
                 lg = s.get("logging", {})
                 yield Label("Logging", classes="section-title")
                 yield Label("Log level", classes="config-label")
@@ -567,6 +612,15 @@ class ConfigScreen(ModalScreen[dict | None]):
             "paths": {
                 "profiles_dir": self._val("#cfg-profiles-dir"),
                 "logs_dir": self._val("#cfg-logs-dir"),
+            },
+            "voice": {
+                "whisper_model": self._val("#cfg-voice-whisper-model"),
+                "piper_model": self._val("#cfg-voice-piper-model"),
+                "sample_rate": self._int("#cfg-voice-sample-rate", 16000),
+                "frame_duration_ms": self._int("#cfg-voice-frame-duration-ms", 30),
+                "vad_aggressiveness": self._int("#cfg-voice-vad-aggressiveness", 2),
+                "silence_timeout_ms": self._int("#cfg-voice-silence-timeout-ms", 800),
+                "max_record_seconds": self._int("#cfg-voice-max-record-seconds", 15),
             },
             "workspace": {
                 "max_workspaces": self._int("#cfg-max-workspaces", 20),

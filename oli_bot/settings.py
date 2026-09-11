@@ -77,6 +77,15 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "auto_save": True,
         "resume_prompt": True,
     },
+    "voice": {
+        "whisper_model": "base",
+        "piper_model": "en_US-lessac-medium.onnx",
+        "sample_rate": 16000,
+        "frame_duration_ms": 30,
+        "vad_aggressiveness": 2,
+        "silence_timeout_ms": 800,
+        "max_record_seconds": 15,
+    },
 }
 
 # Mapping: env var -> dot-separated path into settings dict
@@ -124,6 +133,13 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_API_MODE": "api_server.mode",
     "OLI_PROFILES_DIR": "paths.profiles_dir",
     "OLI_LOGS_DIR": "paths.logs_dir",
+    "OLI_VOICE_WHISPER_MODEL": "voice.whisper_model",
+    "OLI_VOICE_PIPER_MODEL": "voice.piper_model",
+    "OLI_VOICE_SAMPLE_RATE": "voice.sample_rate",
+    "OLI_VOICE_FRAME_DURATION_MS": "voice.frame_duration_ms",
+    "OLI_VOICE_VAD_AGGRESSIVENESS": "voice.vad_aggressiveness",
+    "OLI_VOICE_SILENCE_TIMEOUT_MS": "voice.silence_timeout_ms",
+    "OLI_VOICE_MAX_RECORD_SECONDS": "voice.max_record_seconds",
 }
 
 # SDK-standard env names accepted as fallbacks when the OLI_-prefixed
@@ -263,6 +279,7 @@ class SettingsManager:
         lg = settings.get("logging", {})
         api = settings.get("api_server", {})
         paths = settings.get("paths", {})
+        voice = settings.get("voice", {})
         openai_key = (
             op.get("api_key", "")
             or os.environ.get("OLI_OPENAI_API_KEY", "")
@@ -330,6 +347,13 @@ class SettingsManager:
             api_mode=api.get("mode", "agent"),
             profiles_dir=paths.get("profiles_dir", "profiles"),
             logs_dir=paths.get("logs_dir", "logs"),
+            voice_whisper_model=voice.get("whisper_model", "base"),
+            voice_piper_model=voice.get("piper_model", "en_US-lessac-medium.onnx"),
+            voice_sample_rate=voice.get("sample_rate", 16000),
+            voice_frame_duration_ms=voice.get("frame_duration_ms", 30),
+            voice_vad_aggressiveness=voice.get("vad_aggressiveness", 2),
+            voice_silence_timeout_ms=voice.get("silence_timeout_ms", 800),
+            voice_max_record_seconds=voice.get("max_record_seconds", 15),
         )
 
     def from_appconfig(self, config: AppConfig) -> dict:
@@ -382,6 +406,13 @@ class SettingsManager:
         settings["api_server"]["mode"] = config.api_mode
         settings["paths"]["profiles_dir"] = config.profiles_dir
         settings["paths"]["logs_dir"] = config.logs_dir
+        settings["voice"]["whisper_model"] = config.voice_whisper_model
+        settings["voice"]["piper_model"] = config.voice_piper_model
+        settings["voice"]["sample_rate"] = config.voice_sample_rate
+        settings["voice"]["frame_duration_ms"] = config.voice_frame_duration_ms
+        settings["voice"]["vad_aggressiveness"] = config.voice_vad_aggressiveness
+        settings["voice"]["silence_timeout_ms"] = config.voice_silence_timeout_ms
+        settings["voice"]["max_record_seconds"] = config.voice_max_record_seconds
         return settings
 
 

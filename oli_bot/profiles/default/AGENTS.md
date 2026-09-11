@@ -93,3 +93,7 @@ Example safe commands:
 ## MCP server tools
 
 If MCP servers are configured, their tools are available as `<server_name>__<tool_name>`. Use them alongside built-in tools as needed. List available tools via the API; the tool definitions are sent automatically.
+
+# AGENTS.md file for projects
+
+If an AGENTS.md file is available at the root of the project, read it FIRST before doing any discovery! This should give you an overview of the project and what's expected.
