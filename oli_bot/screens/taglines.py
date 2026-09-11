@@ -69,7 +69,7 @@ TAGLINES = [
     "Manos, but make it software",
     "Nukin' the Fridge? I invented it",
     "Never seen Xanadu? Neither have I, and yet, here we are",
-    "There's a suspicious amount of glitter here"
+    "There's a suspicious amount of glitter here",
 ]
 
 

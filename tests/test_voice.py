@@ -4,6 +4,7 @@ All external dependencies (pyaudio, webrtcvad, faster_whisper, piper,
 simpleaudio) are mocked so the suite runs without any hardware or heavy
 ML packages installed.
 """
+
 from __future__ import annotations
 
 import os
@@ -14,7 +15,6 @@ import wave
 from unittest.mock import MagicMock, call, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -69,11 +69,18 @@ class TestVoiceEngineLoad:
         mock_piper_voice.load = MagicMock(return_value=MagicMock())
         mock_vad_cls = MagicMock(return_value=MagicMock())
 
-        fw_mod  = _stub_module("faster_whisper", WhisperModel=mock_whisper_cls)
+        fw_mod = _stub_module("faster_whisper", WhisperModel=mock_whisper_cls)
         pip_mod = _stub_module("piper", PiperVoice=mock_piper_voice)
         vad_mod = _stub_module("webrtcvad", Vad=mock_vad_cls)
 
-        return fw_mod, pip_mod, vad_mod, mock_whisper_cls, mock_piper_voice, mock_vad_cls
+        return (
+            fw_mod,
+            pip_mod,
+            vad_mod,
+            mock_whisper_cls,
+            mock_piper_voice,
+            mock_vad_cls,
+        )
 
     def teardown_method(self):
         for name in ("faster_whisper", "piper", "webrtcvad"):
@@ -199,13 +206,15 @@ class TestVoiceEngineTranscribe:
         engine.whisper_model_size = "base"
         engine.piper_model_path = "dummy.onnx"
         engine._piper = MagicMock()
-        engine._vad   = MagicMock()
+        engine._vad = MagicMock()
         return engine
 
     def test_transcribe_joins_segments(self):
         engine = self._make_engine()
-        seg1 = MagicMock(); seg1.text = " Hello "
-        seg2 = MagicMock(); seg2.text = " world"
+        seg1 = MagicMock()
+        seg1.text = " Hello "
+        seg2 = MagicMock()
+        seg2.text = " world"
         mock_model = MagicMock()
         mock_model.transcribe.return_value = ([seg1, seg2], MagicMock())
         engine._whisper = mock_model
@@ -238,7 +247,8 @@ class TestVoiceEngineTranscribe:
 
     def test_transcribe_strips_whitespace(self):
         engine = self._make_engine()
-        seg = MagicMock(); seg.text = "  spaces  "
+        seg = MagicMock()
+        seg.text = "  spaces  "
         mock_model = MagicMock()
         mock_model.transcribe.return_value = ([seg], MagicMock())
         engine._whisper = mock_model
@@ -268,7 +278,7 @@ class TestVoiceEngineSpeak:
         engine.whisper_model_size = "base"
         engine.piper_model_path = "dummy.onnx"
         engine._whisper = MagicMock()
-        engine._vad     = MagicMock()
+        engine._vad = MagicMock()
         # synthesize must write a valid WAV header so wave.close() doesn't raise
         mock_piper = MagicMock()
         mock_piper.synthesize.side_effect = _write_wav_into_handle
@@ -368,7 +378,7 @@ class TestVoiceEngineRecord:
         engine.silence_timeout_ms = _v.SILENCE_TIMEOUT_MS
         engine.max_record_seconds = _v.MAX_RECORD_SECONDS
         engine._whisper = MagicMock()
-        engine._piper   = MagicMock()
+        engine._piper = MagicMock()
         return engine
 
     def teardown_method(self):
@@ -408,6 +418,7 @@ class TestVoiceEngineRecord:
 
         # Speech on first frame, then silence until timeout
         from oli_bot import voice as _v
+
         silence_needed = _v.SILENCE_TIMEOUT_MS // _v.FRAME_DURATION_MS
         speech_values = [True] + [False] * (silence_needed + 2)
 
@@ -429,6 +440,7 @@ class TestVoiceEngineRecord:
         self._setup_pyaudio_mock([])
 
         from oli_bot import voice as _v
+
         silence_needed = _v.SILENCE_TIMEOUT_MS // _v.FRAME_DURATION_MS
         speech_values = [True] + [False] * (silence_needed + 2)
 

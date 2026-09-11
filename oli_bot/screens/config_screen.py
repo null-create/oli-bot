@@ -557,9 +557,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "large_model": self._val("#cfg-openai-large-model"),
                 "small_model": self._val("#cfg-openai-small-model"),
                 "vision_style": vision_style,
-                "optional_headers": self._json(
-                    "#cfg-openai-optional-headers"
-                ),
+                "optional_headers": self._json("#cfg-openai-optional-headers"),
             },
             "ollama": {
                 "base_url": self._val("#cfg-ollama-base-url"),

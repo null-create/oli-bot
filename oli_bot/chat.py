@@ -2153,7 +2153,9 @@ class OliBot(App):
 
             # ---- record from microphone (blocking, runs in thread) ---------
             try:
-                audio_path = await asyncio.to_thread(engine.record, self._voice_stop_event)
+                audio_path = await asyncio.to_thread(
+                    engine.record, self._voice_stop_event
+                )
             except Exception as exc:
                 try:
                     listen_widget.remove()
