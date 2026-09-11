@@ -26,6 +26,7 @@ This file is the top-level orientation map. Depth lives under [docs/](docs/).
 | [oli_bot/tools/](oli_bot/tools/) | Tool handlers: `files.py` (read/write/edit + `view_image` via Pillow), `directories.py` (glob/grep/list_directory/tree — filesystem work runs via `asyncio.to_thread` / `create_subprocess_exec`), `web.py` (search + fetch + specialised searches, all guarded by `_check_ssrf`), `shell.py` (allowlisted `run_command`, including read-only `git`), `parsing.py` (`compare`), `memory.py` (`think`, `todowrite`, `notebook`), `truncation.py` (per-tier char budgets), `permissions.py` (sensitive-path detection). See [docs/TOOLS.md](docs/TOOLS.md). |
 | [oli_bot/sessions.py](oli_bot/sessions.py) | `Session` (permission gating) + `ConversationStore` (per-server JSON persistence under `~/.config/oli/sessions/<server>/`) + `WorkspaceManager`. `save_session()` returns the (possibly new) id so callers can rebind after a corrupt-file rewrite. Persisted messages preserve `tool_call_id`; loads pass through `sanitize_tool_history` so poisoned histories self-heal. |
 | [oli_bot/server_manager.py](oli_bot/server_manager.py) | `ServerManager` — multi-server lifecycle persisted to `ollama_hosts.json`, URL validation. |
+| [oli_bot/voice.py](oli_bot/voice.py) | `VoiceEngine` — optional, lazy-loaded mic → STT → TTS engine for the `/voice` command (faster-whisper, Piper TTS, WebRTC VAD, pyaudio). All I/O is blocking; `chat.py` calls it via `asyncio.to_thread`. `record()` accepts a `threading.Event` so `chat.py` can interrupt an in-progress recording the instant voice mode is toggled off, instead of waiting out the silence/max-duration timeout. All seven tunables (whisper/piper models, sample rate, VAD frame duration, VAD aggressiveness, silence timeout, max record seconds) are `AppConfig` fields (`OLI_VOICE_*` env / `settings.json` `voice` section / `/config` screen); `chat.py` passes them explicitly when constructing the engine, and saving `/config` drops the engine so the next `/voice` picks up new values. |
 | [oli_bot/logger.py](oli_bot/logger.py) | Centralised NDJSON file logging (rotating, 10 MB × 5) under `AppConfig.log_file`. Deliberately no console handler — stray writes would corrupt the Textual TUI. |
 
 ## Modes
@@ -74,6 +75,7 @@ See [docs/AGENT-POOLING.md](docs/AGENT-POOLING.md) for the `agents.yaml` schema,
 - **Permission gating** — `BuiltinToolManager.call_tool()` runs the profile enforcer, then `Session.needs_permission()`, then (if needed) `confirm_callback(description)`; the TUI shows `PermissionScreen` and the callback returns `"once"`, `"session"`, or `"deny"`. Session grants persist per scope for the process lifetime. `glob`/`grep` targeting patterns like `.env*`, `*.pem`, `*secret*` trigger the `workspace_sensitive` scope even inside the workspace.
 - **Built-in tool naming** — registered as `builtin__<name>` and dispatched by `MCPClientManager.call_tool`.
 - **Settings round-trip** — runtime model changes (`/model set-large|set-small`, `/servers set-default-model`) persist back to `settings.json` via `OliBot._persist_model_to_settings`; the `/config` form pre-populates from effective runtime values (server overrides included) via `_sync_settings_from_runtime`. Backend construction honours `self.config` overrides so JSON beats env at startup.
+- **Voice mode** — `/voice` toggles a background `@work(exclusive=False)` loop (`_run_voice_loop`) that cycles mic record → `VoiceEngine.transcribe` → the normal `_handle_user_message` chat pipeline → `VoiceEngine.speak`. Fully local (no network calls). A `threading.Event` (`_voice_stop_event`) is set the instant `/voice` toggles off so the blocking `record()` call returns immediately instead of running out the silence/max-duration timeout.
 
 For sequence diagrams and the full state machines, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -102,6 +104,7 @@ Runtime deps are declared in [pyproject.toml](pyproject.toml) `[project.dependen
 - **Backends** — `ollama`, `openai`, `huggingface_hub`, `transformers`, `accelerate`
 - **MCP + API** — `mcp` (v2 SDK — pulls in `httpx2`, `mcp-types`, `opentelemetry-api`), `fastapi`, `uvicorn[standard]`
 - **Tools** — `Pillow` (image handling), `httpx` / `requests` / `aiohttp`, `beautifulsoup4`, `ddgs`, `wikipedia`, `arxiv`, `googlesearch_python`, `stackapi`, `search_engine_parser`, `gnews`, `newspaper4k`
+- **Voice (optional)** — `[project.optional-dependencies].voice`: `pyaudio` (needs the PortAudio system library — `brew install portaudio` on macOS), `webrtcvad-wheels`, `faster-whisper`, `piper-tts`, `simpleaudio`. Install via `pip install -e '.[voice]'`.
 - **Python < 3.11 only** — `exceptiongroup`
 
 ## Run
@@ -175,4 +178,4 @@ Tests under `tests/` cover: `AgentPool` scaffolding (lookup, `${VAR}` expansion,
 
 ## Commands (in-app)
 
-`/help`, `/models [name]`, `/model large|small`, `/model set-large|set-small <name>`, `/config`, `/context`, `/servers add|list|remove|default|switch|use-model`, `/mcp add|list|remove`, `/mode [ask|agent|chat|plan]`, `/profile list|load|create`, `/sessions [list|switch|delete|rename|purge]`, `/workspace list|set|unset`, `/offline`, `/dry-run`, `/clear`, `/home`, `Ctrl+Q`, `Ctrl+L`, `Ctrl+Y`
+`/help`, `/models [name]`, `/model large|small`, `/model set-large|set-small <name>`, `/config`, `/context`, `/servers add|list|remove|default|switch|use-model`, `/mcp add|list|remove`, `/mode [ask|agent|chat|plan]`, `/profile list|load|create`, `/sessions [list|switch|delete|rename|purge]`, `/workspace list|set|unset`, `/offline`, `/dry-run`, `/voice`, `/clear`, `/home`, `Ctrl+Q`, `Ctrl+L`, `Ctrl+Y`

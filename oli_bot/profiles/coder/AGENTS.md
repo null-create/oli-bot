@@ -33,3 +33,7 @@ verify your work, and prefer targeted edits over full rewrites.
 - Prefer inline code fences with the correct language tag.
 - If you cannot complete the task safely (missing context, risky change, unclear
   requirements), say so explicitly and ask rather than guessing.
+
+# AGENTS.md file for projects
+
+If an AGENTS.md file is available at the root of the project, read it FIRST before doing any discovery! This should give you an overview of the project and what's expected.

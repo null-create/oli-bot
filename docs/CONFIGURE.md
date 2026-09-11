@@ -54,6 +54,13 @@ If `~/.config/oli/settings.json` does not exist, it is auto-created on first loa
 | `offline_mode`               | `true`                                 | `OLI_OFFLINE_MODE`            | Block network access for web tools and MCP servers                                           |
 | `log_file`                   | `logs/backend.ndjson`                  | `OLI_LOG_FILE`                | Path for NDJSON backend log file                                                             |
 | `log_level`                  | `INFO`                                 | `OLI_LOG_LEVEL`               | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR`                                           |
+| `voice_whisper_model`        | `base`                                 | `OLI_VOICE_WHISPER_MODEL`     | faster-whisper model size: `tiny`/`base`/`small`/`medium`/`large`                            |
+| `voice_piper_model`          | `en_US-lessac-medium.onnx`             | `OLI_VOICE_PIPER_MODEL`       | Path to the local Piper TTS `.onnx` model file                                               |
+| `voice_sample_rate`          | `16000`                                | `OLI_VOICE_SAMPLE_RATE`       | Mic sample rate in Hz (required by WebRTC VAD)                                               |
+| `voice_frame_duration_ms`    | `30`                                   | `OLI_VOICE_FRAME_DURATION_MS` | VAD frame size; must be `10`, `20`, or `30`                                                  |
+| `voice_vad_aggressiveness`   | `2`                                    | `OLI_VOICE_VAD_AGGRESSIVENESS`| WebRTC VAD aggressiveness `0`–`3`; higher rejects more noise                                 |
+| `voice_silence_timeout_ms`   | `800`                                  | `OLI_VOICE_SILENCE_TIMEOUT_MS`| Stop recording after this much consecutive silence                                           |
+| `voice_max_record_seconds`   | `15`                                   | `OLI_VOICE_MAX_RECORD_SECONDS`| Hard cap on a single recording                                                               |
 
 ## Quick examples
 

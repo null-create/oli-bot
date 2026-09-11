@@ -37,13 +37,14 @@ Concretely, that means:
 
 ## Features
 
-- **Multi-backend support** — Ollama, OpenAI, HuggingFace (remote or local), and Transformers (local GPU/CPU). Switch at runtime.
-- **Agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in [agents.yaml](agents.yaml) via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
+- **Declerative sub-agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in an optional [agents.yaml](agents.yaml) file via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
 - **Agent profiles** — drop-in system prompts with permission manifests, base-profile inheritance, and auto-generated profiles via `/profile create`. Bundled profiles: `default`, `coder`, `reviewer`, `writer`, `planner`, `researcher`, `analyst`.
 - **Rich built-in tool set** — file ops, shell access, web search/fetch, Wikipedia/GitHub/arXiv search, Git, task tracking, reasoning scratchpad, notebook, and more. Sandbox-locked with shell allowlists, SSRF protection, and sensitive-file gating.
 - **Permission system** — write operations and sensitive reads require user approval. Session grants, workspace scoping, and profile-level allow/deny lists.
 - **OpenAI-compatible API server** — run the same agent harness behind `/v1/models` and `/v1/chat/completions` (streaming + non-streaming) so any workflow that speaks the OpenAI wire protocol (the `openai` Python SDK, curl, or plain REST) can drive the agent.
+- **Multi-backend support** — Ollama, OpenAI, HuggingFace (remote or local), and Transformers (local GPU/CPU). Switch at runtime.
 - **MCP integration** — add stdio or HTTP MCP servers at runtime for custom tools.
+- **Voice mode (optional)** — `/voice` toggles a hands-free mic → STT → LLM → TTS loop (faster-whisper, Piper TTS, WebRTC VAD) for the TUI. Fully local; requires the `voice` extras and a downloaded Piper model.
 
 ## Roadmap / areas of active exploration
 
@@ -128,10 +129,30 @@ can pick up where you left off.
 | `/workspace list\|set\|unset`                            | Manage workspace directory                                                               |
 | `/offline`                                               | Toggle offline mode                                                                      |
 | `/dry-run`                                               | Toggle dry-run mode                                                                      |
+| `/voice`                                                 | Toggle voice mode (mic → STT → LLM → TTS)                                                |
 | `/clear`                                                 | Clear the conversation                                                                   |
 | `/home`                                                  | Return to the home screen                                                                |
 | `Ctrl+Q` / `Ctrl+L` / `Ctrl+Y`                           | Quit / Clear / Copy last message                                                         |
+## Voice mode
 
+`/voice` toggles a hands-free loop: listen on the mic (WebRTC VAD auto-detects speech/silence), transcribe with faster-whisper, send the text through the normal chat pipeline, then speak the response back with Piper TTS. Everything runs locally — no network calls.
+
+Install the extras and the PortAudio system library (required to build `pyaudio`):
+
+```bash
+brew install portaudio        # macOS; use your distro's package manager on Linux
+pip install -e '.[voice]'
+```
+
+Download a Piper voice model (one-time):
+
+```bash
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+export OLI_VOICE_PIPER_MODEL=/path/to/en_US-lessac-medium.onnx
+```
+
+Type `/voice` again (or `Ctrl+Q` to quit the app) to exit voice mode — the mic loop is interrupted immediately rather than waiting for the current recording to time out. All voice settings are configurable via env vars, `.env`, or the `/config` screen: `OLI_VOICE_WHISPER_MODEL` (default `base`), `OLI_VOICE_PIPER_MODEL`, plus VAD tunables (`OLI_VOICE_SAMPLE_RATE`, `OLI_VOICE_FRAME_DURATION_MS`, `OLI_VOICE_VAD_AGGRESSIVENESS`, `OLI_VOICE_SILENCE_TIMEOUT_MS`, `OLI_VOICE_MAX_RECORD_SECONDS`). See [docs/CONFIGURE.md](docs/CONFIGURE.md) for the full table.
 ## Documentation
 
 | Document                                       | Contents                                                                        |

@@ -65,6 +65,52 @@ async def test_config_screen_save_keeps_transformers_small_model():
         assert result["ollama"]["small_model"] == "ollama-sm"
 
 
+async def test_config_screen_voice_section_round_trip():
+    settings = _settings()
+    settings["voice"] = {
+        "whisper_model": "small",
+        "piper_model": "/models/custom.onnx",
+        "sample_rate": 16000,
+        "frame_duration_ms": 20,
+        "vad_aggressiveness": 3,
+        "silence_timeout_ms": 1200,
+        "max_record_seconds": 30,
+    }
+    app = _HostApp(settings)
+    async with app.run_test() as pilot:
+        screen = app.screen
+        assert screen.query_one("#cfg-voice-whisper-model").value == "small"
+        assert screen.query_one("#cfg-voice-piper-model").value == "/models/custom.onnx"
+        assert screen.query_one("#cfg-voice-frame-duration-ms").value == "20"
+        assert screen.query_one("#cfg-voice-vad-aggressiveness").value == "3"
+        assert screen.query_one("#cfg-voice-silence-timeout-ms").value == "1200"
+        assert screen.query_one("#cfg-voice-max-record-seconds").value == "30"
+        screen._save()
+        await pilot.pause()
+        voice = app.result["voice"]
+        assert voice["whisper_model"] == "small"
+        assert voice["piper_model"] == "/models/custom.onnx"
+        assert voice["sample_rate"] == 16000
+        assert voice["frame_duration_ms"] == 20
+        assert voice["vad_aggressiveness"] == 3
+        assert voice["silence_timeout_ms"] == 1200
+        assert voice["max_record_seconds"] == 30
+
+
+async def test_config_screen_voice_section_defaults_when_absent():
+    app = _HostApp(_settings())  # no "voice" key
+    async with app.run_test() as pilot:
+        screen = app.screen
+        assert screen.query_one("#cfg-voice-whisper-model").value == "base"
+        screen._save()
+        await pilot.pause()
+        voice = app.result["voice"]
+        assert voice["whisper_model"] == "base"
+        assert voice["piper_model"] == "en_US-lessac-medium.onnx"
+        assert voice["sample_rate"] == 16000
+        assert voice["vad_aggressiveness"] == 2
+
+
 async def test_config_screen_renders_new_sections():
     settings = _settings()
     settings["openai"]["vision_style"] = "bedrock"

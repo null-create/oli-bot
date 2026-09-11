@@ -57,6 +57,13 @@ dev = [
     "pytest-asyncio>=0.24",
     "black>=26.5.1",
 ]
+voice = [
+    "pyaudio>=0.2.14",
+    "webrtcvad-wheels>=2.0.10",
+    "faster-whisper>=1.0",
+    "piper-tts>=1.2",
+    "simpleaudio>=1.0.4",
+]
 
 [project.scripts]
 oli = "oli_bot.chat:main"

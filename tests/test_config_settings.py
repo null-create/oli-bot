@@ -3,6 +3,9 @@
 import json
 
 from oli_bot.config import AppConfig
+from oli_bot.chat import OliBot
+from oli_bot.models import HostConfig
+from oli_bot.server_manager import ServerManager
 from oli_bot.settings import SettingsManager
 
 
@@ -73,6 +76,37 @@ def test_settings_manager_created_file_reflects_env(tmp_path, monkeypatch):
         ]
         == 1500
     )
+
+
+def test_voice_settings_round_trip(tmp_path):
+    mgr = SettingsManager(config_dir=tmp_path)
+    cfg = AppConfig(
+        _env_file=None,
+        voice_whisper_model="small",
+        voice_piper_model="/models/custom.onnx",
+        voice_vad_aggressiveness=3,
+        voice_silence_timeout_ms=1200,
+        voice_max_record_seconds=30,
+    )
+    settings = mgr.from_appconfig(cfg)
+    assert settings["voice"]["whisper_model"] == "small"
+    assert settings["voice"]["vad_aggressiveness"] == 3
+    back = mgr.to_appconfig(settings)
+    assert back.voice_whisper_model == "small"
+    assert back.voice_piper_model == "/models/custom.onnx"
+    assert back.voice_vad_aggressiveness == 3
+    assert back.voice_silence_timeout_ms == 1200
+    assert back.voice_max_record_seconds == 30
+
+
+def test_voice_env_coercion(tmp_path, monkeypatch):
+    monkeypatch.setenv("OLI_VOICE_MAX_RECORD_SECONDS", "30")
+    monkeypatch.setenv("OLI_VOICE_VAD_AGGRESSIVENESS", "1")
+    mgr = SettingsManager(config_dir=tmp_path)
+    settings = mgr.load()
+    cfg = mgr.to_appconfig(settings)
+    assert cfg.voice_max_record_seconds == 30
+    assert cfg.voice_vad_aggressiveness == 1
 
 
 def test_settings_manager_created_file_uses_source_defaults(tmp_path):
@@ -214,3 +248,76 @@ def test_env_to_settings_covers_all_appconfig_fields(tmp_path):
         assert getattr(reloaded, field_name) == getattr(
             cfg, field_name
         ), f"Field {field_name} does not survive from_appconfig/to_appconfig round-trip"
+
+
+def test_runtime_settings_sync_covers_all_appconfig_fields(tmp_path):
+    mgr = SettingsManager(config_dir=tmp_path)
+    cfg = AppConfig(
+        _env_file=None,
+        backend="openai",
+        openai_api_key="openai-key",
+        openai_base_url="https://openai.example/v1",
+        openai_model="openai-large",
+        openai_small_model="openai-small",
+        openai_vision_style="bedrock",
+        openai_optional_headers={"X-Test": "yes"},
+        ollama_base_url="http://ollama.example:11434",
+        ollama_model="ollama-large",
+        ollama_small_model="ollama-small",
+        huggingface_base_url="https://hf.example",
+        huggingface_api_key="hf-key",
+        huggingface_model="hf-large",
+        huggingface_small_model="hf-small",
+        huggingface_remote=True,
+        transformers_model="tr-large",
+        transformers_small_model="tr-small",
+        transformers_device="cpu",
+        transformers_dtype="float32",
+        transformers_is_multi_model=True,
+        use_agent_pool=True,
+        agent_pool_size=11,
+        max_tokens=3333,
+        temperature=0.33,
+        max_retries=9,
+        retry_delay=2.5,
+        request_timeout=61.0,
+        max_messages=44,
+        max_tool_iterations=12,
+        stream_timeout=123.0,
+        model_filters=":cloud",
+        profiles_dir="custom-profiles",
+        logs_dir="custom-logs",
+        truncation_max_chars_small=222,
+        truncation_max_chars_large=22222,
+        dry_run=True,
+        offline_mode=False,
+        log_level="DEBUG",
+        log_file="logs/custom.ndjson",
+        api_host="127.0.0.1",
+        api_port=9999,
+        api_profile="analyst",
+        api_mode="ask",
+    )
+    server_manager = ServerManager(config_path=str(tmp_path / "hosts.json"))
+    server_manager.servers.append(
+        HostConfig(name="test", url="http://localhost:11434", active=True)
+    )
+
+    bot = object.__new__(OliBot)
+    bot.settings_manager = mgr
+    bot.config = cfg
+    bot.settings = mgr.get_defaults()
+    bot.settings["workspace"]["max_workspaces"] = 37
+    bot.settings["session"]["auto_save"] = False
+    bot.settings["session"]["resume_prompt"] = False
+    bot.server_manager = server_manager
+
+    bot._sync_settings_from_runtime()
+
+    reloaded = mgr.to_appconfig(bot.settings)
+    for field_name in AppConfig.model_fields:
+        assert getattr(reloaded, field_name) == getattr(
+            cfg, field_name
+        ), f"Field {field_name} was omitted by OliBot._sync_settings_from_runtime"
+    assert bot.settings["workspace"] == {"max_workspaces": 37}
+    assert bot.settings["session"] == {"auto_save": False, "resume_prompt": False}

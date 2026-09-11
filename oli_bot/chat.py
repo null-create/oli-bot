@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import logging
 import random
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -107,6 +108,7 @@ COMMANDS = (
     "/home",
     "/offline",
     "/dry-run",
+    "/voice",
 )
 
 
@@ -341,6 +343,11 @@ class OliBot(App):
         self._command_matches: list[str] = []
         self._suggestion_index: int = 0
 
+        # Voice mode state
+        self._voice_active: bool = False
+        self._voice_engine = None  # VoiceEngine — lazy-loaded on first /voice use
+        self._voice_stop_event: Optional[threading.Event] = None
+
         server_name = active.name if active else "default"
         loaded = False
         if load_session:
@@ -503,6 +510,10 @@ class OliBot(App):
 
     async def on_unmount(self) -> None:
         self._stop_sub_tree_timer()
+        # Signal the voice loop to stop before disconnecting everything else
+        self._voice_active = False
+        if self._voice_stop_event is not None:
+            self._voice_stop_event.set()
         await self.mcp_manager.disconnect_all()
 
     def on_mount(self) -> None:
@@ -747,6 +758,7 @@ class OliBot(App):
                 "  [bold]/clear[/bold]                 — clear conversation\n"
                 "  [bold]/offline[/bold]              — toggle offline mode (block network tools)\n"
                 "  [bold]/dry-run[/bold]               — toggle dry-run mode (preview destructive actions)\n"
+                "  [bold]/voice[/bold]                 — toggle voice mode (mic → STT → LLM → TTS)\n"
                 "  [bold]/home[/bold]                  — go to home screen\n"
                 "  [bold]/help[/bold]                  — show this message\n"
                 "  [bold]Ctrl+Q[/bold]                 — quit\n"
@@ -783,6 +795,8 @@ class OliBot(App):
             self._handle_dry_run()
         elif cmd == "/workspace":
             self._handle_workspace(text)
+        elif cmd == "/voice":
+            self._handle_voice()
         else:
             self._add_message(
                 "System",
@@ -1903,32 +1917,13 @@ class OliBot(App):
             self._add_message("System", f"[red]{e}[/red]")
 
     def _sync_settings_from_runtime(self) -> None:
-        s = self.settings
-        s["openai"]["large_model"] = self.config.openai_model
-        s["openai"]["small_model"] = self.config.openai_small_model
-        s["openai"]["vision_style"] = self.config.openai_vision_style
-        s["ollama"]["large_model"] = self.config.ollama_model
-        s["ollama"]["small_model"] = self.config.ollama_small_model
-        s["huggingface"]["large_model"] = self.config.huggingface_model
-        s["huggingface"]["small_model"] = self.config.huggingface_small_model
-        s["huggingface"]["remote"] = self.config.huggingface_remote
-        s["transformers"]["model"] = self.config.transformers_model
-        s["transformers"]["small_model"] = self.config.transformers_small_model
-        s["transformers"]["is_multi_model"] = self.config.transformers_is_multi_model
-        mp = s.setdefault("model_params", {})
-        mp["use_agent_pool"] = self.config.use_agent_pool
-        mp["agent_pool_size"] = self.config.agent_pool_size
-        lg = s.setdefault("logging", {})
-        lg["log_level"] = self.config.log_level
-        lg["log_file"] = self.config.log_file
-        api = s.setdefault("api_server", {})
-        api["host"] = self.config.api_host
-        api["port"] = self.config.api_port
-        api["profile"] = self.config.api_profile
-        api["mode"] = self.config.api_mode
-        paths = s.setdefault("paths", {})
-        paths["profiles_dir"] = self.config.profiles_dir
-        paths["logs_dir"] = self.config.logs_dir
+        preserved = {
+            key: self.settings[key]
+            for key in ("workspace", "session")
+            if key in self.settings
+        }
+        s = self.settings_manager.from_appconfig(self.config)
+        s.update(preserved)
         backend = self.config.backend
         section = s.setdefault(backend, {})
         eff_large = self._get_large_model()
@@ -1940,6 +1935,7 @@ class OliBot(App):
         else:
             section["large_model"] = eff_large
             section["small_model"] = eff_small
+        self.settings = s
 
     @work(exclusive=False)
     async def _handle_config(self) -> None:
@@ -1954,6 +1950,11 @@ class OliBot(App):
         self.agent.config = self.config
         self._builtin_tools._config = self.config
         self.mcp_manager._offline_mode = self.config.offline_mode
+
+        # Voice engine holds its own copy of the voice_* config; drop it so
+        # the next /voice activation picks up the new values.
+        if not self._voice_active:
+            self._voice_engine = None
 
         # Always rebuild: base_url / api_key / vision_style changes must
         # take effect even when the backend TYPE didn't change.
@@ -2081,7 +2082,141 @@ class OliBot(App):
             badges.append("[bold blue]\\[OFFLINE][/bold blue]")
         if self.config.dry_run:
             badges.append("[bold red]\\[DRY-RUN][/bold red]")
+        if getattr(self, "_voice_active", False):
+            badges.append("[bold magenta]\\[VOICE][/bold magenta]")
         return " ".join(badges)
+
+    # ------------------------------------------------------------------
+    # Voice mode
+    # ------------------------------------------------------------------
+
+    def _handle_voice(self) -> None:
+        """Toggle voice mode on or off."""
+        if self._voice_active:
+            # ---- turn off ----
+            self._voice_active = False
+            if self._voice_stop_event is not None:
+                self._voice_stop_event.set()  # interrupt an in-progress recording
+            self.update_header()
+            self._add_message("System", "🎙 Voice mode [bold]disabled[/bold].")
+        else:
+            # ---- turn on ----
+            if self._voice_engine is None:
+                from .voice import VoiceEngine  # lazy import — keeps startup fast
+
+                self._voice_engine = VoiceEngine(
+                    whisper_model_size=self.config.voice_whisper_model,
+                    piper_model_path=self.config.voice_piper_model,
+                    sample_rate=self.config.voice_sample_rate,
+                    frame_duration_ms=self.config.voice_frame_duration_ms,
+                    vad_aggressiveness=self.config.voice_vad_aggressiveness,
+                    silence_timeout_ms=self.config.voice_silence_timeout_ms,
+                    max_record_seconds=self.config.voice_max_record_seconds,
+                )
+            self._voice_active = True
+            self._voice_stop_event = threading.Event()
+            self.update_header()
+            self._add_message(
+                "System",
+                "🎙 Voice mode [bold]enabled[/bold]. "
+                "Speak after the [bold]🎙 Listening…[/bold] prompt appears.\n"
+                "Re-enter [bold]/voice[/bold] to exit voice mode.",
+            )
+            self._run_voice_loop()
+
+    @work(exclusive=False)
+    async def _run_voice_loop(self) -> None:
+        """Drive the STT → LLM → TTS cycle while voice mode is active.
+
+        Runs as a non-exclusive background worker so it can coexist with the
+        ``_generate_response`` exclusive worker.  All blocking audio calls are
+        offloaded to threads via ``asyncio.to_thread`` to avoid stalling the
+        Textual event loop.
+        """
+        engine = self._voice_engine
+        chat_log = self.query_one("#chat-log")
+
+        # ---- load models in a thread (may be slow the first time) ----------
+        try:
+            await asyncio.to_thread(engine.load)
+        except RuntimeError as exc:
+            self._voice_active = False
+            self.update_header()
+            self._add_message("System", f"[red]Voice mode error: {exc}[/red]")
+            return
+
+        while self._voice_active:
+            # ---- show listening indicator ----------------------------------
+            listen_widget = Static("🎙 [bold]Listening…[/bold]", classes="message")
+            await chat_log.mount(listen_widget)
+            chat_log.scroll_end(animate=False)
+
+            # ---- record from microphone (blocking, runs in thread) ---------
+            try:
+                audio_path = await asyncio.to_thread(engine.record, self._voice_stop_event)
+            except Exception as exc:
+                try:
+                    listen_widget.remove()
+                except Exception:
+                    pass
+                self._add_message("System", f"[red]Recording error: {exc}[/red]")
+                await asyncio.sleep(1)
+                continue
+
+            try:
+                listen_widget.remove()
+            except Exception:
+                pass
+
+            if not self._voice_active:
+                break
+
+            if audio_path is None:
+                # No speech detected — loop back immediately
+                continue
+
+            # ---- transcribe (blocking, runs in thread) ---------------------
+            try:
+                text = await asyncio.to_thread(engine.transcribe, audio_path)
+            except Exception as exc:
+                self._add_message("System", f"[red]Transcription error: {exc}[/red]")
+                continue
+            finally:
+                try:
+                    import os as _os
+
+                    _os.remove(audio_path)
+                except OSError:
+                    pass
+
+            if not text:
+                continue
+
+            if not self._voice_active:
+                break
+
+            # ---- send transcribed text through the normal chat pipeline ----
+            self._handle_user_message(text)
+
+            # ---- wait for the LLM response to finish -----------------------
+            # _generate_response is @work(exclusive=True); poll the flag it sets.
+            await asyncio.sleep(0.3)  # give the worker a moment to start
+            while self.agent.generating:
+                await asyncio.sleep(0.2)
+
+            if not self._voice_active:
+                break
+
+            # ---- speak the last assistant message --------------------------
+            last_assistant = next(
+                (m.content for m in reversed(self.messages) if m.role == "assistant"),
+                None,
+            )
+            if last_assistant:
+                try:
+                    await asyncio.to_thread(engine.speak, last_assistant)
+                except Exception as exc:
+                    self._add_message("System", f"[red]TTS error: {exc}[/red]")
 
     def _handle_user_message(self, text: str) -> None:
         ts = datetime.now(timezone.utc).isoformat()
