@@ -302,6 +302,7 @@ class SettingsManager:
         else:
             hf_remote = bool(hf_remote_raw)
         return AppConfig(
+            _env_file=None,
             backend=settings.get("backend", "ollama"),
             openai_api_key=openai_key,
             openai_base_url=op.get("base_url", "https://api.openai.com/v1"),
