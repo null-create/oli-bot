@@ -353,7 +353,7 @@ async def list_models() -> Dict[str, Any]:
         "object": "list",
         "data": [
             {
-                "id": model,
+                "id": f"oli-bot-{model}",
                 "object": "model",
                 "created": int(time.time()),
                 "owned_by": "oli",
