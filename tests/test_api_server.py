@@ -146,7 +146,7 @@ def test_list_models(api):
     body = resp.json()
     assert body["object"] == "list"
     assert len(body["data"]) == 1
-    assert body["data"][0]["id"] == "stub-text"
+    assert body["data"][0]["id"] == "oli-bot-stub-text"
     assert body["data"][0]["object"] == "model"
 
 
