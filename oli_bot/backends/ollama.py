@@ -68,6 +68,7 @@ class OllamaBackend(ModelBackend):
             }
             if tools:
                 kwargs["tools"] = _format_tools(tools)
+
             response: OllamaChatResponse = await self.client.chat(**kwargs)
 
             tool_calls = []
