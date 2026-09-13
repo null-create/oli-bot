@@ -1521,9 +1521,6 @@ class OliBot(App):
             )
             return
 
-        # NOTE: this is currently only for Ollama backends.
-        # Other upstream servers won't get this check when added.
-        # TODO: consider adding a generic ping/healthcheck for other backends if they support it.
         if self.config.backend == "ollama":
             ok, err = await UpstreamManager.validate_ollama_url(url)
             if not ok:
@@ -1532,6 +1529,20 @@ class OliBot(App):
                     f"[red]Failed to connect to {url}: {err}[/red]",
                 )
                 return
+        elif self.config.backend == "openai":
+            ok, err = await UpstreamManager.validate_openai_url(url)
+            if not ok:
+                self._add_message(
+                    "System",
+                    f"[red]Failed to connect to {url}: {err}[/red]",
+                )
+                return
+        else:
+            self._add_message(
+                "System",
+                f"[red]Adding servers is not supported for backend '{self.config.backend}'[/red]",
+            )
+            return
 
         try:
             is_first = self.upstream_manager.add_server(name, url)
