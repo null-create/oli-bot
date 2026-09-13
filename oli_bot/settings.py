@@ -62,7 +62,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     },
     "api_server": {
         "host": "0.0.0.0",
-        "port": 8000,
+        "port": 9734,
         "profile": "default",
         "mode": "agent",
     },
