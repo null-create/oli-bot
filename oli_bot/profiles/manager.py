@@ -3,14 +3,14 @@ from pathlib import Path
 from typing import List
 import logging
 
-from .models import ProfileData
-from .profiles.schema import (
+from ..models import ProfileData
+from .schema import (
     ProfileManifest,
     auto_generate_manifest,
     load_profile_manifest,
     dump_profile_manifest,
 )
-from .profiles.permissions import ProfilePermissionEnforcer
+from .permissions import ProfilePermissionEnforcer
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +20,7 @@ class ProfileManager:
 
     def __init__(self, profiles_dir: str = None):
         if not profiles_dir:
-            self.profiles_dir: Path = Path.joinpath(
-                Path(os.path.abspath(os.path.dirname(__file__))), "profiles"
-            )
+            self.profiles_dir: Path = Path(os.path.abspath(os.path.dirname(__file__)))
         else:
             self.profiles_dir = Path(profiles_dir)
 

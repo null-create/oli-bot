@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from ollama import AsyncClient as OllamaAsyncClient
 
-from .models import HostConfig
+from ..models import HostConfig
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ CONFIG_DIR = Path.joinpath(Path.home(), ".config", "oli")
 CONFIG_FILE = Path.joinpath(CONFIG_DIR, "hosts.json")
 
 
-class ServerManager:
+class UpstreamManager:
     def __init__(self, config_path: str = CONFIG_FILE):
         self.config_path = config_path
         self.servers: List[HostConfig] = []

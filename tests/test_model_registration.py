@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from oli_bot.models import HostConfig
-from oli_bot.server_manager import ServerManager
+from oli_bot.backends.upstream_manager import UpstreamManager
 
 
 class TestModelRegistration:
@@ -25,8 +25,8 @@ class TestModelRegistration:
 
     @pytest.fixture
     def manager(self, temp_config):
-        """Create a ServerManager instance with temp config."""
-        mgr = ServerManager(temp_config)
+        """Create a UpstreamManager instance with temp config."""
+        mgr = UpstreamManager(temp_config)
         mgr.servers.append(
             HostConfig(name="test-server", url="http://localhost:11434", active=True)
         )
@@ -97,7 +97,7 @@ class TestModelRegistration:
 
     def test_persistence_to_disk(self, temp_config):
         """Test that registered models persist to hosts.json."""
-        mgr1 = ServerManager(temp_config)
+        mgr1 = UpstreamManager(temp_config)
         mgr1.servers.append(
             HostConfig(name="test-server", url="http://localhost:11434", active=True)
         )
@@ -105,7 +105,7 @@ class TestModelRegistration:
         mgr1.add_model("test-server", "phi", "phi-2", tier="small")
 
         # Load in new manager instance
-        mgr2 = ServerManager(temp_config)
+        mgr2 = UpstreamManager(temp_config)
         models = mgr2.list_models("test-server")
 
         assert models["gpt4"] == "gpt-4-turbo"
@@ -130,7 +130,7 @@ class TestModelRegistration:
         Path(temp_config).write_text(json.dumps(old_data))
 
         # Load should work without errors
-        manager = ServerManager(temp_config)
+        manager = UpstreamManager(temp_config)
         assert len(manager.servers) == 1
 
         server = manager.get_active()
@@ -142,7 +142,7 @@ class TestModelRegistration:
 
     def test_multiple_servers_isolated_models(self, temp_config):
         """Test that models are isolated per server."""
-        manager = ServerManager(temp_config)
+        manager = UpstreamManager(temp_config)
         manager.servers.append(
             HostConfig(name="server1", url="http://host1:11434", active=True)
         )
