@@ -19,7 +19,7 @@ from .backends import (
 )
 from .config import AppConfig, configs
 from .mcp_client import MCPClientManager
-from .profile_manager import ProfileData, ProfileManager
+from .profiles.manager import ProfileData, ProfileManager
 from .profiles.permissions import ProfilePermissionEnforcer
 from .models import (
     ToolCallExecuting,

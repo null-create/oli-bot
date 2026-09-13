@@ -57,7 +57,7 @@ from .models import SubAgentRun, UsageEvent
 from .tools.manager import BuiltinToolManager
 from .tools.memory import _current_sub_run
 from .mcp_client import MCPClientManager
-from .server_manager import ServerManager
+from .backends.upstream_manager import UpstreamManager
 from .sessions import (
     SCOPE_WORKSPACE_SENSITIVE,
     Session,
@@ -269,9 +269,9 @@ class OliBot(App):
         if use_pool:
             self.config.use_agent_pool = True
         self.model_size: str = "large"
-        self.server_manager = ServerManager()
-        self.server_manager.seed_default(base_url)
-        active = self.server_manager.get_active()
+        self.upstream_manager = UpstreamManager()
+        self.upstream_manager.seed_default(base_url)
+        active = self.upstream_manager.get_active()
         effective_url = active.url if active else base_url
 
         cli_model = model
@@ -409,7 +409,7 @@ class OliBot(App):
             yield Static(id="status-bar")
 
     def _render_welcome_panel(self) -> Panel:
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         backend_label = (
             f"[bold {PRIMARY_HEX}]{self.config.backend}[/bold {PRIMARY_HEX}]"
         )
@@ -564,7 +564,7 @@ class OliBot(App):
                 self.notify("Copied to clipboard", timeout=2)
 
     def _server_name(self) -> str:
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         return active.name if active else "default"
 
     def _save_session(self) -> None:
@@ -588,7 +588,7 @@ class OliBot(App):
             self.current_session_id = new_id
 
     def update_header(self) -> None:
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         server_part = f" {active.name}" if active else ""
         model_part = (
             str(self.backend.model)
@@ -1229,7 +1229,7 @@ class OliBot(App):
         )
 
     def _handle_context(self) -> None:
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         backend_label = f"[bold green]{self.config.backend}[/bold green]"
         if self.config.backend == "ollama":
             server_url = active.url if active else self.backend.base_url
@@ -1525,7 +1525,7 @@ class OliBot(App):
         # Other upstream servers won't get this check when added.
         # TODO: consider adding a generic ping/healthcheck for other backends if they support it.
         if self.config.backend == "ollama":
-            ok, err = await ServerManager.validate_ollama_url(url)
+            ok, err = await UpstreamManager.validate_ollama_url(url)
             if not ok:
                 self._add_message(
                     "System",
@@ -1534,7 +1534,7 @@ class OliBot(App):
                 return
 
         try:
-            is_first = self.server_manager.add_server(name, url)
+            is_first = self.upstream_manager.add_server(name, url)
             if is_first:
                 self.backend.set_base_url(url)
                 self.update_header()
@@ -1545,7 +1545,7 @@ class OliBot(App):
             self._add_message("System", f"[red]{e}[/red]")
 
     def _server_list(self) -> None:
-        servers = self.server_manager.list_servers()
+        servers = self.upstream_manager.list_servers()
         if not servers:
             self._add_message("System", "No Ollama servers configured.")
             return
@@ -1557,9 +1557,9 @@ class OliBot(App):
 
     def _server_remove(self, name: str) -> None:
         try:
-            removed = self.server_manager.remove_server(name)
+            removed = self.upstream_manager.remove_server(name)
             if removed.active:
-                active = self.server_manager.get_active()
+                active = self.upstream_manager.get_active()
                 if active:
                     self.backend.set_base_url(active.url)
                 self.update_header()
@@ -1569,7 +1569,7 @@ class OliBot(App):
 
     def _server_default(self, name: str) -> None:
         try:
-            config = self.server_manager.switch_server(name)
+            config = self.upstream_manager.switch_server(name)
             self.backend.set_base_url(config.url)
             model_to_use = config.large_model or config.default_model
             if model_to_use:
@@ -1583,8 +1583,8 @@ class OliBot(App):
 
     def _server_set_default_model(self, name: str, model: str) -> None:
         try:
-            self.server_manager.set_default_model(name, model)
-            active = self.server_manager.get_active()
+            self.upstream_manager.set_default_model(name, model)
+            active = self.upstream_manager.get_active()
             if active and active.name == name:
                 self._switch_model(model)
             if self.config.backend == "ollama":
@@ -1599,7 +1599,7 @@ class OliBot(App):
     def _server_switch(self, name: str) -> None:
         try:
             self._save_session()
-            config = self.server_manager.switch_server(name)
+            config = self.upstream_manager.switch_server(name)
             self.backend.set_base_url(config.url)
             model_to_use = config.large_model or config.default_model
             if model_to_use:
@@ -1671,7 +1671,7 @@ class OliBot(App):
             return self.config.huggingface_model
         if self.config.backend == "transformers":
             return self.config.transformers_model
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         if active and active.large_model:
             return active.large_model
         return self.config.ollama_model
@@ -1685,7 +1685,7 @@ class OliBot(App):
             return (
                 self.config.transformers_small_model or self.config.transformers_model
             )
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         if active and active.small_model:
             return active.small_model
         return self.config.ollama_small_model
@@ -1731,28 +1731,28 @@ class OliBot(App):
             )
 
     def _model_set_large(self, model: str) -> None:
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         if not active:
             self._add_message(
                 "System",
                 "[red]No active server to set model for.[/red]",
             )
             return
-        self.server_manager.set_large_model(active.name, model)
+        self.upstream_manager.set_large_model(active.name, model)
         self._persist_model_to_settings(large=model)
         self._switch_model(model)
         self.model_size = "large"
         self._builtin_tools.model_tier = self.model_size
 
     def _model_set_small(self, model: str) -> None:
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         if not active:
             self._add_message(
                 "System",
                 "[red]No active server to set model for.[/red]",
             )
             return
-        self.server_manager.set_small_model(active.name, model)
+        self.upstream_manager.set_small_model(active.name, model)
         self._persist_model_to_settings(small=model)
         self._switch_model(model)
         self.model_size = "small"
@@ -1799,7 +1799,7 @@ class OliBot(App):
         Usage: /model add <name> [--large|--small|--default]
         Example: /model add gpt4-turbo --large
         """
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         if not active:
             self._add_message(
                 "System",
@@ -1832,7 +1832,7 @@ class OliBot(App):
                 return
 
         try:
-            self.server_manager.add_model(active.name, model_name, model_name, tier)
+            self.upstream_manager.add_model(active.name, model_name, model_name, tier)
             if tier:
                 self._add_message(
                     "System",
@@ -1852,7 +1852,7 @@ class OliBot(App):
         Usage: /model remove <name>
         Example: /model remove gpt4-turbo
         """
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         if not active:
             self._add_message(
                 "System",
@@ -1868,7 +1868,7 @@ class OliBot(App):
             return
 
         try:
-            removed_model = self.server_manager.remove_model(active.name, model_name)
+            removed_model = self.upstream_manager.remove_model(active.name, model_name)
             self._add_message(
                 "System",
                 f"Model [bold]{model_name}[/bold] (mapped to [bold]{removed_model}[/bold]) removed.",
@@ -1878,7 +1878,7 @@ class OliBot(App):
 
     def _model_list(self) -> None:
         """List all registered models for the active server."""
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         if not active:
             self._add_message(
                 "System",
@@ -1887,7 +1887,7 @@ class OliBot(App):
             return
 
         try:
-            models = self.server_manager.list_models(active.name)
+            models = self.upstream_manager.list_models(active.name)
             if not models:
                 self._add_message(
                     "System",
@@ -1967,7 +1967,7 @@ class OliBot(App):
         )
 
     def _rebuild_backend(self, announce: bool = True) -> None:
-        active = self.server_manager.get_active()
+        active = self.upstream_manager.get_active()
         url = active.url if active else self.config.ollama_base_url
         if self.config.backend == "openai":
             url = self.config.openai_base_url

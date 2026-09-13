@@ -7,7 +7,7 @@ from textual.containers import Container
 from textual.screen import ModalScreen
 from textual.widgets import Label, ListItem, ListView
 
-from ..server_manager import HostConfig
+from ..models import HostConfig
 
 
 class ServerListScreen(ModalScreen[Optional[str]]):

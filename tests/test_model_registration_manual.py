@@ -8,7 +8,7 @@ import json
 import tempfile
 from pathlib import Path
 from oli_bot.models import HostConfig
-from oli_bot.server_manager import ServerManager
+from oli_bot.backends.upstream_manager import UpstreamManager
 
 
 def test_hostconfig_has_registered_models():
@@ -28,7 +28,7 @@ def test_add_model_basic():
         config_path = f.name
 
     try:
-        manager = ServerManager(config_path)
+        manager = UpstreamManager(config_path)
         manager.servers.append(
             HostConfig(name="test-server", url="http://localhost:11434", active=True)
         )
@@ -50,7 +50,7 @@ def test_add_model_with_tier():
         config_path = f.name
 
     try:
-        manager = ServerManager(config_path)
+        manager = UpstreamManager(config_path)
         manager.servers.append(
             HostConfig(name="test-server", url="http://localhost:11434", active=True)
         )
@@ -72,7 +72,7 @@ def test_persistence():
 
     try:
         # Create and populate
-        mgr1 = ServerManager(config_path)
+        mgr1 = UpstreamManager(config_path)
         mgr1.servers.append(
             HostConfig(name="test-server", url="http://localhost:11434", active=True)
         )
@@ -80,7 +80,7 @@ def test_persistence():
         mgr1.add_model("test-server", "phi", "phi-2", tier="small")
 
         # Reload in new instance
-        mgr2 = ServerManager(config_path)
+        mgr2 = UpstreamManager(config_path)
         models = mgr2.list_models("test-server")
 
         assert "gpt4" in models, "Model not persisted"
@@ -116,7 +116,7 @@ def test_backward_compatibility():
         Path(config_path).write_text(json.dumps(old_data))
 
         # Load should work without errors
-        manager = ServerManager(config_path)
+        manager = UpstreamManager(config_path)
         assert len(manager.servers) == 1, "Failed to load old config"
 
         server = manager.get_active()
@@ -135,7 +135,7 @@ def test_duplicate_error():
         config_path = f.name
 
     try:
-        manager = ServerManager(config_path)
+        manager = UpstreamManager(config_path)
         manager.servers.append(
             HostConfig(name="test-server", url="http://localhost:11434", active=True)
         )
@@ -159,7 +159,7 @@ def test_remove_model():
         config_path = f.name
 
     try:
-        manager = ServerManager(config_path)
+        manager = UpstreamManager(config_path)
         manager.servers.append(
             HostConfig(name="test-server", url="http://localhost:11434", active=True)
         )
@@ -182,7 +182,7 @@ def test_multiple_servers():
         config_path = f.name
 
     try:
-        manager = ServerManager(config_path)
+        manager = UpstreamManager(config_path)
         manager.servers.append(
             HostConfig(name="server1", url="http://host1:11434", active=True)
         )

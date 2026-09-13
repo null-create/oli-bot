@@ -5,7 +5,7 @@ import json
 from oli_bot.config import AppConfig
 from oli_bot.chat import OliBot
 from oli_bot.models import HostConfig
-from oli_bot.server_manager import ServerManager
+from oli_bot.backends.upstream_manager import UpstreamManager
 from oli_bot.settings import SettingsManager
 
 
@@ -298,7 +298,7 @@ def test_runtime_settings_sync_covers_all_appconfig_fields(tmp_path):
         api_profile="analyst",
         api_mode="ask",
     )
-    server_manager = ServerManager(config_path=str(tmp_path / "hosts.json"))
+    server_manager = UpstreamManager(config_path=str(tmp_path / "hosts.json"))
     server_manager.servers.append(
         HostConfig(name="test", url="http://localhost:11434", active=True)
     )
@@ -310,7 +310,7 @@ def test_runtime_settings_sync_covers_all_appconfig_fields(tmp_path):
     bot.settings["workspace"]["max_workspaces"] = 37
     bot.settings["session"]["auto_save"] = False
     bot.settings["session"]["resume_prompt"] = False
-    bot.server_manager = server_manager
+    bot.upstream_manager = server_manager
 
     bot._sync_settings_from_runtime()
 
