@@ -165,6 +165,7 @@ Type `/voice` again (or `Ctrl+Q` to quit the app) to exit voice mode — the mic
 | Document                                       | Contents                                                                        |
 | ---------------------------------------------- | ------------------------------------------------------------------------------- |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)   | Architectural overview of the application, permission, configurations, and more |
+| [docs/API_SERVER.md](docs/API_SERVER.md)       | Running the `oli-server` REST/WebSocket API, endpoints, config, and examples    |
 | [docs/CONFIGURE.md](docs/CONFIGURE.md)         | Full configuration reference, settings precedence, sessions, workspace          |
 | [docs/TOOLS.md](docs/TOOLS.md)                 | Built-in tools, permission system, security, dry-run/offline modes, truncation  |
 | [docs/BACKENDS.md](docs/BACKENDS.md)           | Backend setup (Ollama, OpenAI, HuggingFace, Transformers), model tier switching |
