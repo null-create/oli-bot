@@ -55,6 +55,17 @@ class _RaisingStub:
         yield  # pragma: no cover
 
 
+class _HistoryProbeStub:
+    model = "stub-probe"
+
+    def __init__(self):
+        self.seen = []
+
+    async def stream_generate(self, messages, tools=None):
+        self.seen.append(len(messages))
+        yield TextChunk(f"n={len(messages)}")
+
+
 class _StubMCP:
     async def call_tool(self, name, params, confirm_callback=None, **kwargs):
         return "result-of-echo"
@@ -74,13 +85,16 @@ def _make_harness(backend) -> Agent:
         config=config,
     )
 
-    def _echo(x: dict) -> str:
-        return f"echoed-{x.get('x')}"
+    def _echo(x: int) -> str:
+        return f"echoed-{x}"
 
     builtin.register_tool(
         name="echo",
         description="Echo back the input.",
-        parameters={"type": "object", "properties": {"x": {"type": "integer"}}},
+        parameters={
+            "type": "object",
+            "properties": {"x": {"type": "integer"}},
+        },
         handler=_echo,
     )
 
@@ -133,6 +147,16 @@ def _text_chunks(body: str) -> list[str]:
             if delta.get("content"):
                 chunks.append(delta["content"])
     return chunks
+
+
+def _recv_until_done(ws) -> list[dict]:
+    """Collect WebSocket frames until a ``done`` frame arrives."""
+    frames = []
+    while True:
+        frame = ws.receive_json()
+        frames.append(frame)
+        if frame.get("type") == "done":
+            return frames
 
 
 # --------------------------------------------------------------------------- #
@@ -262,3 +286,107 @@ def test_health(api):
     resp = api.client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
+
+
+# --------------------------------------------------------------------------- #
+# /v1/chat (WebSocket)                                                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_websocket_chat(api):
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json() == {"type": "connected", "data": {}}
+        ws.send_json({"content": "hi"})
+        frames = _recv_until_done(ws)
+        types = [f["type"] for f in frames]
+        assert "text_chunk" in types
+        assert (
+            "".join(f["data"]["text"] for f in frames if f["type"] == "text_chunk")
+            == "Hello from stub"
+        )
+        done = frames[-1]
+        assert done["type"] == "done"
+        assert done["data"]["full_text"] == "Hello from stub"
+
+
+def test_websocket_tool_events(api):
+    api.reset(_ToolThenTextStub())
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "use the tool"})
+        frames = _recv_until_done(ws)
+        types = [f["type"] for f in frames]
+        assert "tool_call_executing" in types
+        assert "tool_call_result" in types
+        exec_frame = next(f for f in frames if f["type"] == "tool_call_executing")
+        assert exec_frame["data"]["name"] == "builtin__echo"
+        assert exec_frame["data"]["parameters"] == {"x": 1}
+        result_frame = next(f for f in frames if f["type"] == "tool_call_result")
+        assert result_frame["data"]["result"] == "echoed-1"
+        assert frames[-1]["type"] == "done"
+        assert frames[-1]["data"]["full_text"] == "done after tool"
+
+
+def test_websocket_stateful_history(api):
+    probe = _HistoryProbeStub()
+    api.reset(probe)
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "first"})
+        frames = _recv_until_done(ws)
+        # stream_generate sees [system header, user1] on the first turn
+        assert frames[0]["data"]["text"] == "n=2"
+        ws.send_json({"content": "second"})
+        frames = _recv_until_done(ws)
+        # system + user1 + assistant1 + user2 = 4 messages on the second turn
+        assert frames[0]["data"]["text"] == "n=4"
+        assert probe.seen == [2, 4]
+
+
+def test_websocket_clear(api):
+    probe = _HistoryProbeStub()
+    api.reset(probe)
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "first"})
+        _recv_until_done(ws)
+        ws.send_json({"action": "clear"})
+        assert ws.receive_json() == {"type": "cleared", "data": {}}
+        ws.send_json({"content": "after clear"})
+        frames = _recv_until_done(ws)
+        # history was reset: back down to system + user = 2 messages
+        assert frames[0]["data"]["text"] == "n=2"
+        assert probe.seen == [2, 2]
+
+
+def test_websocket_error(api):
+    api.reset(_RaisingStub())
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "hi"})
+        frames = _recv_until_done(ws)
+        types = [f["type"] for f in frames]
+        assert "error" in types
+        assert frames[-1]["type"] == "done"
+        assert frames[-1]["data"]["full_text"] == ""  # empty Done on failure
+
+
+def test_websocket_invalid_json(api):
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_text("not json")
+        frame = ws.receive_json()
+        assert frame["type"] == "error"
+        assert frame["data"]["message"] == "Invalid JSON payload"
+        # connection stays alive for a valid message after the bad one
+        ws.send_json({"content": "hi"})
+        assert _recv_until_done(ws)[-1]["type"] == "done"
+
+
+def test_websocket_empty_message(api):
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "   "})
+        frame = ws.receive_json()
+        assert frame["type"] == "error"
+        assert frame["data"]["message"] == "Empty message"

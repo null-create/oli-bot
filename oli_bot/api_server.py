@@ -1,9 +1,11 @@
 """OpenAI-compatible REST API over the oli agent harness.
 
 Serves ``/v1/models`` and ``/v1/chat/completions`` (streaming + non-streaming)
-using FastAPI, plugging the same ``Agent`` tool loop that powers the TUI into
-any workflow that speaks the OpenAI wire protocol (the ``openai`` Python SDK,
-curl, or any other HTTP client).
+with FastAPI, plus a stateful ``/v1/chat`` WebSocket that relays every agent
+event as a typed JSON frame for real-time browser UIs.  All routes plug the
+same ``Agent`` tool loop that powers the TUI into any client that speaks the
+OpenAI wire protocol (the ``openai`` Python SDK, curl, or any other HTTP
+client).
 
 The server is stateless from the caller's perspective: each
 ``/v1/chat/completions`` request carries the full message history, mirroring
@@ -19,6 +21,7 @@ are serialized with a lock since the shared ``Agent`` is not concurrent-safe.
 """
 
 import base64
+import dataclasses
 import json
 import logging
 import threading
@@ -29,10 +32,10 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from art import text2art
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .agent import Agent
+from .agent import Agent, AgentEvent
 from .backends import create_model_backend, ModelBackend
 from .config import AppConfig, configs
 from .logger import setup_logging
@@ -44,6 +47,10 @@ from .models import (
     ImageAttachment,
     Message,
     StreamChunk,
+    ThinkingChunk,
+    ToolCallExecuting,
+    ToolCallResult,
+    UsageEvent,
     ChatCompletionMessage,
     ChatCompletionRequest,
 )
@@ -341,6 +348,110 @@ async def _stream_response(request: ChatCompletionRequest) -> AsyncIterator[str]
     else:
         yield chunk({}, finish_reason="stop")
     yield "data: [DONE]\n\n"
+
+
+# --- WebSocket ------------------------------------------------------------- #
+
+
+def _event_to_frame(event: AgentEvent) -> Dict[str, Any]:
+    """Convert an ``AgentEvent`` into a typed JSON envelope for the browser.
+
+    The ``type`` field lets the client distinguish event kinds and render them
+    differently (streamed text, thinking blocks, tool calls, errors, etc.).
+    """
+    if isinstance(event, StreamChunk):
+        return {"type": "text_chunk", "data": {"text": event.text}}
+    if isinstance(event, ThinkingChunk):
+        return {"type": "thinking", "data": {"text": event.text}}
+    if isinstance(event, ToolCallExecuting):
+        return {
+            "type": "tool_call_executing",
+            "data": {"name": event.name, "parameters": event.parameters},
+        }
+    if isinstance(event, ToolCallResult):
+        return {
+            "type": "tool_call_result",
+            "data": {"name": event.name, "result": event.result},
+        }
+    if isinstance(event, AssistantResponse):
+        return {"type": "assistant_response", "data": {"content": event.content}}
+    if isinstance(event, UsageEvent):
+        return {"type": "usage", "data": dataclasses.asdict(event.usage)}
+    if isinstance(event, Error):
+        return {"type": "error", "data": {"message": event.message}}
+    if isinstance(event, Done):
+        return {"type": "done", "data": {"full_text": event.full_text}}
+    logger.warning("Unknown agent event in websocket relay: %r", event)
+    return {"type": "unknown", "data": {"event": repr(event)}}
+
+
+@app.websocket("/v1/chat")
+async def websocket_chat(websocket: WebSocket) -> None:
+    """Stateful WebSocket chat endpoint.
+
+    The server keeps a per-connection ``messages`` list so a client just sends
+    the next user turn (``{"content": "..."}``) and receives every ``AgentEvent``
+    back as a typed JSON frame.  ``{"action": "clear"}`` resets the history.
+    Runs are serialized on ``app.state.lock`` like the REST endpoints.
+    """
+    await websocket.accept()
+    messages: List[Message] = []
+    try:
+        await websocket.send_json({"type": "connected", "data": {}})
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json(
+                    {"type": "error", "data": {"message": "Invalid JSON payload"}}
+                )
+                continue
+            if not isinstance(data, dict):
+                await websocket.send_json(
+                    {"type": "error", "data": {"message": "Expected a JSON object"}}
+                )
+                continue
+
+            if data.get("action") == "clear":
+                messages = []
+                await websocket.send_json({"type": "cleared", "data": {}})
+                continue
+
+            content = data.get("content")
+            if not content or not str(content).strip():
+                await websocket.send_json(
+                    {"type": "error", "data": {"message": "Empty message"}}
+                )
+                continue
+
+            messages.append(Message(role="user", content=str(content)))
+
+            try:
+                tools = await _resolve_tools(app.state.agent)
+            except Exception as e:
+                logger.warning("Failed to list tools: %s", e)
+                tools = None
+
+            with app.state.lock:
+                try:
+                    async for event in app.state.agent.process(
+                        messages, tools=tools, confirm_callback=_api_confirm
+                    ):
+                        await websocket.send_json(_event_to_frame(event))
+                        if isinstance(event, Done) and event.full_text:
+                            messages.append(
+                                Message(role="assistant", content=event.full_text)
+                            )
+                except WebSocketDisconnect:
+                    raise
+                except Exception as e:
+                    logger.exception("Agent process failed over websocket: %s", e)
+                    await websocket.send_json(
+                        {"type": "error", "data": {"message": str(e)}}
+                    )
+    except WebSocketDisconnect:
+        logger.debug("WebSocket client disconnected from /v1/chat")
 
 
 # --- Routes ----------------------------------------------------------------- #
