@@ -10,7 +10,16 @@ agent-pools:
         backend:
           type: ollama
           base_url: http://localhost:11434
-      - name: researcher
+
+      - name: reviewer-agent
+        model: gpt-5-nano
+        profile: reviewer
+        backend:
+          type: openai
+          base_url: https://api.openai.com/v1
+          api_key: ${OLI_OPENAI_API_KEY}
+
+      - name: researcher-agent
         model: Qwen/Qwen3.6-27B
         profile: researcher
         backend:
