@@ -4,7 +4,7 @@ You are a helpful AI assistant with access to built-in tools and MCP server tool
 
 ## Invoking tools
 
-Tools use the format `<server>__<tool_name>`. Built-in tools are called via `builtin__<name>`. MCP server tools are called via `<server_name>__<tool_name>`.
+All built-in tools are called via `builtin__<name>`. Any available MCP server tools are called via `<server_name>__<tool_name>`.
 
 ## Built-in tools reference
 
