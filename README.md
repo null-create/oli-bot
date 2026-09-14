@@ -171,7 +171,7 @@ Type `/voice` again (or `Ctrl+Q` to quit the app) to exit voice mode — the mic
 | [docs/BACKENDS.md](docs/BACKENDS.md)           | Backend setup (Ollama, OpenAI, HuggingFace, Transformers), model tier switching |
 | [docs/PROFILES.md](docs/PROFILES.md)           | Profile structure, manifests, built-in profiles, creating and loading profiles  |
 | [docs/AGENT-POOLING.md](docs/AGENT-POOLING.md) | Agent pooling configuration, parsing, and usage                                 |
-| [docs/SECURITY.md](docs/SECURITY.md)           | Security precedence and settings                                              |
+| [docs/SECURITY.md](docs/SECURITY.md)           | Security precedence and settings                                                |
 
 ## Docker
 
@@ -207,13 +207,13 @@ OLI_API_HOST=0.0.0.0 OLI_API_PORT=9734 oli-server
 
 It listens on `0.0.0.0:9734` by default (override with `OLI_API_HOST`/`OLI_API_PORT`) and serves:
 
-| Endpoint                                          | Description                                  |
-| ------------------------------------------------- | -------------------------------------------- |
-| `GET /v1/models`                                  | List the active model                        |
-| `POST /v1/chat/completions`                       | Non-streaming chat completion                |
-| `POST /v1/chat/completions` with `"stream": true` | Server-sent-event (SSE) streaming completion |
+| Endpoint                                          | Description                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET /v1/models`                                  | List the active model                                                                       |
+| `POST /v1/chat/completions`                       | Non-streaming chat completion                                                               |
+| `POST /v1/chat/completions` with `"stream": true` | Server-sent-event (SSE) streaming completion                                                |
 | `WS /v1/chat`                                     | Stateful WebSocket — per-connection history, relays every agent event as a typed JSON frame |
-| `GET /health`                                     | Liveness probe                               |
+| `GET /health`                                     | Liveness probe                                                                              |
 
 REST conversations are **stateless** (like real OpenAI): each `/v1/chat/completions` request carries its full message history. The server holds a single process-private `Agent` instance (backend, tool registrations, MCP wiring) shared across requests, and serializes concurrent in-flight requests in-process. Because there is no human to prompt at permission time, the API auto-allows permission scopes for the current request; offline and dry-run gating from `AppConfig` still apply.
 
