@@ -125,7 +125,7 @@ class AppConfig(BaseSettings):
 
     # API Server configuration
     api_host: str = Field(default="0.0.0.0")
-    api_port: int = Field(default=8000)
+    api_port: int = Field(default=9734)
     api_profile: str = Field(default="default")
     api_mode: str = Field(default="agent")
 

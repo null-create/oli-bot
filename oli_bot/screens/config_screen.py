@@ -440,10 +440,10 @@ class ConfigScreen(ModalScreen[dict | None]):
                     value=api.get("host", "0.0.0.0"),
                 )
                 yield Input(
-                    placeholder=f"Port ({api.get('port', 8000)})",
+                    placeholder=f"Port ({api.get('port', 9734)})",
                     id="cfg-api-port",
                     classes="config-input",
-                    value=str(api.get("port", 8000)),
+                    value=str(api.get("port", 9734)),
                 )
                 yield Input(
                     placeholder=f"Profile ({api.get('profile', 'default')})",
@@ -603,7 +603,7 @@ class ConfigScreen(ModalScreen[dict | None]):
             },
             "api_server": {
                 "host": self._val("#cfg-api-host"),
-                "port": self._int("#cfg-api-port", 8000),
+                "port": self._int("#cfg-api-port", 9734),
                 "profile": self._val("#cfg-api-profile"),
                 "mode": self._val("#cfg-api-mode"),
             },

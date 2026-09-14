@@ -343,7 +343,7 @@ class SettingsManager:
             log_level=lg.get("log_level", "INFO"),
             log_file=lg.get("log_file", "logs/backend.ndjson"),
             api_host=api.get("host", "0.0.0.0"),
-            api_port=api.get("port", 8000),
+            api_port=api.get("port", 9734),
             api_profile=api.get("profile", "default"),
             api_mode=api.get("mode", "agent"),
             profiles_dir=paths.get("profiles_dir", "profiles"),

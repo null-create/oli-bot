@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
 
+import httpx
 from ollama import AsyncClient as OllamaAsyncClient
 
 from ..models import HostConfig
@@ -165,11 +166,24 @@ class UpstreamManager:
 
     @staticmethod
     async def validate_ollama_url(url: str) -> tuple[bool, str]:
-        """NOTE: currently only used to validate ollama URLs"""
+        """Validate Ollama API URL by attempting to list models."""
         try:
             client = OllamaAsyncClient(host=url)
             await client.list()
             return True, ""
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    async def validate_openai_url(url: str) -> tuple[bool, str]:
+        """Validate OpenAI API URL by checking the /v1/models endpoint."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{url}/v1/models")
+                if response.status_code == 200:
+                    return True, ""
+                else:
+                    return False, f"Unexpected status code: {response.status_code}"
         except Exception as e:
             return False, str(e)
 

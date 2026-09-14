@@ -37,7 +37,7 @@ Concretely, that means:
 
 ## Features
 
-- **Declerative sub-agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in an optional [agents.yaml](agents.yaml) file via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
+- **Declarative sub-agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in an optional [agents.yaml](agents.yaml) file via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
 - **Agent profiles** — drop-in system prompts with permission manifests, base-profile inheritance, and auto-generated profiles via `/profile create`. Bundled profiles: `default`, `coder`, `reviewer`, `writer`, `planner`, `researcher`, `analyst`.
 - **Rich built-in tool set** — file ops, shell access, web search/fetch, Wikipedia/GitHub/arXiv search, Git, task tracking, reasoning scratchpad, notebook, and more. Sandbox-locked with shell allowlists, SSRF protection, and sensitive-file gating.
 - **Permission system** — write operations and sensitive reads require user approval. Session grants, workspace scoping, and profile-level allow/deny lists.
@@ -171,7 +171,7 @@ Type `/voice` again (or `Ctrl+Q` to quit the app) to exit voice mode — the mic
 | [docs/BACKENDS.md](docs/BACKENDS.md)           | Backend setup (Ollama, OpenAI, HuggingFace, Transformers), model tier switching |
 | [docs/PROFILES.md](docs/PROFILES.md)           | Profile structure, manifests, built-in profiles, creating and loading profiles  |
 | [docs/AGENT-POOLING.md](docs/AGENT-POOLING.md) | Agent pooling configuration, parsing, and usage                                 |
-| [docs/SECURITY.md](docs/SECURITY.md)           | Security precidence and settings                                                |
+| [docs/SECURITY.md](docs/SECURITY.md)           | Security precedence and settings                                                |
 
 ## Docker
 
@@ -183,7 +183,7 @@ The Compose file runs the OpenAI-compatible API server in a container. The API s
 docker-compose up --build
 ```
 
-The API server listens on `localhost:9734`, mounts `./profiles` and `~/.config/oli` to persist state across restarts, and is ready to accept OpenAI-compatible chat completions requests.
+The API server listens on `localhost:9734` (the compose file sets it via the repo's `.env`), mounts `./oli_bot/profiles`, `~/.config/oli`, and `./notes` to persist state across restarts, and is ready to accept OpenAI-compatible chat completions requests.
 
 **Run the TUI agent locally (optional):**
 
@@ -205,16 +205,19 @@ oli-server
 OLI_API_HOST=0.0.0.0 OLI_API_PORT=9734 oli-server
 ```
 
-It listens on `0.0.0.0:9734` by default and serves:
+It listens on `0.0.0.0:9734` by default (override with `OLI_API_HOST`/`OLI_API_PORT`) and serves:
 
-| Endpoint                                          | Description                                  |
-| ------------------------------------------------- | -------------------------------------------- |
-| `GET /v1/models`                                  | List the active model                        |
-| `POST /v1/chat/completions`                       | Non-streaming chat completion                |
-| `POST /v1/chat/completions` with `"stream": true` | Server-sent-event (SSE) streaming completion |
-| `GET /health`                                     | Liveness probe                               |
+| Endpoint                                          | Description                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET /v1/models`                                  | List the active model                                                                       |
+| `POST /v1/chat/completions`                       | Non-streaming chat completion                                                               |
+| `POST /v1/chat/completions` with `"stream": true` | Server-sent-event (SSE) streaming completion                                                |
+| `WS /v1/chat`                                     | Stateful WebSocket — per-connection history, relays every agent event as a typed JSON frame |
+| `GET /health`                                     | Liveness probe                                                                              |
 
-Conversations are **stateless** (like real OpenAI): each `/v1/chat/completions` request carries its full message history. The server holds a single process-private `Agent` instance (backend, tool registrations, MCP wiring) shared across requests, and serializes concurrent in-flight requests in-process. Because there is no human to prompt at permission time, the API auto-allows permission scopes for the current request; offline and dry-run gating from `AppConfig` still apply.
+REST conversations are **stateless** (like real OpenAI): each `/v1/chat/completions` request carries its full message history. The server holds a single process-private `Agent` instance (backend, tool registrations, MCP wiring) shared across requests, and serializes concurrent in-flight requests in-process. Because there is no human to prompt at permission time, the API auto-allows permission scopes for the current request; offline and dry-run gating from `AppConfig` still apply.
+
+The `WS /v1/chat` WebSocket is the stateful counterpart for real-time browser UIs: the server keeps a per-connection `messages` history, so a client sends each next turn as `{"content": "..."}` and receives every `AgentEvent` back as a typed JSON frame (`text_chunk`/`thinking`/`tool_call_executing`/`tool_call_result`/`assistant_response`/`usage`/`error`/`done`); `{"action": "clear"}` resets the history. See [docs/API_SERVER.md](docs/API_SERVER.md) for the full frame reference.
 
 ### curl
 

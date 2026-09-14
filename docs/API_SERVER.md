@@ -15,7 +15,7 @@ oli-server
 ```
 
 On startup it prints a banner with the resolved backend, model, mode, profile,
-and URL. By default it listens on `0.0.0.0:8000`.
+and URL. By default it listens on `0.0.0.0:9734`.
 
 ## Server configuration
 
@@ -26,7 +26,7 @@ settings. Four fields are specific to the server:
 | Setting (env var)          | Default    | Description                                   |
 | -------------------------- | ---------- | --------------------------------------------- |
 | `api_host` (`OLI_API_HOST`)     | `0.0.0.0`  | Bind address                                    |
-| `api_port` (`OLI_API_PORT`)     | `8000`     | Listen port                                     |
+| `api_port` (`OLI_API_PORT`)     | `9734`     | Listen port                                     |
 | `api_profile` (`OLI_API_PROFILE`) | `default`  | Profile loaded at startup (mirrors `--profile`) |
 | `api_mode` (`OLI_API_MODE`)     | `agent`    | Mode: `agent` / `ask` / `chat` / `plan`         |
 
@@ -80,7 +80,7 @@ Liveness probe. Returns `{"status": "ok"}`.
 Lists the single active model.
 
 ```bash
-curl http://localhost:8000/v1/models
+curl http://localhost:9734/v1/models
 ```
 
 ```json
@@ -102,7 +102,7 @@ curl http://localhost:8000/v1/models
 Non-streaming completion:
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
+curl http://localhost:9734/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "gpt-4o",
@@ -185,7 +185,7 @@ A failed run (backend error, tool error, empty reply) surfaces as
 Set `"stream": true`. The server returns `text/event-stream` SSE:
 
 ```bash
-curl -N http://localhost:8000/v1/chat/completions \
+curl -N http://localhost:9734/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"stream": true, "messages": [{"role": "user", "content": "hi"}]}'
 ```
@@ -211,7 +211,7 @@ a failed run emits one final SSE frame whose payload is `{"error": {...}}` befor
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
+client = OpenAI(base_url="http://localhost:9734/v1", api_key="unused")
 
 resp = client.chat.completions.create(
     model="gpt-4o",
@@ -262,7 +262,7 @@ import asyncio, json
 import websockets
 
 async def main():
-    async with websockets.connect("ws://localhost:8000/v1/chat") as ws:
+    async with websockets.connect("ws://localhost:9734/v1/chat") as ws:
         print(await ws.recv())  # {"type": "connected", ...}
         await ws.send(json.dumps({"content": "List the todos"}))
         while True:
