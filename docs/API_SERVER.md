@@ -23,12 +23,12 @@ The server uses the same `AppConfig` as the TUI (see
 [CONFIGURE.md](CONFIGURE.md)) for backend, model, offline/dry-run, and profile
 settings. Four fields are specific to the server:
 
-| Setting (env var)          | Default    | Description                                   |
-| -------------------------- | ---------- | --------------------------------------------- |
-| `api_host` (`OLI_API_HOST`)     | `0.0.0.0`  | Bind address                                    |
-| `api_port` (`OLI_API_PORT`)     | `9734`     | Listen port                                     |
-| `api_profile` (`OLI_API_PROFILE`) | `default`  | Profile loaded at startup (mirrors `--profile`) |
-| `api_mode` (`OLI_API_MODE`)     | `agent`    | Mode: `agent` / `ask` / `chat` / `plan`         |
+| Setting (env var)                 | Default   | Description                                     |
+| --------------------------------- | --------- | ----------------------------------------------- |
+| `api_host` (`OLI_API_HOST`)       | `0.0.0.0` | Bind address                                    |
+| `api_port` (`OLI_API_PORT`)       | `9734`    | Listen port                                     |
+| `api_profile` (`OLI_API_PROFILE`) | `default` | Profile loaded at startup (mirrors `--profile`) |
+| `api_mode` (`OLI_API_MODE`)       | `agent`   | Mode: `agent` / `ask` / `chat` / `plan`         |
 
 Examples:
 
@@ -127,8 +127,11 @@ server always uses its configured model. Recognized fields:
     {
       "role": "user",
       "content": [
-        {"type": "text", "text": "What is in this image?"},
-        {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo=..."}}
+        { "type": "text", "text": "What is in this image?" },
+        {
+          "type": "image_url",
+          "image_url": { "url": "data:image/png;base64,iVBORw0KGgo=..." }
+        }
       ]
     }
   ]
@@ -150,7 +153,7 @@ Non-streaming response:
   "choices": [
     {
       "index": 0,
-      "message": {"role": "assistant", "content": "The repo contains ..."},
+      "message": { "role": "assistant", "content": "The repo contains ..." },
       "finish_reason": "stop"
     }
   ],
@@ -243,17 +246,27 @@ per-connection `messages` history, so a client sends each next user turn as
 The server sends a `{"type": "connected"}` frame on accept, then one frame per
 inbound message:
 
-| Frame type              | Payload                                                       |
-| ----------------------- | ------------------------------------------------------------- |
-| `text_chunk`            | `{"text": "..."}` — streamed assistant text                   |
-| `thinking`              | `{"text": "..."}` — model reasoning block                     |
-| `tool_call_executing`   | `{"name": "...", "parameters": {...}}`                        |
-| `tool_call_result`      | `{"name": "...", "result": "..."}`                            |
-| `assistant_response`    | `{"content": "..."}` — final assembled assistant text         |
-| `usage`                 | `{"prompt_tokens": ..., "completion_tokens": ..., ...}`        |
-| `error`                 | `{"message": "..."}`                                          |
-| `done`                  | `{"full_text": "..."}` — run finished                         |
-| `cleared`               | `{}` — history reset (reply to `action: clear`)               |
+| Frame type            | Payload                                                        |
+| --------------------- | -------------------------------------------------------------- |
+| `text_chunk`          | `{"text": "..."}` — streamed assistant text                    |
+| `thinking`            | `{"text": "..."}` — model reasoning block                      |
+| `tool_call_executing` | `{"name": "...", "parameters": {...}}`                         |
+| `tool_call_result`    | `{"name": "...", "result": "..."}`                             |
+| `assistant_response`  | `{"content": "..."}` — final assembled assistant text          |
+| `usage`               | `{"prompt_tokens": ..., "completion_tokens": ..., ...}`        |
+| `error`               | `{"message": "..."}`                                           |
+| `done`                | `{"full_text": "..."}` — run finished                          |
+| `cleared`             | `{}` — history reset (reply to `action: clear`)                |
+| `sub_agent_started`   | `{"task_id", "agent_name", "pool_name", "task"}`               |
+| `sub_agent_progress`  | `{"task_id", "agent_name", "activity", "status"}`              |
+| `sub_agent_completed` | `{"task_id", "agent_name", "status", "full_text"}`             |
+| `todo`                | `{"todos": [...]}` (root) or with `task_id`/`agent_name` (sub) |
+
+Sub-agent activity is relayed live while a `dispatch` tool call is in flight:
+frames carry the same shape as above (`text_chunk`, `tool_call_executing`,
+…) with `task_id` and `agent_name` attached so the client can demux by run.
+`todo` frames are emitted whenever `builtin__todowrite` updates a task list —
+the root list has no `task_id`; a sub-agent's list adds `task_id`/`agent_name`.
 
 Example client:
 

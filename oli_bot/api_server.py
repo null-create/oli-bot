@@ -28,6 +28,7 @@ import threading
 import time
 import uuid
 import random
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -35,7 +36,13 @@ from art import text2art
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .agent import Agent, AgentEvent
+from .agent import (
+    Agent,
+    AgentEvent,
+    AgentPool,
+    register_dispatch_tool,
+    run_agent_dispatch,
+)
 from .backends import create_model_backend, ModelBackend
 from .config import AppConfig, configs
 from .logger import setup_logging
@@ -47,6 +54,11 @@ from .models import (
     ImageAttachment,
     Message,
     StreamChunk,
+    SubAgentCompleted,
+    SubAgentEvent,
+    SubAgentProgress,
+    SubAgentRun,
+    SubAgentStarted,
     ThinkingChunk,
     ToolCallExecuting,
     ToolCallResult,
@@ -162,6 +174,68 @@ def _build_agent(config: AppConfig, mode: str, profile: str) -> Agent:
 async def _api_confirm(description: str) -> str:
     """Auto-allow every permission scope (API mode has no interactive prompt)."""
     return "session"
+
+
+def _wire_todo_relay(agent: Agent) -> None:
+    """Relay ``builtin__todowrite`` updates to WebSocket clients.
+
+    The tool manager invokes these synchronously from inside the tool handler;
+    we append snapshots to ``mcp_manager.pending_todos`` which the socket loop
+    drains after each agent event. ``task_id`` is present for sub-agent runs so
+    the client can demux the update.
+    """
+
+    def _on_todos_changed(todos: list) -> None:
+        agent.mcp_manager.pending_todos.append({"todos": list(todos)})
+
+    def _on_sub_todos_changed(run: SubAgentRun, todos: list) -> None:
+        agent.mcp_manager.pending_todos.append(
+            {
+                "todos": list(todos),
+                "task_id": run.task_id,
+                "agent_name": run.agent_name,
+            }
+        )
+
+    agent.mcp_manager._builtin_tools.set_todo_callback(_on_todos_changed)
+    agent.mcp_manager._builtin_tools.set_sub_todo_callback(_on_sub_todos_changed)
+
+
+async def _dispatch_tasks(tasks: list[dict]) -> str:
+    """API-server ``dispatch`` tool handler.
+
+    Fans a batch of tasks out to pooled sub-agents concurrently, mirroring the
+    TUI's implementation. Sub-agent lifecycle events are pushed onto
+    ``mcp_manager.sub_agent_queue`` (set by the agent's tool loop while the
+    dispatch call is in flight) so the WebSocket relay streams them live.
+    """
+    pool = getattr(app.state, "agent_pool", None)
+    if pool is None or not tasks:
+        return "Error: dispatch called with no tasks"
+
+    available_tools = await app.state.agent.mcp_manager.get_available_tools()
+    sub_tools = [t for t in available_tools if t.get("name") != "builtin__dispatch"]
+
+    now = datetime.now(timezone.utc).isoformat()
+    runs: List[SubAgentRun] = []
+    for i, spec in enumerate(tasks):
+        runs.append(
+            SubAgentRun(
+                task_id=f"run-{i + 1}",
+                agent_name=str(spec.get("agent", "")),
+                pool_name=str(spec.get("pool", "default")),
+                task=str(spec.get("task", "")),
+                started_at=now,
+            )
+        )
+
+    return await run_agent_dispatch(
+        pool=pool,
+        runs=runs,
+        tools=sub_tools,
+        confirm_callback=_api_confirm,
+        event_sink=app.state.agent.mcp_manager.sub_agent_queue,
+    )
 
 
 # --- Message conversion ----------------------------------------------------- #
@@ -359,6 +433,13 @@ def _event_to_frame(event: AgentEvent) -> Dict[str, Any]:
     The ``type`` field lets the client distinguish event kinds and render them
     differently (streamed text, thinking blocks, tool calls, errors, etc.).
     """
+    if isinstance(event, SubAgentEvent):
+        # Wrapped sub-agent activity: forward the inner frame with the owning
+        # run's identity attached so the client can demux by task_id.
+        frame = _event_to_frame(event.event)
+        frame["data"]["task_id"] = event.task_id
+        frame["data"]["agent_name"] = event.agent_name
+        return frame
     if isinstance(event, StreamChunk):
         return {"type": "text_chunk", "data": {"text": event.text}}
     if isinstance(event, ThinkingChunk):
@@ -381,6 +462,36 @@ def _event_to_frame(event: AgentEvent) -> Dict[str, Any]:
         return {"type": "error", "data": {"message": event.message}}
     if isinstance(event, Done):
         return {"type": "done", "data": {"full_text": event.full_text}}
+    if isinstance(event, SubAgentStarted):
+        return {
+            "type": "sub_agent_started",
+            "data": {
+                "task_id": event.task_id,
+                "agent_name": event.agent_name,
+                "pool_name": event.pool_name,
+                "task": event.task,
+            },
+        }
+    if isinstance(event, SubAgentProgress):
+        return {
+            "type": "sub_agent_progress",
+            "data": {
+                "task_id": event.task_id,
+                "agent_name": event.agent_name,
+                "activity": event.activity,
+                "status": event.status,
+            },
+        }
+    if isinstance(event, SubAgentCompleted):
+        return {
+            "type": "sub_agent_completed",
+            "data": {
+                "task_id": event.task_id,
+                "agent_name": event.agent_name,
+                "status": event.status,
+                "full_text": event.full_text,
+            },
+        }
     logger.warning("Unknown agent event in websocket relay: %r", event)
     return {"type": "unknown", "data": {"event": repr(event)}}
 
@@ -439,6 +550,11 @@ async def websocket_chat(websocket: WebSocket) -> None:
                         messages, tools=tools, confirm_callback=_api_confirm
                     ):
                         await websocket.send_json(_event_to_frame(event))
+                        while app.state.agent.mcp_manager.pending_todos:
+                            todo_data = app.state.agent.mcp_manager.pending_todos.pop(0)
+                            await websocket.send_json(
+                                {"type": "todo", "data": todo_data}
+                            )
                         if isinstance(event, Done) and event.full_text:
                             messages.append(
                                 Message(role="assistant", content=event.full_text)
@@ -512,6 +628,28 @@ def _initialize_state() -> None:
     app.state.config = config
     app.state.agent = agent
     app.state.lock = _Lock()
+
+    # Relay todo-list updates (from ``builtin__todowrite``) to WebSocket
+    # clients. The tool manager invokes these synchronously; we just append
+    # snapshots to a queue the socket loop drains after each agent event.
+    _wire_todo_relay(agent)
+
+    # Agent pooling: when enabled, build the pool and register the dispatch
+    # tool exactly like the TUI so the root agent can fan work out to
+    # specialist sub-agents. Sub-agent events flow to the WebSocket live.
+    if config.use_agent_pool:
+        try:
+            pool = AgentPool(agent.mcp_manager)
+            register_dispatch_tool(
+                agent.mcp_manager._builtin_tools, pool, _dispatch_tasks
+            )
+            app.state.agent_pool = pool
+            logger.info("Agent pooling enabled: %s", list(pool.agent_pool.keys()))
+        except Exception as e:
+            logger.error("Failed to build agent pool: %s", e)
+            app.state.agent_pool = None
+    else:
+        app.state.agent_pool = None
 
 
 _initialize_state()

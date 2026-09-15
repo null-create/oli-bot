@@ -62,11 +62,11 @@ Top level:
 
 Each pool:
 
-| Key           | Description                                                       |
-| ------------- | ----------------------------------------------------------------- |
+| Key           | Description                                                                    |
+| ------------- | ------------------------------------------------------------------------------ |
 | `name`        | Pool name. `"default"` is used when no `pool` is specified in a dispatch task. |
-| `description` | Free-form text describing the pool's purpose.                     |
-| `agents`      | List of agent configs (1 to `agent_pool_size`, default max 5).    |
+| `description` | Free-form text describing the pool's purpose.                                  |
+| `agents`      | List of agent configs (1 to `agent_pool_size`, default max 5).                 |
 
 Each agent:
 
@@ -137,9 +137,21 @@ are configured, defaulting to `"default"` when omitted):
 ```json
 {
   "tasks": [
-    { "agent": "researcher", "pool": "default",  "task": "Find recent papers on X" },
-    { "agent": "code-writer",  "pool": "coding",   "task": "Write a Python parser for the results" },
-    { "agent": "code-reviewer","pool": "coding",   "task": "Review the parser for correctness" }
+    {
+      "agent": "researcher",
+      "pool": "default",
+      "task": "Find recent papers on X"
+    },
+    {
+      "agent": "code-writer",
+      "pool": "coding",
+      "task": "Write a Python parser for the results"
+    },
+    {
+      "agent": "code-reviewer",
+      "pool": "coding",
+      "task": "Review the parser for correctness"
+    }
   ]
 }
 ```

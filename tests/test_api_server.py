@@ -55,6 +55,36 @@ class _RaisingStub:
         yield  # pragma: no cover
 
 
+class _TodoThenTextStub:
+    model = "stub-todo"
+
+    def __init__(self):
+        self._calls = 0
+
+    async def stream_generate(self, messages, tools=None):
+        self._calls += 1
+        if self._calls == 1:
+            yield ToolCallChunk(
+                [
+                    ToolCall(
+                        id="c1",
+                        name="builtin__todowrite",
+                        parameters={
+                            "todos": [
+                                {
+                                    "content": "do x",
+                                    "status": "pending",
+                                    "priority": "high",
+                                }
+                            ]
+                        },
+                    )
+                ]
+            )
+        else:
+            yield TextChunk("todos updated")
+
+
 class _HistoryProbeStub:
     model = "stub-probe"
 
@@ -122,6 +152,7 @@ class _API:
 
     def reset(self, backend) -> None:
         self.application.state.agent = _make_harness(backend)
+        api_server._wire_todo_relay(self.application.state.agent)
         self.application.state.lock = api_server._Lock()
         self.application.state.config = AppConfig(_env_file=None, backend="ollama")
 
@@ -390,3 +421,85 @@ def test_websocket_empty_message(api):
         frame = ws.receive_json()
         assert frame["type"] == "error"
         assert frame["data"]["message"] == "Empty message"
+
+
+def test_websocket_todo_relay(api):
+    api.reset(_TodoThenTextStub())
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "make a todo"})
+        frames = _recv_until_done(ws)
+        todo_frames = [f for f in frames if f["type"] == "todo"]
+        assert len(todo_frames) == 1
+        assert todo_frames[0]["data"]["todos"][0]["content"] == "do x"
+        assert todo_frames[0]["data"]["todos"][0]["status"] == "pending"
+        assert "task_id" not in todo_frames[0]["data"]
+
+
+# --------------------------------------------------------------------------- #
+# _event_to_frame (sub-agent relay)                                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_event_to_frame_sub_agent_lifecycle():
+    started = api_server._event_to_frame(
+        api_server.SubAgentStarted(
+            task_id="run-1",
+            agent_name="analyst",
+            pool_name="default",
+            task="analyze x",
+        )
+    )
+    assert started == {
+        "type": "sub_agent_started",
+        "data": {
+            "task_id": "run-1",
+            "agent_name": "analyst",
+            "pool_name": "default",
+            "task": "analyze x",
+        },
+    }
+
+    progress = api_server._event_to_frame(
+        api_server.SubAgentProgress(
+            task_id="run-1",
+            agent_name="analyst",
+            activity="calling grep",
+            status="running",
+        )
+    )
+    assert progress["type"] == "sub_agent_progress"
+    assert progress["data"]["activity"] == "calling grep"
+
+    completed = api_server._event_to_frame(
+        api_server.SubAgentCompleted(
+            task_id="run-1",
+            agent_name="analyst",
+            status="done",
+            full_text="result",
+        )
+    )
+    assert completed == {
+        "type": "sub_agent_completed",
+        "data": {
+            "task_id": "run-1",
+            "agent_name": "analyst",
+            "status": "done",
+            "full_text": "result",
+        },
+    }
+
+
+def test_event_to_frame_sub_agent_wrapped_inner():
+    frame = api_server._event_to_frame(
+        api_server.SubAgentEvent(
+            task_id="run-1",
+            agent_name="analyst",
+            event=api_server.StreamChunk("working"),
+        )
+    )
+    # Inner frame is forwarded with the owning run's identity attached.
+    assert frame == {
+        "type": "text_chunk",
+        "data": {"text": "working", "task_id": "run-1", "agent_name": "analyst"},
+    }

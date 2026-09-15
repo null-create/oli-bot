@@ -7,7 +7,7 @@ import pytest
 
 from oli_bot.agent import Agent, AgentPool, _expand_env
 from oli_bot.backends import create_model_backend
-from oli_bot.models import ProfileData
+from oli_bot.models import ProfileData, TextChunk
 from oli_bot.profiles.permissions import ProfilePermissionEnforcer
 from oli_bot.profiles.schema import ProfileManifest
 
@@ -381,3 +381,182 @@ def test_sub_agent_run_pool_name_can_be_set():
         task_id="t", agent_name="code-writer", task="write code", pool_name="coding"
     )
     assert run.pool_name == "coding"
+
+
+# ---------------------------------------------------------------------------
+# register_dispatch_tool
+# ---------------------------------------------------------------------------
+
+
+class _StubToolManager:
+    """Minimal stand-in for BuiltinToolManager used by register_dispatch_tool."""
+
+    def __init__(self):
+        self.registered = []
+
+    def register_tool(self, name, description, parameters, handler):
+        self.registered.append(
+            {
+                "name": name,
+                "description": description,
+                "parameters": parameters,
+                "handler": handler,
+            }
+        )
+
+
+def test_register_dispatch_tool_single_pool():
+    from oli_bot.agent import register_dispatch_tool
+
+    pool = AgentPool(_StubMCP())
+    pool.agent_pool["default"] = {
+        "analyst": _make_agent("analyst"),
+        "researcher": _make_agent("researcher"),
+    }
+    manager = _StubToolManager()
+
+    handler = lambda tasks: "ok"
+    register_dispatch_tool(manager, pool, handler)
+
+    assert len(manager.registered) == 1
+    tool = manager.registered[0]
+    assert tool["name"] == "dispatch"
+    assert tool["handler"] is handler
+    props = tool["parameters"]["properties"]
+    assert "tasks" in props
+    items = props["tasks"]["items"]["properties"]
+    assert items["agent"]["enum"] == ["analyst", "researcher"]
+    # Single pool: no `pool` field exposed in each task item.
+    assert "pool" not in items
+    assert "Dispatch" in tool["description"]
+
+
+def test_register_dispatch_tool_multiple_pools_adds_pool_field():
+    from oli_bot.agent import register_dispatch_tool
+
+    pool = AgentPool(_StubMCP())
+    pool.agent_pool["default"] = {"analyst": _make_agent("analyst")}
+    pool.agent_pool["coding"] = {"code-writer": _make_agent("code-writer")}
+    manager = _StubToolManager()
+
+    register_dispatch_tool(manager, pool, lambda tasks: "ok")
+
+    tool = manager.registered[0]
+    items = tool["parameters"]["properties"]["tasks"]["items"]["properties"]
+    assert items["agent"]["enum"] == ["analyst", "code-writer"]
+    assert "pool" in items
+    assert items["pool"]["enum"] == ["default", "coding"]
+
+
+def test_register_dispatch_tool_empty_pool_is_noop():
+    from oli_bot.agent import register_dispatch_tool
+
+    pool = AgentPool(_StubMCP())
+    manager = _StubToolManager()
+
+    register_dispatch_tool(manager, pool, lambda tasks: "ok")
+    assert manager.registered == []
+
+
+# ---------------------------------------------------------------------------
+# run_agent_dispatch
+# ---------------------------------------------------------------------------
+
+
+def test_run_agent_dispatch_aggregates_and_streams_events():
+    from oli_bot.agent import run_agent_dispatch
+    from oli_bot.models import Done, StreamChunk, SubAgentRun
+
+    pool = AgentPool(_StubMCP())
+
+    class _StreamingBackend:
+        model = "stub"
+
+        async def stream_generate(self, messages, tools=None):
+            yield TextChunk(f"answer for {messages[-1].content}")
+            yield Done(full_text=(f"final-{messages[-1].content}"))
+
+    class _RealMCP(_StubMCP):
+        sub_agent_queue = None
+
+    pool.agent_pool["default"] = {
+        "alpha": Agent(
+            role="alpha",
+            backend=_StreamingBackend(),
+            mcp_manager=_RealMCP(),
+            profile_manager=_StubProfileManager(),
+        ),
+        "beta": Agent(
+            role="beta",
+            backend=_StreamingBackend(),
+            mcp_manager=_RealMCP(),
+            profile_manager=_StubProfileManager(),
+        ),
+    }
+
+    runs = [
+        SubAgentRun(task_id="run-1", agent_name="alpha", task="task A"),
+        SubAgentRun(task_id="run-2", agent_name="beta", task="task B"),
+    ]
+
+    async def scenario():
+        sink = asyncio.Queue()
+        text = await run_agent_dispatch(
+            pool,
+            runs,
+            tools=None,
+            confirm_callback=lambda d: "session",
+            event_sink=sink,
+        )
+        return text, sink
+
+    text, sink = asyncio.run(scenario())
+
+    assert text == "## alpha\nanswer for task A\n\n## beta\nanswer for task B"
+    assert runs[0].status == "done"
+    assert runs[0].activity == "done"
+    assert runs[1].status == "done"
+
+    collected = [sink.get_nowait() for _ in range(sink.qsize())]
+    from oli_bot.models import SubAgentStarted, SubAgentCompleted
+
+    assert isinstance(collected[0], SubAgentStarted)
+    assert isinstance(collected[-1], SubAgentCompleted)
+    task_ids = {e.task_id for e in collected if getattr(e, "task_id", None)}
+    assert task_ids == {"run-1", "run-2"}
+
+
+def test_run_agent_dispatch_propagates_error_status():
+    from oli_bot.agent import run_agent_dispatch
+    from oli_bot.models import SubAgentRun
+
+    pool = AgentPool(_StubMCP())
+    pool.agent_pool["default"] = {
+        "alpha": _make_agent("alpha"),
+    }
+
+    # Requesting an unknown agent makes select_agent raise inside the run, so
+    # run_agent_dispatch must mark the run as errored and aggregate the error.
+    runs = [SubAgentRun(task_id="run-1", agent_name="unknown-agent", task="task A")]
+
+    async def scenario():
+        sink = asyncio.Queue()
+        text = await run_agent_dispatch(
+            pool,
+            runs,
+            tools=None,
+            confirm_callback=lambda d: "session",
+            event_sink=sink,
+        )
+        return text, sink
+
+    text, sink = asyncio.run(scenario())
+
+    assert "## unknown-agent\nError:" in text
+    assert runs[0].status == "error"
+    assert runs[0].activity.startswith("error:")
+    collected = [sink.get_nowait() for _ in range(sink.qsize())]
+    from oli_bot.models import SubAgentCompleted
+
+    assert isinstance(collected[-1], SubAgentCompleted)
+    assert collected[-1].status == "error"
