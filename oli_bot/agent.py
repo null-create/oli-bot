@@ -28,12 +28,17 @@ from .models import (
     Error,
     Done,
     StreamChunk,
+    SubAgentCompleted,
+    SubAgentEvent,
+    SubAgentProgress,
     SubAgentRun,
+    SubAgentStarted,
     ThinkingChunk,
     Usage,
     UsageChunk,
     UsageEvent,
 )
+from .tools.memory import _current_sub_run
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +52,10 @@ AgentEvent = (
     | UsageEvent
     | Error
     | Done
+    | SubAgentStarted
+    | SubAgentProgress
+    | SubAgentCompleted
+    | SubAgentEvent
 )
 
 PLAN_MODE_NOTE = (
@@ -390,12 +399,23 @@ class Agent:
             for tc in tool_calls:
                 yield ToolCallExecuting(name=tc.name, parameters=tc.parameters)
                 try:
-                    result = await self.mcp_manager.call_tool(
-                        tc.name,
-                        tc.parameters,
-                        confirm_callback=confirm_callback,
-                        permission_enforcer=self.permission_enforcer,
-                    )
+                    if tc.name == "builtin__dispatch":
+                        result_holder: List[str] = [""]
+                        async for _ev in self._run_dispatch_with_events(
+                            tc.name,
+                            tc.parameters,
+                            confirm_callback,
+                            result_holder,
+                        ):
+                            yield _ev
+                        result = result_holder[0]
+                    else:
+                        result = await self.mcp_manager.call_tool(
+                            tc.name,
+                            tc.parameters,
+                            confirm_callback=confirm_callback,
+                            permission_enforcer=self.permission_enforcer,
+                        )
                 except Exception as e:
                     result = f"Error: {e}"
                 yield ToolCallResult(name=tc.name, result=result)
@@ -421,6 +441,58 @@ class Agent:
                         images=pending_images,
                     )
                 )
+
+    async def _run_dispatch_with_events(
+        self,
+        name: str,
+        parameters: Dict[str, Any],
+        confirm_callback: Optional[Callable[[str], Any]],
+        result_holder: List[str],
+    ) -> AsyncIterator[AgentEvent]:
+        """Execute a ``builtin__dispatch`` tool call while streaming sub-agent
+        events through the root agent's event stream.
+
+        The dispatch handler pushes ``SubAgent*`` lifecycle events (and wrapped
+        inner events) onto ``mcp_manager.sub_agent_queue`` as the concurrent
+        fan-out progresses. This helper runs the tool call as a background
+        task and alternately drains the queue, yielding each event so the
+        caller (the tool loop) relays it live to the consumer. When the tool
+        task finishes, the dispatch's aggregated result string is stored in
+        ``result_holder[0]``.
+        """
+        queue: asyncio.Queue = asyncio.Queue()
+        self.mcp_manager.sub_agent_queue = queue
+        task = asyncio.create_task(
+            self.mcp_manager.call_tool(
+                name,
+                parameters,
+                confirm_callback=confirm_callback,
+                permission_enforcer=self.permission_enforcer,
+            )
+        )
+        try:
+            while not task.done() or not queue.empty():
+                getter = asyncio.create_task(queue.get())
+                done, _ = await asyncio.wait(
+                    {task, getter}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if getter in done:
+                    event = getter.result()
+                    if isinstance(
+                        event,
+                        (
+                            SubAgentStarted,
+                            SubAgentProgress,
+                            SubAgentCompleted,
+                            SubAgentEvent,
+                        ),
+                    ):
+                        yield event
+                else:
+                    getter.cancel()
+        finally:
+            self.mcp_manager.sub_agent_queue = None
+        result_holder[0] = task.result()
 
     async def _final_stream(
         self,
@@ -510,17 +582,43 @@ def _expand_env(
 async def stream_sub_agent_run(
     run: SubAgentRun,
     events: AsyncIterator[AgentEvent],
+    event_sink: Optional["asyncio.Queue"] = None,
 ) -> str:
     """Consume a sub-agent's event stream into a ``SubAgentRun``.
 
     Every event is appended to ``run.events`` in arrival order so the TUI can
     render the work live; ``run.activity`` / ``run.status`` track progress.
+    When ``event_sink`` is provided, sub-agent lifecycle and inner events are
+    pushed onto the queue so an outer consumer (e.g. the API WebSocket relay)
+    can stream them live alongside the root agent's own events.
     Returns the final assistant text (``Done.full_text``), mirroring the
     previous dispatch contract of ``Agent.process()``.
     """
+
+    async def emit(event: AgentEvent) -> None:
+        if event_sink is not None:
+            await event_sink.put(event)
+
+    await emit(
+        SubAgentStarted(
+            task_id=run.task_id,
+            agent_name=run.agent_name,
+            pool_name=run.pool_name,
+            task=run.task,
+        )
+    )
+
     full_text = ""
     async for event in events:
         run.events.append(event)
+        if event_sink is not None:
+            await emit(
+                SubAgentEvent(
+                    task_id=run.task_id,
+                    agent_name=run.agent_name,
+                    event=event,
+                )
+            )
         if isinstance(event, StreamChunk):
             run.activity = "streaming..."
         elif isinstance(event, ThinkingChunk):
@@ -539,7 +637,183 @@ async def stream_sub_agent_run(
             run.activity = "done"
             run.full_text = event.full_text
             full_text = event.full_text
+        await emit(
+            SubAgentProgress(
+                task_id=run.task_id,
+                agent_name=run.agent_name,
+                activity=run.activity,
+                status=run.status,
+            )
+        )
+
+    await emit(
+        SubAgentCompleted(
+            task_id=run.task_id,
+            agent_name=run.agent_name,
+            status=run.status,
+            full_text=run.full_text,
+        )
+    )
     return full_text
+
+
+async def run_agent_dispatch(
+    pool: "AgentPool",
+    runs: List[SubAgentRun],
+    tools: Optional[List[Dict[str, Any]]],
+    confirm_callback: Callable[[str], Any],
+    event_sink: Optional["asyncio.Queue"] = None,
+) -> str:
+    """Fan a batch of sub-agent runs out concurrently, aggregating results.
+
+    ``runs`` must already be populated with ``SubAgentRun`` objects (the
+    caller keeps a reference for its own UI tracking). Each run consumes its
+    sub-agent's event stream via ``stream_sub_agent_run``; when ``event_sink``
+    is given, sub-agent lifecycle events are pushed onto it as they happen.
+    Returns the aggregated ``## <agent>\\n<result>`` block used as the
+    ``dispatch`` tool result.
+    """
+
+    async def run_task(idx: int) -> tuple[str, str]:
+        run = runs[idx]
+        # Tag the asyncio task context so _todowrite_handler knows which
+        # sub-agent run is active. asyncio.gather copies the context into each
+        # spawned Task, so concurrent sub-agents stay isolated.
+        _current_sub_run.set(run)
+        try:
+            sub_agent = pool.select_agent(run.pool_name, run.agent_name)
+            sub_messages = [Message(role="user", content=run.task)]
+            result = await stream_sub_agent_run(
+                run,
+                sub_agent.process(
+                    sub_messages,
+                    tools=tools,
+                    confirm_callback=confirm_callback,
+                ),
+                event_sink=event_sink,
+            )
+            return run.agent_name, result
+        except Exception as e:
+            logger.exception("Dispatched agent '%s' failed", run.agent_name)
+            run.status = "error"
+            run.activity = f"error: {e}"
+            if event_sink is not None:
+                await event_sink.put(
+                    SubAgentProgress(
+                        task_id=run.task_id,
+                        agent_name=run.agent_name,
+                        activity=run.activity,
+                        status="error",
+                    )
+                )
+                await event_sink.put(
+                    SubAgentCompleted(
+                        task_id=run.task_id,
+                        agent_name=run.agent_name,
+                        status="error",
+                        full_text="",
+                    )
+                )
+            return run.agent_name, f"Error: {e}"
+
+    results = await asyncio.gather(*(run_task(i) for i in range(len(runs))))
+    return "\n\n".join(f"## {name}\n{text}" for name, text in results)
+
+
+def register_dispatch_tool(
+    builtin_tools: "BuiltinToolManager",
+    pool: "AgentPool",
+    handler: Callable[..., str],
+) -> None:
+    """Register the `dispatch` built-in tool that fans a batch of tasks out
+    to pooled sub-agents concurrently.
+
+    When multiple pools are defined the tool schema gains an optional ``pool``
+    field on each task item so the root agent can target any pool by name.
+    Single-pool configurations keep the simpler schema unchanged.
+    """
+    # Collect agents per pool, preserving definition order.
+    all_pool_names: list[str] = list(pool.agent_pool.keys())
+    pool_agent_map: dict[str, list[str]] = {
+        p: pool.list_agents(p) for p in all_pool_names
+    }
+    all_agent_names: list[str] = [
+        name for names in pool_agent_map.values() for name in names
+    ]
+
+    if not all_agent_names:
+        logger.debug("Agent pool has no delegate-able agents; skipping dispatch tool")
+        return
+
+    has_multiple_pools = len(all_pool_names) > 1
+
+    # Human-readable summary used in descriptions, e.g.:
+    #   "default: researcher, analyst-agent; coding: code-writer"
+    pool_summary = "; ".join(
+        f"{p}: {', '.join(agents)}" for p, agents in pool_agent_map.items() if agents
+    )
+
+    tool_description = (
+        "Dispatch one or more tasks to specialist sub-agents to run "
+        "CONCURRENTLY (in parallel, not sequentially). Use this instead "
+        "of calling sub-agents one at a time. "
+        + (
+            f"Available agents per pool — {pool_summary}"
+            if has_multiple_pools
+            else f"Available agents: {', '.join(all_agent_names)}"
+        )
+    )
+
+    agent_description = "Name of the sub-agent to run this task. " + (
+        f"Each agent belongs to a specific pool — {pool_summary}."
+        if has_multiple_pools
+        else f"Available: {', '.join(all_agent_names)}."
+    )
+
+    task_item_properties: dict = {
+        "agent": {
+            "type": "string",
+            "enum": all_agent_names,
+            "description": agent_description,
+        },
+        "task": {
+            "type": "string",
+            "description": "The task/instructions for this agent.",
+        },
+    }
+
+    # Only expose `pool` in the schema when multiple pools are configured —
+    # keeps the single-pool case clean and backwards-compatible.
+    if has_multiple_pools:
+        task_item_properties["pool"] = {
+            "type": "string",
+            "enum": all_pool_names,
+            "description": (
+                f"The agent pool to target. Available pools: {', '.join(all_pool_names)}. "
+                "Defaults to 'default' if omitted."
+            ),
+        }
+
+    builtin_tools.register_tool(
+        name="dispatch",
+        description=tool_description,
+        parameters={
+            "type": "object",
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "description": "The batch of tasks to run in parallel.",
+                    "items": {
+                        "type": "object",
+                        "properties": task_item_properties,
+                        "required": ["agent", "task"],
+                    },
+                },
+            },
+            "required": ["tasks"],
+        },
+        handler=handler,
+    )
 
 
 class AgentPool:

@@ -28,6 +28,7 @@ import threading
 import time
 import uuid
 import random
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -35,7 +36,13 @@ from art import text2art
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .agent import Agent, AgentEvent
+from .agent import (
+    Agent,
+    AgentEvent,
+    AgentPool,
+    register_dispatch_tool,
+    run_agent_dispatch,
+)
 from .backends import create_model_backend, ModelBackend
 from .config import AppConfig, configs
 from .logger import setup_logging
@@ -45,8 +52,14 @@ from .models import (
     Done,
     Error,
     ImageAttachment,
+    MCPServerConfig,
     Message,
     StreamChunk,
+    SubAgentCompleted,
+    SubAgentEvent,
+    SubAgentProgress,
+    SubAgentRun,
+    SubAgentStarted,
     ThinkingChunk,
     ToolCallExecuting,
     ToolCallResult,
@@ -162,6 +175,68 @@ def _build_agent(config: AppConfig, mode: str, profile: str) -> Agent:
 async def _api_confirm(description: str) -> str:
     """Auto-allow every permission scope (API mode has no interactive prompt)."""
     return "session"
+
+
+def _wire_todo_relay(agent: Agent) -> None:
+    """Relay ``builtin__todowrite`` updates to WebSocket clients.
+
+    The tool manager invokes these synchronously from inside the tool handler;
+    we append snapshots to ``mcp_manager.pending_todos`` which the socket loop
+    drains after each agent event. ``task_id`` is present for sub-agent runs so
+    the client can demux the update.
+    """
+
+    def _on_todos_changed(todos: list) -> None:
+        agent.mcp_manager.pending_todos.append({"todos": list(todos)})
+
+    def _on_sub_todos_changed(run: SubAgentRun, todos: list) -> None:
+        agent.mcp_manager.pending_todos.append(
+            {
+                "todos": list(todos),
+                "task_id": run.task_id,
+                "agent_name": run.agent_name,
+            }
+        )
+
+    agent.mcp_manager._builtin_tools.set_todo_callback(_on_todos_changed)
+    agent.mcp_manager._builtin_tools.set_sub_todo_callback(_on_sub_todos_changed)
+
+
+async def _dispatch_tasks(tasks: list[dict]) -> str:
+    """API-server ``dispatch`` tool handler.
+
+    Fans a batch of tasks out to pooled sub-agents concurrently, mirroring the
+    TUI's implementation. Sub-agent lifecycle events are pushed onto
+    ``mcp_manager.sub_agent_queue`` (set by the agent's tool loop while the
+    dispatch call is in flight) so the WebSocket relay streams them live.
+    """
+    pool = getattr(app.state, "agent_pool", None)
+    if pool is None or not tasks:
+        return "Error: dispatch called with no tasks"
+
+    available_tools = await app.state.agent.mcp_manager.get_available_tools()
+    sub_tools = [t for t in available_tools if t.get("name") != "builtin__dispatch"]
+
+    now = datetime.now(timezone.utc).isoformat()
+    runs: List[SubAgentRun] = []
+    for i, spec in enumerate(tasks):
+        runs.append(
+            SubAgentRun(
+                task_id=f"run-{i + 1}",
+                agent_name=str(spec.get("agent", "")),
+                pool_name=str(spec.get("pool", "default")),
+                task=str(spec.get("task", "")),
+                started_at=now,
+            )
+        )
+
+    return await run_agent_dispatch(
+        pool=pool,
+        runs=runs,
+        tools=sub_tools,
+        confirm_callback=_api_confirm,
+        event_sink=app.state.agent.mcp_manager.sub_agent_queue,
+    )
 
 
 # --- Message conversion ----------------------------------------------------- #
@@ -359,6 +434,13 @@ def _event_to_frame(event: AgentEvent) -> Dict[str, Any]:
     The ``type`` field lets the client distinguish event kinds and render them
     differently (streamed text, thinking blocks, tool calls, errors, etc.).
     """
+    if isinstance(event, SubAgentEvent):
+        # Wrapped sub-agent activity: forward the inner frame with the owning
+        # run's identity attached so the client can demux by task_id.
+        frame = _event_to_frame(event.event)
+        frame["data"]["task_id"] = event.task_id
+        frame["data"]["agent_name"] = event.agent_name
+        return frame
     if isinstance(event, StreamChunk):
         return {"type": "text_chunk", "data": {"text": event.text}}
     if isinstance(event, ThinkingChunk):
@@ -381,6 +463,36 @@ def _event_to_frame(event: AgentEvent) -> Dict[str, Any]:
         return {"type": "error", "data": {"message": event.message}}
     if isinstance(event, Done):
         return {"type": "done", "data": {"full_text": event.full_text}}
+    if isinstance(event, SubAgentStarted):
+        return {
+            "type": "sub_agent_started",
+            "data": {
+                "task_id": event.task_id,
+                "agent_name": event.agent_name,
+                "pool_name": event.pool_name,
+                "task": event.task,
+            },
+        }
+    if isinstance(event, SubAgentProgress):
+        return {
+            "type": "sub_agent_progress",
+            "data": {
+                "task_id": event.task_id,
+                "agent_name": event.agent_name,
+                "activity": event.activity,
+                "status": event.status,
+            },
+        }
+    if isinstance(event, SubAgentCompleted):
+        return {
+            "type": "sub_agent_completed",
+            "data": {
+                "task_id": event.task_id,
+                "agent_name": event.agent_name,
+                "status": event.status,
+                "full_text": event.full_text,
+            },
+        }
     logger.warning("Unknown agent event in websocket relay: %r", event)
     return {"type": "unknown", "data": {"event": repr(event)}}
 
@@ -439,6 +551,11 @@ async def websocket_chat(websocket: WebSocket) -> None:
                         messages, tools=tools, confirm_callback=_api_confirm
                     ):
                         await websocket.send_json(_event_to_frame(event))
+                        while app.state.agent.mcp_manager.pending_todos:
+                            todo_data = app.state.agent.mcp_manager.pending_todos.pop(0)
+                            await websocket.send_json(
+                                {"type": "todo", "data": todo_data}
+                            )
                         if isinstance(event, Done) and event.full_text:
                             messages.append(
                                 Message(role="assistant", content=event.full_text)
@@ -452,6 +569,204 @@ async def websocket_chat(websocket: WebSocket) -> None:
                     )
     except WebSocketDisconnect:
         logger.debug("WebSocket client disconnected from /v1/chat")
+
+
+# --- Config API ------------------------------------------------------------- #
+
+
+# Mapping between the browser UI's flat ``OliConfig`` keys and the nested
+# settings.json format the ``SettingsManager`` persists.
+_FLAT_TO_NESTED = {
+    "backend": ("", "backend"),
+    "openai_api_key": ("openai", "api_key"),
+    "openai_base_url": ("openai", "base_url"),
+    "openai_model": ("openai", "large_model"),
+    "openai_small_model": ("openai", "small_model"),
+    "openai_vision_style": ("openai", "vision_style"),
+    "openai_optional_headers": ("openai", "optional_headers"),
+    "ollama_base_url": ("ollama", "base_url"),
+    "ollama_model": ("ollama", "large_model"),
+    "ollama_small_model": ("ollama", "small_model"),
+    "huggingface_base_url": ("huggingface", "base_url"),
+    "huggingface_api_key": ("huggingface", "api_key"),
+    "huggingface_model": ("huggingface", "large_model"),
+    "huggingface_small_model": ("huggingface", "small_model"),
+    "huggingface_remote": ("huggingface", "remote"),
+    "transformers_model": ("transformers", "model"),
+    "transformers_small_model": ("transformers", "small_model"),
+    "transformers_device": ("transformers", "device"),
+    "transformers_dtype": ("transformers", "dtype"),
+    "transformers_is_multi_model": ("transformers", "is_multi_model"),
+    "voice_whisper_model": ("voice", "whisper_model"),
+    "voice_piper_model": ("voice", "piper_model"),
+    "voice_sample_rate": ("voice", "sample_rate"),
+    "voice_frame_duration_ms": ("voice", "frame_duration_ms"),
+    "voice_vad_aggressiveness": ("voice", "vad_aggressiveness"),
+    "voice_silence_timeout_ms": ("voice", "silence_timeout_ms"),
+    "voice_max_record_seconds": ("voice", "max_record_seconds"),
+    "max_tokens": ("model_params", "max_tokens"),
+    "temperature": ("model_params", "temperature"),
+    "max_retries": ("model_params", "max_retries"),
+    "retry_delay": ("model_params", "retry_delay"),
+    "request_timeout": ("model_params", "request_timeout"),
+    "max_messages": ("model_params", "max_messages"),
+    "max_tool_iterations": ("model_params", "max_tool_iterations"),
+    "stream_timeout": ("model_params", "stream_timeout"),
+    "model_filters": ("model_params", "model_filters"),
+    "truncation_max_chars_small": ("model_params", "truncation_max_chars_small"),
+    "truncation_max_chars_large": ("model_params", "truncation_max_chars_large"),
+    "dry_run": ("model_params", "dry_run"),
+    "offline_mode": ("model_params", "offline_mode"),
+    "use_agent_pool": ("model_params", "use_agent_pool"),
+    "agent_pool_size": ("model_params", "agent_pool_size"),
+    "log_level": ("logging", "log_level"),
+    "log_file": ("logging", "log_file"),
+    "profiles_dir": ("paths", "profiles_dir"),
+    "logs_dir": ("paths", "logs_dir"),
+    "api_host": ("api_server", "host"),
+    "api_port": ("api_server", "port"),
+    "api_profile": ("api_server", "profile"),
+    "api_mode": ("api_server", "mode"),
+}
+
+
+def _flat_to_nested(flat: Dict[str, Any], settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Overlay a flat OliConfig dict (from the browser) onto nested settings."""
+    for flat_key, (group, nested_key) in _FLAT_TO_NESTED.items():
+        if flat_key not in flat:
+            continue
+        if group:
+            settings.setdefault(group, {})[nested_key] = flat[flat_key]
+        else:
+            settings[nested_key] = flat[flat_key]
+    return settings
+
+
+def _nested_to_flat(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Flatten nested settings into the browser's OliConfig shape."""
+    flat: Dict[str, Any] = {}
+    for flat_key, (group, nested_key) in _FLAT_TO_NESTED.items():
+        if group:
+            flat[flat_key] = settings.get(group, {}).get(nested_key)
+        else:
+            flat[flat_key] = settings.get(nested_key)
+    return flat
+
+
+@app.get("/v1/config")
+async def get_config() -> Dict[str, Any]:
+    """Return the server's current configuration in flat OliConfig form."""
+    settings = SettingsManager().load()
+    return _nested_to_flat(settings)
+
+
+@app.put("/v1/config")
+async def update_config(flat: Dict[str, Any]) -> Any:
+    """Persist an updated config to ``~/.config/oli/settings.json``.
+
+    Only the OliConfig fields from the browser are overlaid onto the existing
+    settings, so secrets/env-driven values untouched by the UI are preserved.
+    The running agent is not rebuilt; restart the server for changes to take
+    effect.
+    """
+    manager = SettingsManager()
+    settings = _flat_to_nested(flat, manager.load())
+    try:
+        config = manager.to_appconfig(settings)
+    except Exception as e:
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"message": f"Invalid config: {e}"}},
+        )
+    manager.save(settings)
+    app.state.config = config
+    return _nested_to_flat(settings)
+
+
+# --- MCP API ---------------------------------------------------------------- #
+
+
+def _mcp_list() -> List[Dict[str, Any]]:
+    """Snapshot the current MCP server configs as a JSON-safe list."""
+    return [
+        dataclasses.asdict(cfg) for cfg in app.state.agent.mcp_manager.list_servers()
+    ]
+
+
+def _validate_mcp_config(cfg: MCPServerConfig) -> Optional[str]:
+    """Return an error message for an invalid MCP server config, else None."""
+    if not cfg.name or not cfg.name.strip():
+        return "Server name is required"
+    if cfg.transport not in ("stdio", "http"):
+        return f"Unknown transport: {cfg.transport}"
+    if cfg.transport == "http":
+        if not cfg.url or not cfg.url.strip():
+            return "URL is required for HTTP transport"
+    elif not cfg.command or not cfg.command.strip():
+        return "Command is required for stdio transport"
+    return None
+
+
+@app.get("/v1/mcp")
+async def list_mcp_servers() -> List[Dict[str, Any]]:
+    """Return the configured MCP servers (from mcp_servers.json)."""
+    return _mcp_list()
+
+
+@app.post("/v1/mcp")
+async def add_mcp_server(cfg: MCPServerConfig) -> Any:
+    """Register a new MCP server and persist it to disk."""
+    error = _validate_mcp_config(cfg)
+    if error:
+        return JSONResponse(status_code=422, content={"error": {"message": error}})
+    try:
+        app.state.agent.mcp_manager.add_server(
+            name=cfg.name,
+            command=cfg.command,
+            args=cfg.args,
+            env=cfg.env,
+            transport=cfg.transport,
+            url=cfg.url,
+        )
+    except ValueError as e:
+        return JSONResponse(
+            status_code=409, content={"error": {"message": str(e)}}
+        )
+    return _mcp_list()
+
+
+@app.put("/v1/mcp/{name}")
+async def update_mcp_server(name: str, cfg: MCPServerConfig) -> Any:
+    """Update an existing MCP server (matches by path name) and persist."""
+    error = _validate_mcp_config(cfg)
+    if error:
+        return JSONResponse(status_code=422, content={"error": {"message": error}})
+    try:
+        app.state.agent.mcp_manager.update_server(
+            name=name,
+            command=cfg.command,
+            args=cfg.args,
+            env=cfg.env,
+            transport=cfg.transport,
+            url=cfg.url,
+        )
+    except ValueError as e:
+        return JSONResponse(
+            status_code=404, content={"error": {"message": str(e)}}
+        )
+    return _mcp_list()
+
+
+@app.delete("/v1/mcp/{name}")
+async def remove_mcp_server(name: str) -> Any:
+    """Remove a configured MCP server and persist to disk."""
+    try:
+        app.state.agent.mcp_manager.remove_server(name)
+    except ValueError as e:
+        return JSONResponse(
+            status_code=404, content={"error": {"message": str(e)}}
+        )
+    return _mcp_list()
 
 
 # --- Routes ----------------------------------------------------------------- #
@@ -512,6 +827,28 @@ def _initialize_state() -> None:
     app.state.config = config
     app.state.agent = agent
     app.state.lock = _Lock()
+
+    # Relay todo-list updates (from ``builtin__todowrite``) to WebSocket
+    # clients. The tool manager invokes these synchronously; we just append
+    # snapshots to a queue the socket loop drains after each agent event.
+    _wire_todo_relay(agent)
+
+    # Agent pooling: when enabled, build the pool and register the dispatch
+    # tool exactly like the TUI so the root agent can fan work out to
+    # specialist sub-agents. Sub-agent events flow to the WebSocket live.
+    if config.use_agent_pool:
+        try:
+            pool = AgentPool(agent.mcp_manager)
+            register_dispatch_tool(
+                agent.mcp_manager._builtin_tools, pool, _dispatch_tasks
+            )
+            app.state.agent_pool = pool
+            logger.info("Agent pooling enabled: %s", list(pool.agent_pool.keys()))
+        except Exception as e:
+            logger.error("Failed to build agent pool: %s", e)
+            app.state.agent_pool = None
+    else:
+        app.state.agent_pool = None
 
 
 _initialize_state()

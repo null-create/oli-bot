@@ -45,6 +45,8 @@ from .agent import (
     Done as AgentDone,
     Error as AgentError,
     StreamChunk,
+    register_dispatch_tool,
+    run_agent_dispatch,
     stream_sub_agent_run,
     sanitize_tool_history,
     ThinkingChunk,
@@ -2608,99 +2610,12 @@ class OliBot(App):
 
     def _register_dispatch_tool(self) -> None:
         """Register the `dispatch` built-in tool that fans a batch of tasks
-        out to pooled sub-agents concurrently.
-
-        When multiple pools are defined the tool schema gains an optional
-        ``pool`` field on each task item so the root agent can target any pool
-        by name.  Single-pool configurations keep the simpler schema unchanged.
+        out to pooled sub-agents concurrently. Schema generation is shared
+        with the API server via ``agent.register_dispatch_tool``.
         """
         assert self.agent_pool is not None
-
-        # Collect agents per pool, preserving definition order.
-        all_pool_names: list[str] = list(self.agent_pool.agent_pool.keys())
-        pool_agent_map: dict[str, list[str]] = {
-            pool: self.agent_pool.list_agents(pool) for pool in all_pool_names
-        }
-        all_agent_names: list[str] = [
-            name for names in pool_agent_map.values() for name in names
-        ]
-
-        if not all_agent_names:
-            logger.debug(
-                "Agent pool has no delegate-able agents; skipping dispatch tool"
-            )
-            return
-
-        has_multiple_pools = len(all_pool_names) > 1
-
-        # Human-readable summary used in descriptions, e.g.:
-        #   "default: researcher, analyst-agent; coding: code-writer"
-        pool_summary = "; ".join(
-            f"{pool}: {', '.join(agents)}"
-            for pool, agents in pool_agent_map.items()
-            if agents
-        )
-
-        tool_description = (
-            "Dispatch one or more tasks to specialist sub-agents to run "
-            "CONCURRENTLY (in parallel, not sequentially). Use this instead "
-            "of calling sub-agents one at a time. "
-            + (
-                f"Available agents per pool — {pool_summary}"
-                if has_multiple_pools
-                else f"Available agents: {', '.join(all_agent_names)}"
-            )
-        )
-
-        agent_description = "Name of the sub-agent to run this task. " + (
-            f"Each agent belongs to a specific pool — {pool_summary}."
-            if has_multiple_pools
-            else f"Available: {', '.join(all_agent_names)}."
-        )
-
-        task_item_properties: dict = {
-            "agent": {
-                "type": "string",
-                "enum": all_agent_names,
-                "description": agent_description,
-            },
-            "task": {
-                "type": "string",
-                "description": "The task/instructions for this agent.",
-            },
-        }
-
-        # Only expose `pool` in the schema when multiple pools are configured —
-        # keeps the single-pool case clean and backwards-compatible.
-        if has_multiple_pools:
-            task_item_properties["pool"] = {
-                "type": "string",
-                "enum": all_pool_names,
-                "description": (
-                    f"The agent pool to target. Available pools: {', '.join(all_pool_names)}. "
-                    "Defaults to 'default' if omitted."
-                ),
-            }
-
-        self._builtin_tools.register_tool(
-            name="dispatch",
-            description=tool_description,
-            parameters={
-                "type": "object",
-                "properties": {
-                    "tasks": {
-                        "type": "array",
-                        "description": "The batch of tasks to run in parallel.",
-                        "items": {
-                            "type": "object",
-                            "properties": task_item_properties,
-                            "required": ["agent", "task"],
-                        },
-                    },
-                },
-                "required": ["tasks"],
-            },
-            handler=self._dispatch_tasks,
+        register_dispatch_tool(
+            self._builtin_tools, self.agent_pool, self._dispatch_tasks
         )
 
     async def _dispatch_tasks(self, tasks: list[dict]) -> str:
@@ -2726,44 +2641,18 @@ class OliBot(App):
         self._sync_sub_agent_tree()
         self._start_sub_tree_timer()
 
-        async def run_one(idx: int) -> str:
-            run = self._sub_runs[idx]
-            sub_agent = self.agent_pool.select_agent(run.pool_name, run.agent_name)
-            sub_messages = [Message(role="user", content=run.task)]
-            return await stream_sub_agent_run(
-                run,
-                sub_agent.process(
-                    sub_messages,
-                    tools=sub_tools,
-                    confirm_callback=self._permission_callback,
-                ),
-            )
-
-        async def run_task(idx: int) -> tuple[str, str]:
-            run = self._sub_runs[idx]
-            # Tag the asyncio task context so _todowrite_handler knows which
-            # sub-agent run is active.  asyncio.gather copies the context into
-            # each spawned Task, so concurrent sub-agents stay isolated.
-            _current_sub_run.set(run)
-            try:
-                result = await run_one(idx)
-                return run.agent_name, result
-            except ValueError as e:
-                run.status = "error"
-                run.activity = f"error: {e}"
-                return run.agent_name, f"Error: {e}"
-            except Exception as e:
-                logger.exception("Dispatched agent '%s' failed", run.agent_name)
-                run.status = "error"
-                run.activity = f"error: {e}"
-                return run.agent_name, f"Error: {e}"
-
         try:
-            results = await asyncio.gather(*(run_task(i) for i in range(len(tasks))))
+            aggregated = await run_agent_dispatch(
+                pool=self.agent_pool,
+                runs=self._sub_runs,
+                tools=sub_tools,
+                confirm_callback=self._permission_callback,
+                event_sink=self.mcp_manager.sub_agent_queue,
+            )
         finally:
             self._sync_sub_agent_tree()
             self._stop_sub_tree_timer()
-        return "\n\n".join(f"## {name}\n{text}" for name, text in results)
+        return aggregated
 
     def _run_label(self, run: SubAgentRun) -> str:
         status = {

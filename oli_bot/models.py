@@ -135,6 +135,49 @@ class UsageEvent:
 
 
 @dataclass
+class SubAgentStarted:
+    """Emitted when a sub-agent run begins."""
+
+    task_id: str
+    agent_name: str
+    pool_name: str
+    task: str
+
+
+@dataclass
+class SubAgentProgress:
+    """Emitted on meaningful sub-agent activity changes."""
+
+    task_id: str
+    agent_name: str
+    activity: str
+    status: str  # "running" | "done" | "error"
+
+
+@dataclass
+class SubAgentCompleted:
+    """Emitted when a sub-agent run finishes."""
+
+    task_id: str
+    agent_name: str
+    status: str  # "done" | "error"
+    full_text: str
+
+
+@dataclass
+class SubAgentEvent:
+    """Wraps a raw inner sub-agent event with the owning run's identity.
+
+    Carried over the WebSocket so clients can demux live sub-agent activity
+    (streaming text, thinking, tool calls) by ``task_id``.
+    """
+
+    task_id: str
+    agent_name: str
+    event: Any
+
+
+@dataclass
 class ProfileData:
     system_prompt: str
     manifest: ProfileManifest

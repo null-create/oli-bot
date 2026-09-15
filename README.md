@@ -217,7 +217,7 @@ It listens on `0.0.0.0:9734` by default (override with `OLI_API_HOST`/`OLI_API_P
 
 REST conversations are **stateless** (like real OpenAI): each `/v1/chat/completions` request carries its full message history. The server holds a single process-private `Agent` instance (backend, tool registrations, MCP wiring) shared across requests, and serializes concurrent in-flight requests in-process. Because there is no human to prompt at permission time, the API auto-allows permission scopes for the current request; offline and dry-run gating from `AppConfig` still apply.
 
-The `WS /v1/chat` WebSocket is the stateful counterpart for real-time browser UIs: the server keeps a per-connection `messages` history, so a client sends each next turn as `{"content": "..."}` and receives every `AgentEvent` back as a typed JSON frame (`text_chunk`/`thinking`/`tool_call_executing`/`tool_call_result`/`assistant_response`/`usage`/`error`/`done`); `{"action": "clear"}` resets the history. See [docs/API_SERVER.md](docs/API_SERVER.md) for the full frame reference.
+The `WS /v1/chat` WebSocket is the stateful counterpart for real-time browser UIs: the server keeps a per-connection `messages` history, so a client sends each next turn as `{"content": "..."}` and receives every `AgentEvent` back as a typed JSON frame (`text_chunk`/`thinking`/`tool_call_executing`/`tool_call_result`/`assistant_response`/`usage`/`error`/`done`), plus `sub_agent_started`/`sub_agent_progress`/`sub_agent_completed` and `todo` frames for delegated runs and live task lists; `{"action": "clear"}` resets the history. See [docs/API_SERVER.md](docs/API_SERVER.md) for the full frame reference.
 
 ### curl
 

@@ -55,6 +55,36 @@ class _RaisingStub:
         yield  # pragma: no cover
 
 
+class _TodoThenTextStub:
+    model = "stub-todo"
+
+    def __init__(self):
+        self._calls = 0
+
+    async def stream_generate(self, messages, tools=None):
+        self._calls += 1
+        if self._calls == 1:
+            yield ToolCallChunk(
+                [
+                    ToolCall(
+                        id="c1",
+                        name="builtin__todowrite",
+                        parameters={
+                            "todos": [
+                                {
+                                    "content": "do x",
+                                    "status": "pending",
+                                    "priority": "high",
+                                }
+                            ]
+                        },
+                    )
+                ]
+            )
+        else:
+            yield TextChunk("todos updated")
+
+
 class _HistoryProbeStub:
     model = "stub-probe"
 
@@ -122,6 +152,7 @@ class _API:
 
     def reset(self, backend) -> None:
         self.application.state.agent = _make_harness(backend)
+        api_server._wire_todo_relay(self.application.state.agent)
         self.application.state.lock = api_server._Lock()
         self.application.state.config = AppConfig(_env_file=None, backend="ollama")
 
@@ -390,3 +421,239 @@ def test_websocket_empty_message(api):
         frame = ws.receive_json()
         assert frame["type"] == "error"
         assert frame["data"]["message"] == "Empty message"
+
+
+def test_websocket_todo_relay(api):
+    api.reset(_TodoThenTextStub())
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "make a todo"})
+        frames = _recv_until_done(ws)
+        todo_frames = [f for f in frames if f["type"] == "todo"]
+        assert len(todo_frames) == 1
+        assert todo_frames[0]["data"]["todos"][0]["content"] == "do x"
+        assert todo_frames[0]["data"]["todos"][0]["status"] == "pending"
+        assert "task_id" not in todo_frames[0]["data"]
+
+
+# --------------------------------------------------------------------------- #
+# /v1/mcp (MCP server configuration)                                           #
+# --------------------------------------------------------------------------- #
+
+
+def _clear_mcp(harness):
+    manager = harness.application.state.agent.mcp_manager
+    for name in list(manager.servers):
+        manager.remove_server(name)
+
+
+def test_mcp_list_empty(api):
+    _clear_mcp(api)
+    resp = api.client.get("/v1/mcp")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_mcp_add_and_list(api):
+    _clear_mcp(api)
+    resp = api.client.post(
+        "/v1/mcp",
+        json={
+            "name": "filesystem",
+            "transport": "stdio",
+            "command": "npx",
+            "args": ["-y", "mcp-server-filesystem", "/tmp"],
+            "env": {"FOO": "bar"},
+        },
+    )
+    assert resp.status_code == 200
+    servers = resp.json()
+    assert len(servers) == 1
+    assert servers[0]["name"] == "filesystem"
+    assert servers[0]["transport"] == "stdio"
+    assert servers[0]["command"] == "npx"
+    assert servers[0]["args"] == ["-y", "mcp-server-filesystem", "/tmp"]
+    assert servers[0]["env"] == {"FOO": "bar"}
+    assert servers[0]["url"] == ""
+
+    resp = api.client.get("/v1/mcp")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+def test_mcp_add_http(api):
+    _clear_mcp(api)
+    resp = api.client.post(
+        "/v1/mcp",
+        json={
+            "name": "remote",
+            "transport": "http",
+            "url": "http://localhost:3000/mcp",
+        },
+    )
+    assert resp.status_code == 200
+    server = resp.json()[0]
+    assert server["name"] == "remote"
+    assert server["transport"] == "http"
+    assert server["url"] == "http://localhost:3000/mcp"
+    assert server["command"] == ""
+
+
+def test_mcp_add_duplicate_conflict(api):
+    _clear_mcp(api)
+    api.client.post(
+        "/v1/mcp",
+        json={"name": "dup", "transport": "stdio", "command": "echo"},
+    )
+    resp = api.client.post(
+        "/v1/mcp",
+        json={"name": "dup", "transport": "stdio", "command": "echo"},
+    )
+    assert resp.status_code == 409
+    assert "already exists" in resp.json()["error"]["message"]
+
+
+def test_mcp_add_validation(api):
+    _clear_mcp(api)
+    # Missing name
+    resp = api.client.post("/v1/mcp", json={"transport": "stdio", "command": "echo"})
+    assert resp.status_code == 422
+    # stdio without a command
+    resp = api.client.post(
+        "/v1/mcp", json={"name": "x", "transport": "stdio", "command": ""}
+    )
+    assert resp.status_code == 422
+    # http without a url
+    resp = api.client.post(
+        "/v1/mcp", json={"name": "x", "transport": "http", "url": ""}
+    )
+    assert resp.status_code == 422
+
+
+def test_mcp_update(api):
+    _clear_mcp(api)
+    api.client.post(
+        "/v1/mcp",
+        json={
+            "name": "fs",
+            "transport": "stdio",
+            "command": "npx",
+            "args": ["-y", "server"],
+        },
+    )
+    resp = api.client.put(
+        "/v1/mcp/fs",
+        json={
+            "name": "fs",
+            "transport": "http",
+            "url": "http://localhost:9000/mcp",
+        },
+    )
+    assert resp.status_code == 200
+    server = next(s for s in resp.json() if s["name"] == "fs")
+    assert server["transport"] == "http"
+    assert server["url"] == "http://localhost:9000/mcp"
+    assert server["command"] == ""
+
+
+def test_mcp_update_missing_404(api):
+    _clear_mcp(api)
+    resp = api.client.put(
+        "/v1/mcp/nope",
+        json={"name": "nope", "transport": "stdio", "command": "echo"},
+    )
+    assert resp.status_code == 404
+
+
+def test_mcp_remove(api):
+    _clear_mcp(api)
+    api.client.post(
+        "/v1/mcp", json={"name": "fs", "transport": "stdio", "command": "echo"}
+    )
+    resp = api.client.delete("/v1/mcp/fs")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+    resp = api.client.delete("/v1/mcp/fs")
+    assert resp.status_code == 404
+
+
+def test_mcp_persists_to_disk(api):
+    _clear_mcp(api)
+    manager = api.application.state.agent.mcp_manager
+    api.client.post(
+        "/v1/mcp",
+        json={"name": "persist", "transport": "stdio", "command": "echo"},
+    )
+    assert "persist" in manager.servers
+    raw = open(manager.config_path).read()
+    assert '"persist"' in raw
+
+
+# --------------------------------------------------------------------------- #
+# _event_to_frame (sub-agent relay)                                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_event_to_frame_sub_agent_lifecycle():
+    started = api_server._event_to_frame(
+        api_server.SubAgentStarted(
+            task_id="run-1",
+            agent_name="analyst",
+            pool_name="default",
+            task="analyze x",
+        )
+    )
+    assert started == {
+        "type": "sub_agent_started",
+        "data": {
+            "task_id": "run-1",
+            "agent_name": "analyst",
+            "pool_name": "default",
+            "task": "analyze x",
+        },
+    }
+
+    progress = api_server._event_to_frame(
+        api_server.SubAgentProgress(
+            task_id="run-1",
+            agent_name="analyst",
+            activity="calling grep",
+            status="running",
+        )
+    )
+    assert progress["type"] == "sub_agent_progress"
+    assert progress["data"]["activity"] == "calling grep"
+
+    completed = api_server._event_to_frame(
+        api_server.SubAgentCompleted(
+            task_id="run-1",
+            agent_name="analyst",
+            status="done",
+            full_text="result",
+        )
+    )
+    assert completed == {
+        "type": "sub_agent_completed",
+        "data": {
+            "task_id": "run-1",
+            "agent_name": "analyst",
+            "status": "done",
+            "full_text": "result",
+        },
+    }
+
+
+def test_event_to_frame_sub_agent_wrapped_inner():
+    frame = api_server._event_to_frame(
+        api_server.SubAgentEvent(
+            task_id="run-1",
+            agent_name="analyst",
+            event=api_server.StreamChunk("working"),
+        )
+    )
+    # Inner frame is forwarded with the owning run's identity attached.
+    assert frame == {
+        "type": "text_chunk",
+        "data": {"text": "working", "task_id": "run-1", "agent_name": "analyst"},
+    }

@@ -40,6 +40,15 @@ class MCPClientManager:
         self._builtin_tools = builtin_tools
         self._offline_mode = offline_mode
         self._warnings: List[str] = []
+        # Live sub-agent event queue. Set/cleared by the agent's tool loop
+        # only while a `builtin__dispatch` call is in flight; the dispatch
+        # handler pushes SubAgent* events here so they can be drained
+        # concurrently by the root agent's event stream.
+        self.sub_agent_queue: Optional[Any] = None
+        # Pending todo-list snapshots pushed by the tool manager's change
+        # callbacks and drained by the API server's WebSocket relay. Each
+        # entry is a dict: {"todos": [...], optional "task_id"/"agent_name"}.
+        self.pending_todos: List[Dict[str, Any]] = []
         Path(self.config_path).parent.mkdir(parents=True, exist_ok=True)
         self._load_config()
         # Cached MCP tool listings, keyed by server name. Populated on first

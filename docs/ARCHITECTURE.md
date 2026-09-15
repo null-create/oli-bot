@@ -687,15 +687,15 @@ Agent generates tool call:
 
 ## Useful Architecture Patterns
 
-| Pattern | Usage | Location |
-|---------|-------|----------|
-| **Factory** | Backend creation | backend.py |
-| **Strategy** | Tool implementations | tools/*.py |
-| **Observer** | Textual events | views.py |
-| **Builder** | Config precedence | settings.py |
-| **Adapter** | Backend interface | backend.py |
-| **Registry** | Tool management | tools/manager.py |
-| **Template Method** | Agent processing | agent.py |
+| Pattern             | Usage                | Location         |
+| ------------------- | -------------------- | ---------------- |
+| **Factory**         | Backend creation     | backend.py       |
+| **Strategy**        | Tool implementations | tools/\*.py      |
+| **Observer**        | Textual events       | views.py         |
+| **Builder**         | Config precedence    | settings.py      |
+| **Adapter**         | Backend interface    | backend.py       |
+| **Registry**        | Tool management      | tools/manager.py |
+| **Template Method** | Agent processing     | agent.py         |
 
 ---
 
