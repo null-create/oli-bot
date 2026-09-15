@@ -14,7 +14,7 @@ services:
     restart: "unless-stopped"
     working_dir: /app
     volumes:
-      - ~/.config/oli:/.config/oli
+      - ~/.config/oli:/app/.config/oli
       - ./oli_bot/profiles:/usr/local/lib/python3.12/site-packages/oli_bot/profiles
       - ./notes:/app/notes
       - oli-logs:/app/logs
