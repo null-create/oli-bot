@@ -52,6 +52,7 @@ from .models import (
     Done,
     Error,
     ImageAttachment,
+    MCPServerConfig,
     Message,
     StreamChunk,
     SubAgentCompleted,
@@ -680,6 +681,92 @@ async def update_config(flat: Dict[str, Any]) -> Any:
     manager.save(settings)
     app.state.config = config
     return _nested_to_flat(settings)
+
+
+# --- MCP API ---------------------------------------------------------------- #
+
+
+def _mcp_list() -> List[Dict[str, Any]]:
+    """Snapshot the current MCP server configs as a JSON-safe list."""
+    return [
+        dataclasses.asdict(cfg) for cfg in app.state.agent.mcp_manager.list_servers()
+    ]
+
+
+def _validate_mcp_config(cfg: MCPServerConfig) -> Optional[str]:
+    """Return an error message for an invalid MCP server config, else None."""
+    if not cfg.name or not cfg.name.strip():
+        return "Server name is required"
+    if cfg.transport not in ("stdio", "http"):
+        return f"Unknown transport: {cfg.transport}"
+    if cfg.transport == "http":
+        if not cfg.url or not cfg.url.strip():
+            return "URL is required for HTTP transport"
+    elif not cfg.command or not cfg.command.strip():
+        return "Command is required for stdio transport"
+    return None
+
+
+@app.get("/v1/mcp")
+async def list_mcp_servers() -> List[Dict[str, Any]]:
+    """Return the configured MCP servers (from mcp_servers.json)."""
+    return _mcp_list()
+
+
+@app.post("/v1/mcp")
+async def add_mcp_server(cfg: MCPServerConfig) -> Any:
+    """Register a new MCP server and persist it to disk."""
+    error = _validate_mcp_config(cfg)
+    if error:
+        return JSONResponse(status_code=422, content={"error": {"message": error}})
+    try:
+        app.state.agent.mcp_manager.add_server(
+            name=cfg.name,
+            command=cfg.command,
+            args=cfg.args,
+            env=cfg.env,
+            transport=cfg.transport,
+            url=cfg.url,
+        )
+    except ValueError as e:
+        return JSONResponse(
+            status_code=409, content={"error": {"message": str(e)}}
+        )
+    return _mcp_list()
+
+
+@app.put("/v1/mcp/{name}")
+async def update_mcp_server(name: str, cfg: MCPServerConfig) -> Any:
+    """Update an existing MCP server (matches by path name) and persist."""
+    error = _validate_mcp_config(cfg)
+    if error:
+        return JSONResponse(status_code=422, content={"error": {"message": error}})
+    try:
+        app.state.agent.mcp_manager.update_server(
+            name=name,
+            command=cfg.command,
+            args=cfg.args,
+            env=cfg.env,
+            transport=cfg.transport,
+            url=cfg.url,
+        )
+    except ValueError as e:
+        return JSONResponse(
+            status_code=404, content={"error": {"message": str(e)}}
+        )
+    return _mcp_list()
+
+
+@app.delete("/v1/mcp/{name}")
+async def remove_mcp_server(name: str) -> Any:
+    """Remove a configured MCP server and persist to disk."""
+    try:
+        app.state.agent.mcp_manager.remove_server(name)
+    except ValueError as e:
+        return JSONResponse(
+            status_code=404, content={"error": {"message": str(e)}}
+        )
+    return _mcp_list()
 
 
 # --- Routes ----------------------------------------------------------------- #
