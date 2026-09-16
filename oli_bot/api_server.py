@@ -42,6 +42,7 @@ from .agent import (
     AgentPool,
     register_dispatch_tool,
     run_agent_dispatch,
+    sanitize_tool_history,
 )
 from .backends import create_model_backend, ModelBackend
 from .config import AppConfig, configs
@@ -67,7 +68,7 @@ from .models import (
     ChatCompletionMessage,
     ChatCompletionRequest,
 )
-from .sessions import Session, is_sensitive_path
+from .sessions import ConversationStore, Session, _message_from_dict, is_sensitive_path
 from .settings import SettingsManager
 from .screens.taglines import TAGLINES
 from .tools.manager import BuiltinToolManager
@@ -78,6 +79,10 @@ API_HOST = configs.api_host
 API_PORT = configs.api_port
 API_PROFILE = configs.api_profile
 API_MODE = configs.api_mode
+
+# Sessions are namespaced per "server". The browser shares the TUI's store by
+# using the same default namespace the TUI falls back to when no server is set.
+_SESSION_SERVER = "default"
 
 
 class _Lock:
@@ -115,6 +120,8 @@ class AgentError(Exception):
             },
         )
 
+
+# --- FastAPI app ------------------------------------------------------------- #
 
 app = FastAPI(title="oli", version="1.0.0")
 
@@ -425,6 +432,78 @@ async def _stream_response(request: ChatCompletionRequest) -> AsyncIterator[str]
     yield "data: [DONE]\n\n"
 
 
+# --- Sessions ------------------------------------------------------------- #
+
+
+def _session_meta(session: Dict[str, Any]) -> Dict[str, Any]:
+    """Reduce a stored session dict to the metadata browsers need after a
+    ``session_created`` notification."""
+    return {
+        "id": session.get("id", ""),
+        "name": session.get("name", ""),
+        "created_at": session.get("created_at", ""),
+        "updated_at": session.get("updated_at", ""),
+        "server": session.get("server", _SESSION_SERVER),
+        "model": session.get("model", ""),
+        "profile": session.get("profile", ""),
+        "total_tokens": session.get("total_tokens", 0) or 0,
+        "total_tokens_estimated": session.get("total_tokens_estimated", False),
+    }
+
+
+def _session_created_frame(session_id: str) -> Dict[str, Any]:
+    """Build a ``session_created`` frame carrying the stored session's meta."""
+    data = app.state.session_store.load_session(_SESSION_SERVER, session_id) or {}
+    return {"type": "session_created", "data": {"session": _session_meta(data)}}
+
+
+def _persist_session(
+    session_id: str,
+    messages: List[Message],
+    total_tokens: int,
+    tokens_estimated: bool,
+) -> str:
+    """Save a WebSocket conversation turn to the shared store.
+
+    Returns the (possibly new) session id — the store recreates a session
+    under a fresh UUID when the file is missing or corrupt.
+    """
+    store: ConversationStore = app.state.session_store
+    agent = app.state.agent
+    return store.save_session(
+        server=_SESSION_SERVER,
+        session_id=session_id,
+        messages=messages,
+        model=str(agent.backend.model or ""),
+        profile=agent.profile_name or "",
+        total_tokens=total_tokens,
+        tokens_estimated=tokens_estimated,
+    )
+
+
+def _load_conversation(session_id: str) -> tuple[str, List[Message]]:
+    """Load a session's persisted messages from disk.
+
+    If the file is missing or corrupt a fresh session is created and its new
+    id is returned so the caller can tell the client via ``session_created``.
+    """
+    store: ConversationStore = app.state.session_store
+    data = store.load_session(_SESSION_SERVER, session_id)
+    if data is None:
+        agent = app.state.agent
+        new_id = store.create_session(
+            server=_SESSION_SERVER,
+            model=str(agent.backend.model or ""),
+            profile=agent.profile_name or "",
+            system_prompt=agent.system_prompt or "",
+        )
+        return new_id, []
+    messages = sanitize_tool_history(
+        [_message_from_dict(m) for m in data.get("messages", [])]
+    )
+    return session_id, messages
+
+
 # --- WebSocket ------------------------------------------------------------- #
 
 
@@ -501,13 +580,18 @@ def _event_to_frame(event: AgentEvent) -> Dict[str, Any]:
 async def websocket_chat(websocket: WebSocket) -> None:
     """Stateful WebSocket chat endpoint.
 
-    The server keeps a per-connection ``messages`` list so a client just sends
-    the next user turn (``{"content": "..."}``) and receives every ``AgentEvent``
-    back as a typed JSON frame.  ``{"action": "clear"}`` resets the history.
+    The client may send ``{"content": ...}`` for a turn or
+    ``{"action": "clear"}`` to reset the connection history.  When a
+    ``session_id`` is included, the conversation is persisted to the shared
+    ``ConversationStore`` (under ``_SESSION_SERVER``) after every turn,
+    mirroring the TUI's per-turn save.  Missing or corrupt session files are
+    recreated and the client is notified via a ``session_created`` frame.
+    ``{"action": "clear", "session_id": ...}`` wipes the persisted session too.
     Runs are serialized on ``app.state.lock`` like the REST endpoints.
     """
     await websocket.accept()
     messages: List[Message] = []
+    connection_session_id = ""
     try:
         await websocket.send_json({"type": "connected", "data": {}})
         while True:
@@ -527,6 +611,17 @@ async def websocket_chat(websocket: WebSocket) -> None:
 
             if data.get("action") == "clear":
                 messages = []
+                requested = data.get("session_id")
+                if requested:
+                    connection_session_id = str(requested)
+                    try:
+                        new_id = _persist_session(connection_session_id, [], 0, False)
+                    except Exception as e:
+                        logger.warning("Failed to clear persisted session: %s", e)
+                        new_id = connection_session_id
+                    if new_id != connection_session_id:
+                        connection_session_id = new_id
+                        await websocket.send_json(_session_created_frame(new_id))
                 await websocket.send_json({"type": "cleared", "data": {}})
                 continue
 
@@ -537,6 +632,23 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 )
                 continue
 
+            requested_session = data.get("session_id")
+            if requested_session:
+                try:
+                    connection_session_id, messages = _load_conversation(
+                        str(requested_session)
+                    )
+                    if connection_session_id != str(requested_session):
+                        await websocket.send_json(
+                            _session_created_frame(connection_session_id)
+                        )
+                except Exception as e:
+                    logger.exception("Failed to load session %s", requested_session)
+                    await websocket.send_json(
+                        {"type": "error", "data": {"message": str(e)}}
+                    )
+                    continue
+
             messages.append(Message(role="user", content=str(content)))
 
             try:
@@ -546,6 +658,8 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 tools = None
 
             with app.state.lock:
+                total_tokens = 0
+                tokens_estimated = False
                 try:
                     async for event in app.state.agent.process(
                         messages, tools=tools, confirm_callback=_api_confirm
@@ -556,10 +670,33 @@ async def websocket_chat(websocket: WebSocket) -> None:
                             await websocket.send_json(
                                 {"type": "todo", "data": todo_data}
                             )
-                        if isinstance(event, Done) and event.full_text:
-                            messages.append(
-                                Message(role="assistant", content=event.full_text)
-                            )
+                        if isinstance(event, UsageEvent):
+                            total_tokens += event.usage.total_tokens
+                            tokens_estimated = tokens_estimated or event.usage.estimated
+                        if isinstance(event, Done):
+                            if event.full_text:
+                                messages.append(
+                                    Message(role="assistant", content=event.full_text)
+                                )
+                            if requested_session:
+                                try:
+                                    new_id = _persist_session(
+                                        connection_session_id,
+                                        messages,
+                                        total_tokens,
+                                        tokens_estimated,
+                                    )
+                                    if new_id != connection_session_id:
+                                        connection_session_id = new_id
+                                        await websocket.send_json(
+                                            _session_created_frame(new_id)
+                                        )
+                                except Exception as e:
+                                    logger.warning(
+                                        "Failed to persist session %s: %s",
+                                        connection_session_id,
+                                        e,
+                                    )
                 except WebSocketDisconnect:
                     raise
                 except Exception as e:
@@ -729,9 +866,7 @@ async def add_mcp_server(cfg: MCPServerConfig) -> Any:
             url=cfg.url,
         )
     except ValueError as e:
-        return JSONResponse(
-            status_code=409, content={"error": {"message": str(e)}}
-        )
+        return JSONResponse(status_code=409, content={"error": {"message": str(e)}})
     return _mcp_list()
 
 
@@ -751,9 +886,7 @@ async def update_mcp_server(name: str, cfg: MCPServerConfig) -> Any:
             url=cfg.url,
         )
     except ValueError as e:
-        return JSONResponse(
-            status_code=404, content={"error": {"message": str(e)}}
-        )
+        return JSONResponse(status_code=404, content={"error": {"message": str(e)}})
     return _mcp_list()
 
 
@@ -763,13 +896,74 @@ async def remove_mcp_server(name: str) -> Any:
     try:
         app.state.agent.mcp_manager.remove_server(name)
     except ValueError as e:
-        return JSONResponse(
-            status_code=404, content={"error": {"message": str(e)}}
-        )
+        return JSONResponse(status_code=404, content={"error": {"message": str(e)}})
     return _mcp_list()
 
 
-# --- Routes ----------------------------------------------------------------- #
+# --- Session API ------------------------------------------------------------- #
+
+
+@app.get("/v1/sessions")
+async def list_sessions() -> Dict[str, Any]:
+    """List saved sessions for the shared server namespace."""
+    store: ConversationStore = app.state.session_store
+    return {"sessions": store.list_sessions(_SESSION_SERVER)}
+
+
+@app.post("/v1/sessions")
+async def create_session() -> Dict[str, Any]:
+    """Create a new empty session and return it."""
+    store: ConversationStore = app.state.session_store
+    agent = app.state.agent
+    session_id = store.create_session(
+        server=_SESSION_SERVER,
+        model=str(agent.backend.model or ""),
+        profile=agent.profile_name or "",
+        system_prompt=agent.system_prompt or "",
+    )
+    return store.load_session(_SESSION_SERVER, session_id) or {}
+
+
+@app.get("/v1/sessions/{session_id}")
+async def get_session(session_id: str) -> Any:
+    """Return a full session including its messages, or 404."""
+    store: ConversationStore = app.state.session_store
+    data = store.load_session(_SESSION_SERVER, session_id)
+    if data is None:
+        return JSONResponse(
+            status_code=404, content={"error": {"message": "Session not found"}}
+        )
+    return data
+
+
+@app.put("/v1/sessions/{session_id}")
+async def rename_session(session_id: str, payload: Dict[str, Any]) -> Any:
+    """Rename a session, returning the updated session or 404."""
+    name = str(payload.get("name", "")).strip()
+    if not name:
+        return JSONResponse(
+            status_code=422, content={"error": {"message": "Name is required"}}
+        )
+    store: ConversationStore = app.state.session_store
+    if not store.rename_session(_SESSION_SERVER, session_id, name):
+        return JSONResponse(
+            status_code=404, content={"error": {"message": "Session not found"}}
+        )
+    return store.load_session(_SESSION_SERVER, session_id) or {}
+
+
+@app.delete("/v1/sessions/{session_id}")
+async def delete_session(session_id: str) -> Any:
+    """Delete a session, returning 404 when it does not exist."""
+    store: ConversationStore = app.state.session_store
+    if not store.delete_session(_SESSION_SERVER, session_id):
+        return JSONResponse(
+            status_code=404, content={"error": {"message": "Session not found"}}
+        )
+    return {"deleted": session_id}
+
+
+# --- Chat Completion Routes ----------------------------------------------------------------- #
 
 
 @app.get("/v1/models")
@@ -827,6 +1021,7 @@ def _initialize_state() -> None:
     app.state.config = config
     app.state.agent = agent
     app.state.lock = _Lock()
+    app.state.session_store = ConversationStore()
 
     # Relay todo-list updates (from ``builtin__todowrite``) to WebSocket
     # clients. The tool manager invokes these synchronously; we just append
