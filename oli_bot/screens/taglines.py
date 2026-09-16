@@ -69,6 +69,7 @@ TAGLINES = [
     "Never seen Xanadu? Neither have I, and yet, here we are",
     "There's a suspicious amount of glitter here",
     "Green on black, the way god intended",
+    "The Zune of agent harnesses"
 ]
 
 
