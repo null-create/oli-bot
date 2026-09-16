@@ -68,7 +68,14 @@ from .models import (
     ChatCompletionMessage,
     ChatCompletionRequest,
 )
-from .sessions import ConversationStore, Session, _message_from_dict, is_sensitive_path
+from .sessions import (
+    SCOPE_WORKSPACE_SENSITIVE,
+    ConversationStore,
+    Session,
+    WorkspaceManager,
+    _message_from_dict,
+    is_sensitive_path,
+)
 from .settings import SettingsManager
 from .screens.taglines import TAGLINES
 from .tools.manager import BuiltinToolManager
@@ -963,6 +970,136 @@ async def delete_session(session_id: str) -> Any:
     return {"deleted": session_id}
 
 
+# --- Workspace & filesystem API ---------------------------------------------- #
+
+
+_FS_LIST_LIMIT = 500
+
+
+def _get_workspace_manager() -> WorkspaceManager:
+    """Return the process-wide ``WorkspaceManager`` (recent workspace list).
+
+    Built in ``_initialize_state``; recreated lazily here so tests that
+    rewire ``app.state`` without it keep working.
+    """
+    manager = getattr(app.state, "workspace_manager", None)
+    if manager is None:
+        manager = WorkspaceManager()
+        app.state.workspace_manager = manager
+    return manager
+
+
+def _workspace_state(agent: Agent, manager: WorkspaceManager) -> Dict[str, Any]:
+    """Snapshot the active workspace plus the recently used list."""
+    current = getattr(agent._session, "workspace", None)
+    current_str = str(current) if current else None
+    return {
+        "current": current_str,
+        "sensitive": bool(current and is_sensitive_path(current)),
+        "workspaces": [str(w) for w in manager.list_workspaces()],
+    }
+
+
+@app.get("/v1/workspace")
+async def get_workspace() -> Dict[str, Any]:
+    """Return the active workspace and the recently used workspace list."""
+    return _workspace_state(app.state.agent, _get_workspace_manager())
+
+
+@app.put("/v1/workspace")
+async def set_workspace(payload: Dict[str, Any]) -> Any:
+    """Set the shared agent's workspace to an existing directory.
+
+    Mirrors the TUI's ``/workspace set`` (without interactive prompts — the
+    browser already required confirmation for sensitive paths): the session
+    grants are cleared and, for a sensitive path, ``workspace_sensitive`` is
+    re-granted so read scoping is respected.  The path is recorded in the
+    recently-used list.
+    """
+    path_str = str(payload.get("path") or "").strip()
+    if not path_str:
+        return JSONResponse(
+            status_code=422, content={"error": {"message": "Path is required"}}
+        )
+    try:
+        path = Path(path_str).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"message": f"Invalid path: {path_str}"}},
+        )
+    if not path.is_dir():
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"message": f"Not a valid directory: {path}"}},
+        )
+    session = app.state.agent._session
+    session.workspace = path
+    session._session_grants.clear()
+    if is_sensitive_path(path):
+        session._session_grants.add(SCOPE_WORKSPACE_SENSITIVE)
+    manager = _get_workspace_manager()
+    manager.add_workspace(path)
+    return _workspace_state(app.state.agent, manager)
+
+
+@app.delete("/v1/workspace")
+async def unset_workspace() -> Any:
+    """Clear the active workspace (mirrors the TUI's ``/workspace unset``)."""
+    session = app.state.agent._session
+    session.workspace = None
+    session._session_grants.clear()
+    return _workspace_state(app.state.agent, _get_workspace_manager())
+
+
+def _list_dir(path: Path) -> List[Dict[str, Any]]:
+    """List one directory as JSON-safe entries (dirs first, alphabetized)."""
+    entries: List[Dict[str, Any]] = []
+    for child in path.iterdir():
+        try:
+            child_type = "dir" if child.is_dir() else "file"
+        except OSError:
+            continue
+        entries.append(
+            {
+                "name": child.name,
+                "path": str(child.resolve()),
+                "type": child_type,
+                "sensitive": is_sensitive_path(child) if child_type == "dir" else False,
+            }
+        )
+    entries.sort(key=lambda e: (e["type"] != "dir", e["name"].lower()))
+    return entries[:_FS_LIST_LIMIT]
+
+
+@app.get("/v1/fs/list")
+async def list_fs_directory(path: str = "/") -> Any:
+    """List a directory on the server for the workspace browser."""
+    try:
+        resolved = Path(path).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return JSONResponse(
+            status_code=422, content={"error": {"message": f"Invalid path: {path}"}}
+        )
+    if not resolved.is_dir():
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": f"Not a valid directory: {resolved}"}},
+        )
+    try:
+        entries = _list_dir(resolved)
+    except PermissionError:
+        return JSONResponse(
+            status_code=403,
+            content={"error": {"message": f"Permission denied: {resolved}"}},
+        )
+    return {
+        "path": str(resolved),
+        "sensitive": is_sensitive_path(resolved),
+        "entries": entries,
+    }
+
+
 # --- Chat Completion Routes ----------------------------------------------------------------- #
 
 
@@ -1022,6 +1159,7 @@ def _initialize_state() -> None:
     app.state.agent = agent
     app.state.lock = _Lock()
     app.state.session_store = ConversationStore()
+    app.state.workspace_manager = WorkspaceManager()
 
     # Relay todo-list updates (from ``builtin__todowrite``) to WebSocket
     # clients. The tool manager invokes these synchronously; we just append
