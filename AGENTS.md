@@ -35,7 +35,7 @@ Switched via `/mode`. Orthogonal to the active profile.
 - **agent** _(default)_ — all tools enabled; runs up to `max_tool_iterations` (default 25) streaming tool-calling rounds.
 - **ask** — read-only built-in tools; MCP and write tools disabled.
 - **chat** — no tools; single streamed response.
-- **plan** — read-only tools plus `notebook` / `todowrite` and MCP; write tools disabled. An ephemeral system-prompt note (`oli_bot/agent.py:PLAN_MODE_NOTE`) instructs the model to save the finished plan via `notebook(action="set", page="plan-<name>")`, which persists to `notes/plan-<name>.md` (auto-incrementing on collision).
+- **plan** — read-only tools plus `notebook` / `todowrite` and MCP; write tools disabled. An ephemeral system-prompt note (`oli_bot/agent.py:PLAN_MODE_NOTE`) instructs the model to save the finished plan via `notebook(action="set", page="plan-<name>")`, which persists to `~/.config/oli/notes/plan-<name>.md` (auto-incrementing on collision).
 
 ## Profiles
 

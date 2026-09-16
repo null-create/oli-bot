@@ -323,30 +323,36 @@ def test_get_plan_tool_definitions_matches_plan_tools_set():
 
 
 def test_notebook_set_auto_increments_plan_pages(tmp_path, monkeypatch):
+    from pathlib import Path
+
     from oli_bot.tools.memory import _notebook_handler
 
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    notes_dir = tmp_path / ".config" / "oli" / "notes"
 
     r1 = _notebook_handler("set", page="plan-foo", content="v1")
     assert "plan-foo" in r1
-    assert (tmp_path / "notes" / "plan-foo.md").read_text() == "v1"
+    assert (notes_dir / "plan-foo.md").read_text() == "v1"
 
     r2 = _notebook_handler("set", page="plan-foo", content="v2")
     assert "plan-foo-2" in r2
-    assert (tmp_path / "notes" / "plan-foo-2.md").read_text() == "v2"
-    assert (tmp_path / "notes" / "plan-foo.md").read_text() == "v1"
+    assert (notes_dir / "plan-foo-2.md").read_text() == "v2"
+    assert (notes_dir / "plan-foo.md").read_text() == "v1"
 
     r3 = _notebook_handler("set", page="plan-foo", content="v3")
     assert "plan-foo-3" in r3
-    assert (tmp_path / "notes" / "plan-foo-3.md").read_text() == "v3"
+    assert (notes_dir / "plan-foo-3.md").read_text() == "v3"
 
 
 def test_notebook_set_overwrites_non_plan_pages(tmp_path, monkeypatch):
+    from pathlib import Path
+
     from oli_bot.tools.memory import _notebook_handler
 
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    notes_dir = tmp_path / ".config" / "oli" / "notes"
 
     _notebook_handler("set", page="scratch", content="v1")
     _notebook_handler("set", page="scratch", content="v2")
-    assert (tmp_path / "notes" / "scratch.md").read_text() == "v2"
-    assert not (tmp_path / "notes" / "scratch-2.md").exists()
+    assert (notes_dir / "scratch.md").read_text() == "v2"
+    assert not (notes_dir / "scratch-2.md").exists()

@@ -27,7 +27,7 @@ output is the plan itself, saved via `notebook` so it persists across sessions.
 ## Workflow
 
 1. **Gather context** — read relevant source files, docs, and any existing
-   plans in `notes/`. Use web search for background on external dependencies
+   plans in `~/.config/oli/notes/`. Use web search for background on external dependencies
    or prior art.
 2. **Identify the goal** — restate the goal in your own words. If it's
    ambiguous, ask for clarification before planning.

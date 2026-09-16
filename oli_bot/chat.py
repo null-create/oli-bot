@@ -1303,7 +1303,7 @@ class OliBot(App):
                 "  [bold]ask[/bold]   — read-only tools enabled\n"
                 "  [bold]agent[/bold] — all tools enabled\n"
                 "  [bold]chat[/bold]  — no tools, simple chat\n"
-                "  [bold]plan[/bold]  — research + notebook/todowrite tools, saves a plan to notes/plan-<name>.md",
+                "  [bold]plan[/bold]  — research + notebook/todowrite tools, saves a plan to ~/.config/oli/notes/plan-<name>.md",
             )
             return
         mode = parts[1].lower()
