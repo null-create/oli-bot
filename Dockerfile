@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y \
     g++ \
     net-tools \
     curl \
+    tree \
+    grep \
+    glob \
     && rm -rf /var/lib/apt/lists/*
 
 # Run as root so the container can always read/write the host-mounted
