@@ -18,7 +18,7 @@
 | Programming questions | `builtin__search_stackoverflow` | Search Stack Overflow questions by keyword or tag. |
 | Books | `builtin__search_open_library` | Search the Open Library catalog; returns titles, authors, first publication year, and links. |
 | Full article text | `builtin__extract_article` | Pull the full body text (title, authors, date, preview) from an article URL via newspaper4k. |
-| Store session notes | `builtin__notebook` | Working memory across the conversation. Pages live as Markdown files under `notes/`. |
+| Store session notes | `builtin__notebook` | Working memory across the conversation. Pages live as Markdown files under `~/.config/oli/notes/`. |
 
 ## When NOT to use tools
 
@@ -31,7 +31,7 @@
 
 ## Notebook usage
 
-`builtin__notebook` is your per-session working memory. Pages are Markdown files saved to `notes/`. Use it to retain important context across the conversation.
+`builtin__notebook` is your per-session working memory. Pages are Markdown files saved to `~/.config/oli/notes/`. Use it to retain important context across the conversation.
 
 - **Store findings** — save discovered facts, decisions, or research results so you don't need to re-derive them.
 - **Maintain state** — keep track of complex multi-step processes, partial progress, or pending items the todo list doesn't capture.

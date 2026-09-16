@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import logging
 import random
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1302,7 +1303,7 @@ class OliBot(App):
                 "  [bold]ask[/bold]   — read-only tools enabled\n"
                 "  [bold]agent[/bold] — all tools enabled\n"
                 "  [bold]chat[/bold]  — no tools, simple chat\n"
-                "  [bold]plan[/bold]  — research + notebook/todowrite tools, saves a plan to notes/plan-<name>.md",
+                "  [bold]plan[/bold]  — research + notebook/todowrite tools, saves a plan to ~/.config/oli/notes/plan-<name>.md",
             )
             return
         mode = parts[1].lower()
@@ -2862,15 +2863,21 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _build_arg_parser().parse_args()
-    app = OliBot(
-        model=args.model,
-        base_url=args.url,
-        profile=args.profile,
-        resume_last=args.resume_last,
-        load_session=args.load_session,
-        dry_run=args.dry_run,
-        use_pool=args.use_pool,
-    )
+    try:
+        app = OliBot(
+            model=args.model,
+            base_url=args.url,
+            profile=args.profile,
+            resume_last=args.resume_last,
+            load_session=args.load_session,
+            dry_run=args.dry_run,
+            use_pool=args.use_pool,
+        )
+    except RuntimeError as e:
+        if "~/.config/oli" in str(e):
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        raise
     if args.offline:
         app.config.offline_mode = True
     if args.no_offline:

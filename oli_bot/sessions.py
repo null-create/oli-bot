@@ -289,6 +289,15 @@ def _message_from_dict(d: dict) -> Message:
     )
 
 
+def _session_write_error(path: Path, error: PermissionError) -> RuntimeError:
+    return RuntimeError(
+        f"Cannot write session {path}: {error}\n"
+        "This usually means the ~/.config/oli directory is owned by a "
+        "different user (e.g. the Docker container) than the one running "
+        "the TUI. Fix with:  sudo chown -R $(id -u):$(id -g) ~/.config/oli"
+    )
+
+
 class ConversationStore:
     """Persist and manage conversation sessions as JSON files."""
 
@@ -296,7 +305,10 @@ class ConversationStore:
         if sessions_dir is None:
             sessions_dir = str(Path.home() / ".config" / "oli" / "sessions")
         self.sessions_dir = Path(sessions_dir)
-        self.sessions_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.sessions_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError as e:
+            raise _session_write_error(self.sessions_dir, e) from e
 
     def _server_dir(self, server: str) -> Path:
         return self.sessions_dir / _sanitize_name(server)
@@ -325,10 +337,13 @@ class ConversationStore:
         if system_prompt:
             data["messages"].append({"role": "system", "content": system_prompt})
         server_dir = self._server_dir(server)
-        server_dir.mkdir(parents=True, exist_ok=True)
-        self._session_path(server, session_id).write_text(
-            json.dumps(data, indent=2), encoding="utf-8"
-        )
+        try:
+            server_dir.mkdir(parents=True, exist_ok=True)
+            self._session_path(server, session_id).write_text(
+                json.dumps(data, indent=2), encoding="utf-8"
+            )
+        except PermissionError as e:
+            raise _session_write_error(server_dir, e) from e
         return session_id
 
     def save_session(
@@ -389,7 +404,10 @@ class ConversationStore:
             tokens_estimated = False
         data["total_tokens"] = int(total_tokens or 0)
         data["total_tokens_estimated"] = bool(tokens_estimated)
-        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        try:
+            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except PermissionError as e:
+            raise _session_write_error(path, e) from e
         if created_new:
             logger.info("Session recreated under new id: %s", session_id)
         return session_id

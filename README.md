@@ -183,7 +183,7 @@ The Compose file runs the OpenAI-compatible API server in a container. The API s
 docker-compose up --build
 ```
 
-The API server listens on `localhost:9734` (the compose file sets it via the repo's `.env`), mounts `./oli_bot/profiles`, `~/.config/oli`, and `./notes` to persist state across restarts, and is ready to accept OpenAI-compatible chat completions requests.
+The API server listens on `localhost:9734` (the compose file sets it via the repo's `.env`), mounts `./oli_bot/profiles` and `~/.config/oli` to persist state across restarts, and is ready to accept OpenAI-compatible chat completions requests.
 
 **Run the TUI agent locally (optional):**
 

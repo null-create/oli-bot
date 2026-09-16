@@ -74,7 +74,8 @@ def register_tools(manager: BuiltinToolManager) -> None:
 
     manager.register_tool(
         name="notebook",
-        description="Agent's working memory stored as Markdown files under a notes/ directory. "
+        description="Agent's working memory stored as Markdown files under "
+        "~/.config/oli/notes/. "
         "Use pages to store session notes, plans, and important information "
         "as Markdown documents. "
         "get — retrieve a specific page or list all pages; "
@@ -165,7 +166,7 @@ def _todowrite_handler(
 
 
 def _notebook_handler(action: str, page: str = None, content: str = None) -> str:
-    notes_dir = Path("notes").resolve()
+    notes_dir = Path.home() / ".config" / "oli" / "notes"
     if action == "list":
         if not notes_dir.is_dir():
             return "No pages found."

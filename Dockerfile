@@ -4,7 +4,8 @@ WORKDIR /app
 
 # Set environment variables for Python
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    HOME=/app
 
 # Tell HuggingFace where to cache models inside the image
 ENV TRANSFORMERS_CACHE=/app/.cache/huggingface \
@@ -16,12 +17,11 @@ RUN apt-get update && apt-get install -y \
     g++ \
     net-tools \
     curl \
+    tree \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up user permissions
-RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
-RUN mkdir -p /app/logs /workspace/logs && \
-    chown -R appuser:appuser /app /workspace/logs 2>/dev/null || true
+# Create directories for logs and workspaces
+RUN mkdir -p /app/logs /workspace/logs
 
 # ── PyTorch (CPU-only) ────────────────────────────────────────────────────────
 # Install CPU-only PyTorch so the much larger CUDA build (~1.7 GB) is never
@@ -42,8 +42,6 @@ RUN pip install --no-cache-dir transformers>=4.40 accelerate>=0.2
 # image and makes the `oli` / `oli-server` console scripts available on PATH.
 COPY . .
 RUN pip install --no-cache-dir .
-
-USER appuser
 
 EXPOSE 9734
 

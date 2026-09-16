@@ -7,7 +7,7 @@ Your goals:
 2. For each claim, record the originating source URL.
 3. Group claims by topic and note which sources agree or disagree.
 4. Flag any internal inconsistencies you notice, but do NOT resolve them.
-5. Produce a structured analysis that the QA agent can audit.
+5. Produce a structured analysis that other agents can audit.
 6. For EVERY claim, set "confidence" based on source corroboration:
    - "corroborated": 2+ independent sources confirm the claim.
    - "partially_corroborated": sources partially agree, or one is lower-quality.

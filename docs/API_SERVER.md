@@ -294,6 +294,81 @@ asyncio.run(main())
 Invalid JSON payloads, non-object payloads, and empty messages are answered with
 `{"type": "error", "data": {"message": "..."}}` and the connection stays open.
 
+### `GET/PUT /v1/config`
+
+Management endpoints backing the browser UI's settings view. They read and write
+`~/.config/oli/settings.json` through the same `SettingsManager` the TUI uses,
+translating between the nested settings format and a flat key-per-`AppConfig`-
+field shape (`openai_model`, `truncation_max_chars_small`, `api_port`, ...).
+
+`GET /v1/config` returns the current flat config:
+
+```bash
+curl http://localhost:9734/v1/config
+```
+
+```json
+{
+  "backend": "ollama",
+  "ollama_model": "llama3.1",
+  "temperature": 0.7,
+  "api_port": 9734
+}
+```
+
+`PUT /v1/config` takes a partial flat dict, overlays only the recognized keys
+onto the existing settings (so secrets and env-driven values the UI doesn't
+touch are preserved), validates them by round-tripping through `AppConfig`, and
+persists the result:
+
+```bash
+curl -X PUT http://localhost:9734/v1/config \
+  -H 'Content-Type: application/json' \
+  -d '{"temperature": 0.2, "max_tool_iterations": 10}'
+```
+
+On validation failure it returns HTTP 422 with `{"error": {"message":
+"Invalid config: ..."}}`. Note the running agent is **not** rebuilt — restart the
+server for config changes to take effect.
+
+### `GET/POST /v1/mcp` and `PUT/DELETE /v1/mcp/{name}`
+
+CRUD for the MCP server configuration persisted to `mcp_servers.json`, backing
+the browser UI's MCP server management view. Operates on the shared
+`MCPClientManager` (`app.state.agent.mcp_manager`); all responses return the
+updated list of server configs.
+
+`GET /v1/mcp` lists the configured servers:
+
+```bash
+curl http://localhost:9734/v1/mcp
+```
+
+```json
+[
+  {
+    "name": "github",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": { "GITHUB_TOKEN": "..." },
+    "url": ""
+  }
+]
+```
+
+`POST /v1/mcp` registers a new server (409 on duplicate name), `DELETE
+/v1/mcp/{name}` removes one (404 if unknown), and `PUT /v1/mcp/{name}` updates
+the server whose stored `name` matches the path parameter (404 if not found).
+Unknown transports, missing `command` for `stdio`, and missing `url` for `http`
+return HTTP 422. The request body is the same shape as the list entries above.
+
+```bash
+curl -X POST http://localhost:9734/v1/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "filesystem", "command": "/usr/local/bin/mcp-fs"}'
+```
+
 ## Behavior notes
 
 - **Workspace** — the agent's workspace defaults to the process CWD unless the

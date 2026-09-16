@@ -48,6 +48,15 @@ def test_save_returns_same_id_on_happy_path(tmp_path):
     assert returned == sid
 
 
+def test_unwritable_sessions_dir_raises_friendly_error(tmp_path):
+    locked = tmp_path / "locked"
+    store = ConversationStore(sessions_dir=str(locked))
+    locked.chmod(0o500)
+    with pytest.raises(RuntimeError, match="chown -R"):
+        store.create_session("srv", "m", "p", "")
+    locked.chmod(0o700)
+
+
 def test_sanitize_tool_history_repairs_orphan_from_disk(tmp_path):
     """Regression: a session saved by an older build with an orphan assistant
     tool_use must be self-healed on load (via the sanitize call at the load
