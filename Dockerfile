@@ -20,8 +20,7 @@ RUN apt-get update && apt-get install -y \
     tree \
     && rm -rf /var/lib/apt/lists/*
 
-# Run as root so the container can always read/write the host-mounted
-# ~/.config/oli volume regardless of the host ownership it presents.
+# Create directories for logs and workspaces
 RUN mkdir -p /app/logs /workspace/logs
 
 # ── PyTorch (CPU-only) ────────────────────────────────────────────────────────
