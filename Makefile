@@ -7,6 +7,12 @@ init:
 	@./venv/bin/pip install --upgrade pip
 	@./venv/bin/pip install -e .
 
+init-dev:
+	@echo "Initializing backend for development..."
+	@python3 -m venv venv
+	@./venv/bin/pip install --upgrade pip
+	@./venv/bin/pip install -e .[dev]
+
 clean:
 	@echo "Cleaning up..."
 	@rm -rf ./venv
