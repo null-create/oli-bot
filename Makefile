@@ -36,7 +36,7 @@ restart:
 
 build:
 	@echo "Building and running agent..."
-	@docker compose -d -build
+	@docker compose -d --build
 
 rebuild:
 	@echo "Rebuilding Agent..."
