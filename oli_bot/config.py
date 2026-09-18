@@ -80,9 +80,13 @@ class AppConfig(BaseSettings):
     # Hard cap to prevent runaway recordings
     voice_max_record_seconds: int = Field(default=15, gt=0)
 
-    # General Agent configs
+    # Agent pooling
     use_agent_pool: bool = Field(default=False)
     agent_pool_size: int = Field(default=5)
+    # Explicit path to the agents.yaml used by agent pooling.
+    agents_yaml: str = Field(default="")
+
+    # General Agent configs
     max_tokens: int = Field(default=2048)
     temperature: float = Field(default=0.7)
     max_retries: int = Field(default=3)

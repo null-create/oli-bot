@@ -55,6 +55,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "offline_mode": True,
         "use_agent_pool": False,
         "agent_pool_size": 5,
+        "agents_yaml": "",
     },
     "logging": {
         "log_level": "INFO",
@@ -125,6 +126,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_OFFLINE_MODE": "model_params.offline_mode",
     "OLI_USE_AGENT_POOL": "model_params.use_agent_pool",
     "OLI_AGENT_POOL_SIZE": "model_params.agent_pool_size",
+    "OLI_AGENTS_YAML": "model_params.agents_yaml",
     "OLI_LOG_LEVEL": "logging.log_level",
     "OLI_LOG_FILE": "logging.log_file",
     "OLI_API_HOST": "api_server.host",
@@ -340,6 +342,7 @@ class SettingsManager:
             offline_mode=mp.get("offline_mode", True),
             use_agent_pool=mp.get("use_agent_pool", False),
             agent_pool_size=mp.get("agent_pool_size", 5),
+            agents_yaml=mp.get("agents_yaml", ""),
             log_level=lg.get("log_level", "INFO"),
             log_file=lg.get("log_file", "logs/backend.ndjson"),
             api_host=api.get("host", "0.0.0.0"),
@@ -382,6 +385,7 @@ class SettingsManager:
         settings["transformers"]["is_multi_model"] = config.transformers_is_multi_model
         settings["model_params"]["use_agent_pool"] = config.use_agent_pool
         settings["model_params"]["agent_pool_size"] = config.agent_pool_size
+        settings["model_params"]["agents_yaml"] = config.agents_yaml
         settings["model_params"]["max_tokens"] = config.max_tokens
         settings["model_params"]["temperature"] = config.temperature
         settings["model_params"]["max_retries"] = config.max_retries

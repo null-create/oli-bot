@@ -1,9 +1,11 @@
 """Regression tests for AgentPool dispatch."""
 
 import asyncio
+import logging
 from unittest.mock import mock_open, patch
 
 import pytest
+import yaml
 
 from oli_bot.agent import Agent, AgentPool, _expand_env
 from oli_bot.backends import create_model_backend
@@ -268,6 +270,159 @@ def test_agent_pool_last_agent_wins_on_duplicate_name(pool):
 
 
 # ---------------------------------------------------------------------------
+# agents.yaml resolution
+# ---------------------------------------------------------------------------
+
+
+def test_agent_pool_finds_agents_yaml_at_repo_root(monkeypatch, tmp_path):
+    """Regression: agents.yaml next to pyproject.toml (one level above the
+    package) must be found WITHOUT patching os.path.exists. This is the root
+    cause of the 'dispatch tool never registered' bug — the pool built empty
+    because the config lived at the repo root, not inside the package dir.
+    """
+    from oli_bot import agent as agent_module
+
+    # Fake the package dir so the "repo root" candidate becomes tmp_path.
+    monkeypatch.setattr(agent_module, "__file__", str(tmp_path / "pkg" / "agent.py"))
+
+    (tmp_path / "agents.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "agent-pools": [
+                    {
+                        "name": "default",
+                        "agents": [
+                            {
+                                "name": "worker",
+                                "model": "gemma",
+                                "backend": {
+                                    "type": "ollama",
+                                    "base_url": "http://localhost:11434",
+                                },
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+
+    pool = AgentPool(_StubMCP())
+
+    assert pool.list_agents("default") == ["worker"]
+    assert pool.has_agents() is True
+    assert pool.select_agent("default", "worker").backend.model == "gemma"
+
+
+def test_agent_pool_respects_oli_agents_yaml_override(monkeypatch, tmp_path):
+    """$OLI_AGENTS_YAML must take precedence over the default locations."""
+    from oli_bot import agent as agent_module
+
+    custom = tmp_path / "custom" / "my-pool.yaml"
+    custom.parent.mkdir(parents=True)
+    custom.write_text(
+        yaml.safe_dump(
+            {
+                "agent-pools": [
+                    {
+                        "name": "default",
+                        "agents": [
+                            {
+                                "name": "specialist",
+                                "model": "mixtral",
+                                "backend": {
+                                    "type": "ollama",
+                                    "base_url": "http://localhost:11434",
+                                },
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setenv("OLI_AGENTS_YAML", str(custom))
+    monkeypatch.setattr(agent_module, "__file__", str(tmp_path / "pkg" / "agent.py"))
+
+    pool = AgentPool(_StubMCP())
+
+    assert pool.list_agents("default") == ["specialist"]
+
+
+def test_agent_pool_uses_config_agents_yaml_field(monkeypatch, tmp_path):
+    """AgentPool must honor AppConfig.agents_yaml (the .env / settings.json
+    route) with no OLI_AGENTS_YAML env var set, and the config field must
+    still win over the auto-location candidates.
+    """
+    from oli_bot import agent as agent_module
+    from oli_bot.config import AppConfig
+
+    custom = tmp_path / "custom" / "field-pool.yaml"
+    custom.parent.mkdir(parents=True)
+    custom.write_text(
+        yaml.safe_dump(
+            {
+                "agent-pools": [
+                    {
+                        "name": "default",
+                        "agents": [
+                            {
+                                "name": "field-agent",
+                                "model": "llama",
+                                "backend": {
+                                    "type": "ollama",
+                                    "base_url": "http://localhost:11434",
+                                },
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+    # A tempting repo-root agents.yaml would be ignored because the config
+    # field wins (and it's intentionally invalid YAML to prove it isn't parsed).
+    (tmp_path / "agents.yaml").write_text("not-valid-yaml: [")
+    monkeypatch.setattr(agent_module, "__file__", str(tmp_path / "pkg" / "agent.py"))
+
+    pool = AgentPool(
+        _StubMCP(), config=AppConfig(_env_file=None, agents_yaml=str(custom))
+    )
+
+    assert pool.list_agents("default") == ["field-agent"]
+    assert pool.select_agent("default", "field-agent").backend.model == "llama"
+
+
+def test_agent_pool_missing_config_logs_error_and_builds_empty(
+    monkeypatch, tmp_path, caplog
+):
+    """A missing agents.yaml must be loud (error log + empty pool), not a
+    silent skip — otherwise the missing `dispatch` tool is invisible.
+    """
+    from oli_bot import agent as agent_module
+
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr(agent_module, "__file__", str(tmp_path / "pkg" / "agent.py"))
+
+    class _FakePath:
+        @staticmethod
+        def home():
+            return fake_home
+
+    monkeypatch.setattr(agent_module, "Path", _FakePath)
+
+    with caplog.at_level(logging.ERROR, logger="oli_bot.agent"):
+        pool = AgentPool(_StubMCP())
+
+    assert pool.agent_pool == {}
+    assert pool.has_agents() is False
+    assert any(
+        record.name == "oli_bot.agent" and "No agents.yaml" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+# ---------------------------------------------------------------------------
 # Multi-pool dispatch
 # ---------------------------------------------------------------------------
 
@@ -451,7 +606,10 @@ def test_register_dispatch_tool_multiple_pools_adds_pool_field():
 def test_register_dispatch_tool_empty_pool_is_noop():
     from oli_bot.agent import register_dispatch_tool
 
-    pool = AgentPool(_StubMCP())
+    # Build the pool hermetically so a real repo-root agents.yaml (which the
+    # resolver now finds without patching os.path.exists) can't leak agents in.
+    with patch.object(AgentPool, "_build_agent_pools", lambda self: None):
+        pool = AgentPool(_StubMCP())
     manager = _StubToolManager()
 
     register_dispatch_tool(manager, pool, lambda tasks: "ok")

@@ -326,13 +326,23 @@ class OliBot(App):
         )
         self._permission_lock = asyncio.Lock()
         self.agent_pool: AgentPool | None = None
+        self._agent_pool_empty = False
         if self.config.use_agent_pool:
             try:
-                self.agent_pool = AgentPool(self.mcp_manager)
+                self.agent_pool = AgentPool(self.mcp_manager, config=self.config)
                 self._register_dispatch_tool()
+                if not self.agent_pool.has_agents():
+                    self._agent_pool_empty = True
+                    logger.error(
+                        "Agent pooling enabled but no sub-agents loaded. "
+                        "Checked $OLI_AGENTS_YAML, the package dir, the repo root, "
+                        "and ~/.config/oli for agents.yaml. "
+                        "The 'dispatch' tool will not be available."
+                    )
             except Exception as e:
                 logger.error("Failed to build agent pool: %s", e)
                 self.agent_pool = None
+                self._agent_pool_empty = True
 
         self._builtin_tools.model_tier = self.model_size
         self.store = ConversationStore()
@@ -525,6 +535,14 @@ class OliBot(App):
             self.query_one("#sub-agent-tree", Tree).border_title = "Active Sub-Agents"
             # Right panel is always visible when the agent pool is active
             self.query_one("#right-panel").display = True
+            if getattr(self, "_agent_pool_empty", False):
+                self.notify(
+                    "Agent pooling is on but no sub-agents loaded — the 'dispatch' "
+                    "tool is unavailable. Check where agents.yaml is placed "
+                    "(OLI_AGENTS_YAML, package dir, repo root, ~/.config/oli).",
+                    severity="error",
+                    timeout=10,
+                )
 
         # Wire up the todo-change callback so updates fire immediately
         self._builtin_tools.set_todo_callback(self._on_todos_changed)
