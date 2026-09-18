@@ -9,7 +9,12 @@ from oli_bot.agent import Agent
 from oli_bot.config import AppConfig
 from oli_bot.mcp_client import MCPClientManager
 from oli_bot.models import TextChunk
-from oli_bot.sessions import ConversationStore, Session, WorkspaceManager, is_sensitive_path
+from oli_bot.sessions import (
+    ConversationStore,
+    Session,
+    WorkspaceManager,
+    is_sensitive_path,
+)
 from oli_bot.tools.manager import BuiltinToolManager
 
 

@@ -368,6 +368,12 @@ class ConfigScreen(ModalScreen[dict | None]):
                     classes="config-input",
                     value=str(mp.get("agent_pool_size", 5)),
                 )
+                yield Input(
+                    placeholder=f"agents.yaml path ({mp.get('agents_yaml') or 'auto-locate'})",
+                    id="cfg-agents-yaml",
+                    classes="config-input",
+                    value=str(mp.get("agents_yaml", "")),
+                )
 
                 vo = s.get("voice", {})
                 yield Label("Voice", classes="section-title")
@@ -596,6 +602,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "dry_run": self._bool("#cfg-dry-run"),
                 "use_agent_pool": self._bool("#cfg-use-agent-pool"),
                 "agent_pool_size": self._int("#cfg-agent-pool-size", 5),
+                "agents_yaml": self._val("#cfg-agents-yaml"),
             },
             "logging": {
                 "log_level": log_level,

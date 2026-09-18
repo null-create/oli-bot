@@ -9,13 +9,18 @@ command line or by setting `OLI_USE_AGENT_POOL=true`.
 
 ## How it works
 
-At startup, `chat.py` builds an `AgentPool` from `agents.yaml` (next to
-`agent.py` in the repo root). Each named pool becomes a `dict` of `Agent`
-instances keyed by agent name. When pooling is enabled, a `dispatch` built-in
-tool is registered on the root agent. The root agent can call `dispatch` with a
-batch of `{agent, task}` pairs; all tasks are run **concurrently**
-(`asyncio.gather`, never sequentially) and the results are aggregated into a
-single labeled string returned to the root agent's tool loop.
+At startup, `chat.py` builds an `AgentPool` from `agents.yaml`. An explicit
+path comes from the `agents_yaml` config field (`OLI_AGENTS_YAML` env var, a
+`.env` line, `settings.json` `model_params.agents_yaml`, or the `/config`
+screen). Otherwise the file is auto-located from (in order) the package dir
+(beside `agent.py`), the repo root (beside `pyproject.toml`, e.g. for local
+source checkouts), or `~/.config/oli/agents.yaml` — the first that exists
+wins. Each named pool becomes a `dict` of `Agent` instances keyed by agent
+name. When pooling is enabled, a `dispatch` built-in tool is registered on
+the root agent. The root agent can call `dispatch` with a batch of
+`{agent, task}` pairs; all tasks are run **concurrently** (`asyncio.gather`,
+never sequentially) and the results are aggregated into a single labeled
+string returned to the root agent's tool loop.
 
 Each sub-agent runs its own full `Agent.process()` loop — its own model call,
 its own tool-calling iterations — with the shared tool set (minus `dispatch`
@@ -34,8 +39,12 @@ or
 OLI_USE_AGENT_POOL=true python chat.py
 ```
 
-If `agents.yaml` is missing, the pool is skipped silently and the `dispatch`
-tool is never registered.
+If `agents.yaml` cannot be found, the pool builds empty and this is reported
+**loudly**: `AgentPool` logs an error, the TUI shows an error toast on startup,
+and the `oli-server` banner flags "pool: ENABLED BUT EMPTY". The `dispatch`
+tool is never registered in that case, so the root agent won't see it in its
+tool set. Set `OLI_AGENTS_YAML` (or the `agents_yaml` config field) to point
+at your config if you keep it in a non-standard location.
 
 ## The agents.yaml schema
 

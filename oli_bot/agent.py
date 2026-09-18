@@ -742,7 +742,9 @@ def register_dispatch_tool(
     ]
 
     if not all_agent_names:
-        logger.debug("Agent pool has no delegate-able agents; skipping dispatch tool")
+        logger.warning(
+            "Agent pool has no delegate-able agents; 'dispatch' tool not registered"
+        )
         return
 
     has_multiple_pools = len(all_pool_names) > 1
@@ -819,9 +821,14 @@ def register_dispatch_tool(
 class AgentPool:
     """Pool for sub agents to be selected from at runtime by the Root Agent"""
 
-    def __init__(self, mcp_manager: MCPClientManager):
+    def __init__(
+        self,
+        mcp_manager: MCPClientManager,
+        config: Optional[AppConfig] = None,
+    ):
         self.agent_pool: dict[str, dict[str, Agent]] = {}
         self.mcp_manager = mcp_manager
+        self._config = config or configs
         self._build_agent_pools()
 
     def select_agent(self, agent_pool_name: str, agent_name: str) -> Agent:
@@ -838,12 +845,66 @@ class AgentPool:
         """Return the delegate-able agent names in a pool (root agent excluded)."""
         return list(self.agent_pool.get(agent_pool_name, {}).keys())
 
-    def _build_agent_pools(self) -> None:
-        configs_file = os.path.join(
-            os.path.abspath(os.path.dirname(__file__)), "agents.yaml"
+    def has_agents(self) -> bool:
+        """True when at least one delegate-able agent is loaded (any pool)."""
+        return any(names for names in self.agent_pool.values())
+
+    def _override_env(self) -> str:
+        """Resolve an explicit agents.yaml path from the config/env layers.
+
+        Precedence: a real ``OLI_AGENTS_YAML`` env var beats the resolved
+        ``AppConfig.agents_yaml`` value (which itself covers the ``OLI_``
+        env or a ``.env`` line via pydantic-settings, plus ``settings.json``
+        via ``SettingsManager``). The module ``configs`` singleton is a final
+        fallback so chat/api config instances built with ``_env_file=None``
+        still honour a repo-root ``.env``.
+        """
+        return (
+            os.environ.get("OLI_AGENTS_YAML")
+            or self._config.agents_yaml
+            or configs.agents_yaml
+            or ""
         )
-        if not os.path.exists(configs_file):
+
+    def _resolve_agents_config_path(self) -> Optional[str]:
+        """Locate the ``agents.yaml`` config, or return None.
+
+        Candidate locations, tried in order:
+          1. ``$OLI_AGENTS_YAML`` / ``OLI_AGENTS_YAML`` in ``.env`` /
+             ``settings.json`` ``model_params.agents_yaml`` — explicit override.
+          2. ``<package_dir>/agents.yaml`` — beside ``agent.py`` (default when
+             installed as a real wheel with the file shipped as package data).
+          3. ``<repo_root>/agents.yaml`` — one level above the package (local
+             source checkouts keep it next to ``pyproject.toml``).
+          4. ``~/.config/oli/agents.yaml`` — user config dir.
+        The first path that exists is returned.
+        """
+        candidates: List[str] = []
+        override = self._override_env()
+        if override:
+            candidates.append(override)
+        package_dir = os.path.abspath(os.path.dirname(__file__))
+        candidates.append(os.path.join(package_dir, "agents.yaml"))
+        candidates.append(os.path.join(os.path.dirname(package_dir), "agents.yaml"))
+        candidates.append(os.path.join(Path.home(), ".config", "oli", "agents.yaml"))
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate
+        return None
+
+    def _build_agent_pools(self) -> None:
+        configs_file = self._resolve_agents_config_path()
+        if not configs_file:
+            # Loud, not silent: pooling was explicitly enabled, so an empty
+            # pool must be surfaced rather than quietly skipped.
+            logger.error(
+                "No agents.yaml found for agent pooling. Checked $OLI_AGENTS_YAML, "
+                "the package dir, the repo root, and ~/.config/oli. "
+                "The 'dispatch' tool will not be available."
+            )
             return  # No agents.yaml file found, skip building the agent pool
+
+        logger.debug("Loading agent pool configuration from %s", configs_file)
 
         try:
             with open(configs_file, "r") as f:
@@ -857,10 +918,13 @@ class AgentPool:
         for agent_pool in agent_pools:
             pool_name = agent_pool.get("name", "default")
             agent_configs = agent_pool.get("agents", [])
-            if len(agent_configs) == 0 or len(agent_configs) > configs.agent_pool_size:
+            if (
+                len(agent_configs) == 0
+                or len(agent_configs) > self._config.agent_pool_size
+            ):
                 raise ValueError(
                     f"Agent pool '{pool_name}' has {len(agent_configs)} agents. "
-                    f"Expected between 1 and {configs.agent_pool_size} agents."
+                    f"Expected between 1 and {self._config.agent_pool_size} agents."
                 )
 
             for agent_config in agent_configs:

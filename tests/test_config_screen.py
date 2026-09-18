@@ -117,6 +117,7 @@ async def test_config_screen_renders_new_sections():
     settings["huggingface"]["remote"] = True
     settings["transformers"]["is_multi_model"] = True
     settings["model_params"] = {"use_agent_pool": True, "agent_pool_size": 8}
+    settings["model_params"]["agents_yaml"] = "/custom/agents.yaml"
     settings["logging"] = {"log_level": "DEBUG", "log_file": "logs/x.ndjson"}
     settings["api_server"] = {
         "host": "127.0.0.1",
@@ -132,6 +133,7 @@ async def test_config_screen_renders_new_sections():
         await pilot.pause()
         assert screen.query_one("#cfg-use-agent-pool").value is True
         assert screen.query_one("#cfg-agent-pool-size").value == "8"
+        assert screen.query_one("#cfg-agents-yaml").value == "/custom/agents.yaml"
         assert screen.query_one("#cfg-log-file").value == "logs/x.ndjson"
         assert screen.query_one("#cfg-api-host").value == "127.0.0.1"
         assert screen.query_one("#cfg-api-port").value == "9001"
@@ -154,6 +156,7 @@ async def test_config_screen_save_round_trips_new_sections():
     settings["huggingface"]["remote"] = True
     settings["transformers"]["is_multi_model"] = True
     settings["model_params"] = {"use_agent_pool": True, "agent_pool_size": 7}
+    settings["model_params"]["agents_yaml"] = "/custom/agents.yaml"
     settings["logging"] = {"log_level": "WARNING", "log_file": "logs/z.ndjson"}
     settings["api_server"] = {
         "host": "10.0.0.1",
@@ -175,6 +178,7 @@ async def test_config_screen_save_round_trips_new_sections():
         assert result["transformers"]["is_multi_model"] is True
         assert result["model_params"]["use_agent_pool"] is True
         assert result["model_params"]["agent_pool_size"] == 7
+        assert result["model_params"]["agents_yaml"] == "/custom/agents.yaml"
         assert result["logging"]["log_level"] == "WARNING"
         assert result["logging"]["log_file"] == "logs/z.ndjson"
         assert result["api_server"]["host"] == "10.0.0.1"

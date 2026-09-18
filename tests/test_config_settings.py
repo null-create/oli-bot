@@ -26,6 +26,18 @@ def test_appconfig_truncation_env_aliases(monkeypatch):
     assert c.truncation_max_chars_large == 111222
 
 
+def test_appconfig_reads_agents_yaml_env(monkeypatch):
+    monkeypatch.setenv("OLI_AGENTS_YAML", "/custom/agents.yaml")
+    c = AppConfig()
+    assert c.agents_yaml == "/custom/agents.yaml"
+
+
+def test_appconfig_reads_agents_yaml_from_dotenv(tmp_path):
+    (tmp_path / ".env").write_text('OLI_AGENTS_YAML="/from/dotenv/agents.yaml"\n')
+    c = AppConfig(_env_file=tmp_path / ".env")
+    assert c.agents_yaml == "/from/dotenv/agents.yaml"
+
+
 def test_appconfig_falls_back_to_defaults():
     # _env_file=None bypasses .env loading so we assert pristine defaults
     # even when the repo has a populated .env for local development.
@@ -189,6 +201,16 @@ def test_agent_pool_size_roundtrip(tmp_path):
     back = mgr.from_appconfig(cfg)
     assert back["model_params"]["use_agent_pool"] is True
     assert back["model_params"]["agent_pool_size"] == 12
+
+
+def test_agents_yaml_roundtrip(tmp_path):
+    mgr = SettingsManager(config_dir=tmp_path)
+    settings = mgr.get_defaults()
+    settings["model_params"]["agents_yaml"] = "/custom/agents.yaml"
+    cfg = mgr.to_appconfig(settings)
+    assert cfg.agents_yaml == "/custom/agents.yaml"
+    back = mgr.from_appconfig(cfg)
+    assert back["model_params"]["agents_yaml"] == "/custom/agents.yaml"
 
 
 def test_logging_section_roundtrip(tmp_path):

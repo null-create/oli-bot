@@ -763,6 +763,7 @@ _FLAT_TO_NESTED = {
     "offline_mode": ("model_params", "offline_mode"),
     "use_agent_pool": ("model_params", "use_agent_pool"),
     "agent_pool_size": ("model_params", "agent_pool_size"),
+    "agents_yaml": ("model_params", "agents_yaml"),
     "log_level": ("logging", "log_level"),
     "log_file": ("logging", "log_file"),
     "profiles_dir": ("paths", "profiles_dir"),
@@ -1171,12 +1172,19 @@ def _initialize_state() -> None:
     # specialist sub-agents. Sub-agent events flow to the WebSocket live.
     if config.use_agent_pool:
         try:
-            pool = AgentPool(agent.mcp_manager)
+            pool = AgentPool(agent.mcp_manager, config=config)
             register_dispatch_tool(
                 agent.mcp_manager._builtin_tools, pool, _dispatch_tasks
             )
             app.state.agent_pool = pool
             logger.info("Agent pooling enabled: %s", list(pool.agent_pool.keys()))
+            if not pool.has_agents():
+                logger.error(
+                    "Agent pooling enabled but no sub-agents loaded. "
+                    "Checked $OLI_AGENTS_YAML, the package dir, the repo root, "
+                    "and ~/.config/oli for agents.yaml. "
+                    "The 'dispatch' tool will not be available."
+                )
         except Exception as e:
             logger.error("Failed to build agent pool: %s", e)
             app.state.agent_pool = None
@@ -1187,7 +1195,7 @@ def _initialize_state() -> None:
 _initialize_state()
 
 
-def _print_banner(backend: str, model: str, mode: str, profile: str) -> None:
+def _print_banner(backend: str, model: str, mode: str, profile: str, pool: str) -> None:
     """Print a startup banner with ASCII art logo and server config."""
     tagline = random.choice(TAGLINES)
     url = f"http://{API_HOST}:{API_PORT}"
@@ -1197,6 +1205,7 @@ def _print_banner(backend: str, model: str, mode: str, profile: str) -> None:
         ("model", model),
         ("mode", mode),
         ("profile", profile),
+        ("pool", pool),
         ("url", url),
     ]
 
@@ -1221,7 +1230,18 @@ def main() -> None:
     mode = app.state.agent.mode
     profile = app.state.agent.profile_name
 
-    _print_banner(backend, model, mode, profile)
+    pool_state = app.state.agent_pool
+    if pool_state is None:
+        pool_status = "off"
+    elif pool_state.has_agents():
+        pool_status = ", ".join(
+            f"{p}: {', '.join(pool_state.list_agents(p))}"
+            for p in pool_state.agent_pool
+        )
+    else:
+        pool_status = "ENABLED BUT EMPTY — agents.yaml not found"
+
+    _print_banner(backend, model, mode, profile, pool_status)
 
     logger.info(
         "starting api server host=%s port=%s backend=%s model=%s mode=%s profile=%s",

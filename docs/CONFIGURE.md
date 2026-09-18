@@ -39,6 +39,7 @@ If `~/.config/oli/settings.json` does not exist, it is auto-created on first loa
 | `transformers_dtype`         | `"auto"`                               | `OLI_TRANSFORMERS_DTYPE`       | Data type: `auto`, `float16`, `bfloat16`, `float32`                                                                                               |
 | `use_agent_pool`             | `false`                                | `OLI_USE_AGENT_POOL`           | Enable agent pooling (`--use-pool`); root agent can dispatch tasks to agents.yaml sub-agents                                                      |
 | `agent_pool_size`            | `5`                                    | `OLI_AGENT_POOL_SIZE`          | Max agents allowed per pool in agents.yaml                                                                                                        |
+| `agents_yaml`                | `""`                                   | `OLI_AGENTS_YAML`              | Explicit path to agents.yaml for pooling (empty = auto-locate: package dir, repo root, `~/.config/oli`)                                          |
 | `max_tokens`                 | `2048`                                 | `OLI_MAX_TOKENS`               | Max tokens per generation                                                                                                                         |
 | `temperature`                | `0.7`                                  | `OLI_TEMPERATURE`              | Model temperature                                                                                                                                 |
 | `max_retries`                | `3`                                    | `OLI_MAX_RETRIES`              | Max retries on API failure                                                                                                                        |
@@ -76,6 +77,12 @@ python chat.py
 # Edit settings at runtime
 /config   # opens the TUI configuration screen
 ```
+
+> **`OLI_AGENTS_YAML`** maps to the `agents_yaml` config field — settable via
+> the env var, a `.env` line, `settings.json` under `model_params.agents_yaml`,
+> or the `/config` screen. When it is empty, the pool config is auto-located
+> (in order) beside the oli package, at the repo root, or at
+> `~/.config/oli/agents.yaml` — see [AGENT-POOLING.md](AGENT-POOLING.md).
 
 ## Sessions
 

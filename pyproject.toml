@@ -79,7 +79,6 @@ exclude = ["tests*", "venv*", "logs*", "notes*"]
 
 [tool.setuptools.package-data]
 oli_bot = [
-    "agents.yaml",
     "profiles/**/*.md",
     "profiles/**/*.json",
 ]
