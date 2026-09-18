@@ -886,6 +886,7 @@ class AgentPool:
         package_dir = os.path.abspath(os.path.dirname(__file__))
         candidates.append(os.path.join(package_dir, "agents.yaml"))
         candidates.append(os.path.join(os.path.dirname(package_dir), "agents.yaml"))
+        candidates.append(os.path.join(package_dir, "oli_bot", "agents.yaml"))
         candidates.append(os.path.join(Path.home(), ".config", "oli", "agents.yaml"))
         for candidate in candidates:
             if os.path.exists(candidate):
@@ -899,7 +900,7 @@ class AgentPool:
             # pool must be surfaced rather than quietly skipped.
             logger.error(
                 "No agents.yaml found for agent pooling. Checked $OLI_AGENTS_YAML, "
-                "the package dir, the repo root, and ~/.config/oli. "
+                "the package dir, package/oli_bot, the repo root, and ~/.config/oli. "
                 "The 'dispatch' tool will not be available."
             )
             return  # No agents.yaml file found, skip building the agent pool
