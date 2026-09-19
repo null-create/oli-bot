@@ -10,8 +10,19 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from dataclasses import field
+from pathlib import Path
+from typing import Optional
 
 from oli_bot.mcp_client import MCPClientManager
+
+
+class DummySession:
+    workspace: Optional[Path] = None
+    _session_grants: set[str] = field(default_factory=set)
+
+    def needs_permission(self, tool_name, arguments):
+        return None
 
 
 class FakeClient:
@@ -60,7 +71,9 @@ def _manager(tmp_path, monkeypatch, *, make=None, stdio_capture=None):
             lambda params: stdio_capture.append(params) or object(),
         )
 
-    return MCPClientManager(config_path=str(tmp_path / "mcp_servers.json"))
+    return MCPClientManager(
+        config_path=str(tmp_path / "mcp_servers.json"), session=DummySession()
+    )
 
 
 @pytest.mark.asyncio

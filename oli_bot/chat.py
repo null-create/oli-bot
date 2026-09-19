@@ -313,8 +313,10 @@ class OliBot(App):
             config=self.config,
         )
         self.mcp_manager = MCPClientManager(
+            config=self.config,
             builtin_tools=self._builtin_tools,
             offline_mode=self.config.offline_mode,
+            session=self.session,
         )
         # Root agent and main conversation llm
         self.agent = Agent(
