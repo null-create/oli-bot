@@ -171,8 +171,10 @@ def _build_agent(config: AppConfig, mode: str, profile: str) -> Agent:
         config=config,
     )
     mcp_manager = MCPClientManager(
+        config=config,
         builtin_tools=builtin_tools,
         offline_mode=config.offline_mode,
+        session=session,
     )
     agent = Agent(
         role="root",
