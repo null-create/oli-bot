@@ -45,7 +45,9 @@ class MCPToolManager:
         skip_session: bool = False,
         permission_enforcer: Optional["ProfilePermissionEnforcer"] = None,
     ) -> PermissionDecision:
-        if name not in self._mcp_servers:
+        # Extract server name from tool name (format: "server__toolname")
+        server_name, sep, _ = name.partition("__")
+        if not server_name or server_name not in self._mcp_servers:
             decision = PermissionDecision(
                 outcome="deny",
                 reason=f"Unknown tool '{name}'",
@@ -85,7 +87,7 @@ class MCPToolManager:
                 )
                 return decision
 
-        if self._config.offline_mode:
+        if self._config is not None and self._config.offline_mode:
             decision = PermissionDecision(
                 outcome="deny",
                 reason=(
@@ -97,7 +99,7 @@ class MCPToolManager:
             logger.info("permission deny: tool=%s source=%s", name, decision.source)
             return decision
 
-        if self._config.dry_run:
+        if self._config is not None and self._config.dry_run:
             args_str = ", ".join(f"{k}={v!r}" for k, v in arguments.items())
             preview = f"[DRY RUN] Would execute `{name}({args_str})` — skipped"
             decision = PermissionDecision(
@@ -192,7 +194,7 @@ class MCPClientManager:
         self._session: Optional["Session"] = session
         # MCPToolManger for profile-based permission enforcement.
         # TODO: Not initialized with enforcer; should be replaced with a real one if available.
-        self._tool_manager = MCPToolManager(
+        self._gate = MCPToolManager(
             config=config,
             session=self._session,
             mcp_servers=self.servers,
@@ -223,6 +225,7 @@ class MCPClientManager:
             env=env,
             url=url,
         )
+        self._gate._mcp_servers = self.servers
         self._invalidate_tool_cache(name)
         self._save_config()
 
@@ -248,6 +251,7 @@ class MCPClientManager:
             env=env,
             url=url,
         )
+        self._gate._mcp_servers = self.servers
         self._invalidate_tool_cache(name)
         self._save_config()
 
@@ -257,6 +261,7 @@ class MCPClientManager:
         if name in self._clients:
             del self._clients[name]
         del self.servers[name]
+        self._gate._mcp_servers = self.servers
         self._invalidate_tool_cache(name)
         self._save_config()
 
@@ -318,6 +323,7 @@ class MCPClientManager:
         server_name, sep, actual_name = tool_name.partition("__")
         if not server_name or not sep:
             return f"Error: Invalid tool name format: {tool_name}. Expected 'server__toolname'"
+
         # Check permissions for built-in tools
         if server_name == "builtin":
             if self._builtin_tools is None:
@@ -329,12 +335,40 @@ class MCPClientManager:
                 permission_enforcer=permission_enforcer,
             )
 
-        # TODO: add permission checks for external mcp servers.
-        # Should be similar to the builtin tool manager and how
-        # it calls tools with scoped permission checks.
+        # Check permissions for external mcp servers
         if server_name not in self.servers:
             return f"Error: Unknown server: {server_name}"
 
+        decision = self._gate._evaluate_permission(
+            tool_name,
+            arguments=arguments,
+            permission_enforcer=permission_enforcer,
+        )
+        match decision.outcome:
+            case "deny":
+                return f"Error: tool {tool_name} denied by permissions enforcer: {decision.reason}"
+            case "preview":
+                return decision.preview
+            case "prompt":
+                if not confirm_callback:
+                    return "Error: Permission prompt required but no confirm_callback was provided"
+                user = await confirm_callback("prompt")
+                match user:
+                    case "once":
+                        pass
+                    case "session":
+                        decision = PermissionDecision(
+                            outcome="approve",
+                            reason=f"Permission approved for tool: {tool_name}",
+                            source="user",
+                            scope=f"tool:{tool_name}",
+                        )
+                        if self._session is not None:
+                            self._session.grant(decision.scope, session=True)
+                    case _:
+                        return "Error: Permission denied by user"
+
+        # Call the tool on the appropriate MCP server.
         client = await self._get_client(server_name)
         result = await client.call_tool(actual_name, arguments)
         text = "".join(c.text for c in result.content if hasattr(c, "text"))
