@@ -1,5 +1,7 @@
 """Tests for the workspace + filesystem REST API (``api_server.py``)."""
 
+import asyncio
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -59,7 +61,7 @@ class _API:
     def reset(self, backend, workspace=None) -> None:
         self.application.state.agent = _make_harness(backend, workspace)
         api_server._wire_todo_relay(self.application.state.agent)
-        self.application.state.lock = api_server._Lock()
+        self.application.state.lock = asyncio.Lock()
         self.application.state.config = AppConfig(_env_file=None, backend="ollama")
         self.application.state.session_store = ConversationStore(
             sessions_dir=str(self.tmp_path / "sessions")

@@ -1,15 +1,17 @@
-"""Tests for the OpenAI-compatible API server (``api_server.py``).
+"""Tests for the OpenAI-compatible API server (``oli_bot.api``).
 
 These tests drive the FastAPI app over ``TestClient`` (httpx-based, so it
 works with the fully async agent loop via the ASGI transport).  A stub backend
 (following the pattern in ``test_agent_process.py``) replaces the real model
-backend so the harness runs without a live model or network.  The module-level
-``_initialize_state()`` builds a real backend from env/settings, so each test
+backend so the harness runs without a live model or network.  Each test
 fixture re-initializes ``app.state`` with the stub harness.
 """
 
+import asyncio
 import json
+import threading
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -53,6 +55,32 @@ class _RaisingStub:
     async def stream_generate(self, messages, tools=None):
         raise RuntimeError("boom")
         yield  # pragma: no cover
+
+
+class _ConcurrencyProbeStub:
+    """Tracks how many ``stream_generate`` calls are in flight at once.
+
+    The process-wide lock must serialize the shared ``Agent``, so two
+    concurrent requests may never have overlapping runs.
+    """
+
+    model = "stub-conc"
+
+    def __init__(self):
+        self.active = 0
+        self.max_active = 0
+        self._mutex = threading.Lock()
+
+    async def stream_generate(self, messages, tools=None):
+        with self._mutex:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            await asyncio.sleep(0.05)
+            yield TextChunk("serialized")
+        finally:
+            with self._mutex:
+                self.active -= 1
 
 
 class _TodoThenTextStub:
@@ -153,7 +181,7 @@ class _API:
     def reset(self, backend) -> None:
         self.application.state.agent = _make_harness(backend)
         api_server._wire_todo_relay(self.application.state.agent)
-        self.application.state.lock = api_server._Lock()
+        self.application.state.lock = asyncio.Lock()
         self.application.state.config = AppConfig(_env_file=None, backend="ollama")
 
 
@@ -251,6 +279,31 @@ def test_chat_completion_error(api):
     body = resp.json()
     assert "error" in body
     assert body["error"]["type"] == "server_error"
+
+
+def test_chat_completions_serialized_under_concurrency(api):
+    # Two in-flight requests must never run the shared Agent simultaneously —
+    # the asyncio.Lock serializes runs across the event loop even though the
+    # lock is held across await points (a threading.RLock would NOT, since all
+    # coroutines share the loop thread and RLock is per-thread reentrant).
+    probe = _ConcurrencyProbeStub()
+    api.reset(probe)
+    transport = httpx.ASGITransport(app=api.application)
+
+    async def _post(client, payload):
+        return (await client.post("/v1/chat/completions", json=payload)).status_code
+
+    async def _run():
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            payload = {"messages": [{"role": "user", "content": "x"}]}
+            return await asyncio.gather(_post(client, payload), _post(client, payload))
+
+    results = asyncio.run(_run())
+    assert results == [200, 200]
+    # The shared agent never had two runs in flight at once.
+    assert probe.max_active == 1
 
 
 # --------------------------------------------------------------------------- #

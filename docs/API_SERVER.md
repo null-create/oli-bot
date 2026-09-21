@@ -1,6 +1,11 @@
 # API Server
 
-[`oli_bot/api_server.py`](../oli_bot/api_server.py) exposes the same `Agent`
+The API server lives in the [`oli_bot/api/`](../oli_bot/api/) package (a FastAPI
+app factory in `app.py`, route modules in `routers/`, plus `harness.py`,
+`runner.py`, `session_service.py`, `errors.py`, `convert.py`, and `deps.py`).
+[`oli_bot/api_server.py`](../oli_bot/api_server.py) is a compatibility shim that
+re-exports the same public surface as the historical single module. It exposes
+the same `Agent`
 harness that powers the TUI over an OpenAI-compatible REST API plus a stateful
 WebSocket. Any client that speaks the OpenAI wire protocol — the `openai` Python
 SDK, `curl`, or a custom HTTP client — can drive the full tool-calling agent,
@@ -59,11 +64,14 @@ with the same `OLI_*` env vars / `settings.json` the TUI uses.
   OpenAI semantics. The server does not persist conversation state between
   requests.
 - **Shared agent** — a single process-private `Agent` (backend, tool
-  registrations, MCP wiring, profile) is built at module import and reused
-  across requests, so connections are never rebuilt per call.
+  registrations, MCP wiring, profile) is built once (by `main()` or the app
+  lifespan's `init_state()`) and reused across requests, so connections are
+  never rebuilt per call.
 - **Serialized runs** — the shared `Agent` is not concurrent-safe, so in-flight
-  `Agent.process()` runs are serialized process-wide with a
-  `threading.RLock`. Concurrent requests queue.
+  `Agent.process()` runs are serialized process-wide with an `asyncio.Lock` held
+  across `await` points. Concurrent requests queue. (A threading lock would not
+  work: it is per-thread reentrant, and all coroutines sharing the event loop
+  run on the same thread.)
 - **No human in the loop** — the permission confirm-callback auto-defaults to
   `"session"` for every scope (the REST equivalent of the TUI's "Allow for
   session"). Offline mode and dry-run gating from `AppConfig` still apply
