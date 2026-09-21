@@ -147,10 +147,35 @@ For the full setting table, per-backend model tiers, truncation aliases (`OLI_TR
 
 ```bash
 pip install -e '.[dev]'
-pytest
+pytest                          # unit + integration (hermetic)
+pytest tests/unit               # fast tier first
+pytest tests/unit tests/integration   # the full CI gate
+pytest -m integration           # wire + MCP + tools tiers
+pytest -m process               # real oli-server subprocess tier
 ```
 
-Tests under `tests/` cover: `AgentPool` scaffolding (lookup, `${VAR}` expansion, `root-agent` exclusion, per-agent backend overrides, concurrent dispatch), config env-var precedence, session round-trip + `save_session` ID propagation, permission matrix (workspace scoping, sensitive files, `glob`/`grep` sensitive-pattern gating), truncation boundary preservation, security regressions (`git` restricted to read-only subcommands in `run_command`, `find -exec/-delete` blocked, SSRF for loopback/private/link-local/non-`http(s)`), `OpenAIBackend.stream_generate` tool-call flushing on all finish reasons, token-usage accounting (backend `UsageChunk` exact/estimate paths, agent `UsageEvent` aggregation, session `total_tokens` round-trip), and the `oli_bot/api/` OpenAI-compatible endpoints (session CRUD, workspace/fs listing, MCP config, streaming completion, WebSocket frames, and the `asyncio.Lock` serialization of concurrent runs). `tests/conftest.py` scrubs `OLI_*` env vars so runs are hermetic.
+Two hermetic suites — **unit** (`tests/unit/`, fast, no I/O, ~397 cases) and
+**integration** (`tests/integration/`, slow, crosses real wire/process
+boundaries). They are split into four escalating tiers that reuse the same
+scriptable mock-wire harness (`tests/integration/conftest.py`):
+
+| tier | wire                | real HTTP/SSE     | real MCP server (stdio + streamable-HTTP via official `mcp` SDK) | real subprocess |
+| ---- | ------------------- | ----------------- | ---------------------------------------------------------------- | --------------- |
+| 1    | mock OpenAI/Ollama  | yes (uvicorn thread + real `httpx`/`AsyncOpenAI`) | – | – |
+| 2    | mock wire           | yes               | yes                                                              | – |
+| 3    | mock wire           | yes               | yes                                                              | real `run_command`/`git`/file handlers |
+| 4    | mock wire           | yes               | yes                                                              | real `oli-server` process (`python -m oli_bot.api`) boots + streams |
+
+Unit covers: sub-agent scaffolding, config env-var precedence, session
+round-trip, permission matrix, truncation boundaries, security regressions,
+OpenAI-style tool-call flushing, token-usage accounting, and the in-process
+OpenAI-compatible API routes. Integration covers tiers 1–4 above, ending with
+the `oli-server` process boot + streaming chat completion over the wire.
+Both suites scrub stray `OLI_*`/SDK env vars at import time
+(`tests/integration/conftest.py` re-scrubs once more ahead of the tier-4
+subprocess so no host config can leak in) so every run is hermetic; tier 4
+also spawns with an isolated `HOME` so a real `~/.config/oli/settings.json`
+can never be picked up.
 
 ## Code style
 
