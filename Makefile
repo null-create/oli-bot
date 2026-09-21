@@ -18,8 +18,16 @@ clean:
 	@rm -rf ./venv
 
 test:
-	@echo "Running tests..."
-	@pytest -v tests/
+	@echo "Running fast unit tier first (the always-gated tier)..."
+	@pytest tests/unit
+
+test-all:
+	@echo "Running unit + integration (the full CI gate)..."
+	@pytest tests/unit tests/integration
+
+test-integration:
+	@echo "Running the slow hermetic wire/MCP/process tiers..."
+	@pytest tests/integration
 
 run:
 	@echo "Running agent in container with API server..."

@@ -280,4 +280,23 @@ pip install -e '.[dev]'
 pytest
 ```
 
-Tests live under `tests/` and cover: sub-agent scaffolding, config env-var precedence, session round-trip, permission matrix, truncation boundaries, security regressions, OpenAI-style tool-call flushing, and the OpenAI-compatible API server endpoints. `tests/conftest.py` clears stray `OLI_*` env vars so runs are hermetic.
+Tests live in two hermetic suites: **unit** under `tests/unit/` (fast, no I/O,
+~397 cases: sub-agent scaffolding, config env-var precedence, session
+round-trip, permission matrix, truncation boundaries, security regressions,
+OpenAI-style tool-call flushing, in-process API `TestClient` routes) and
+**integration** under `tests/integration/` (slow, scriptable real wire server
+on a real localhost port):
+
+| tier | wire | real HTTP/SSE | real MCP server | real subprocess |
+| ---- | ---- | ------------- | --------------- | --------------- |
+| 1    | mock wire (openai/ollama) | yes | – | – |
+| 2    | mock wire | yes | MSQL stdio + streamable-HTTP (real `mcp` SDK subprocess) | – |
+| 3    | mock wire | yes | yes | real `run_command`/`git`/file handlers over real tools |
+| 4    | mock wire | yes | yes | real `oli-server` process (`python -m oli_bot.api`) boots + streams |
+
+Run the fast tier first with `pytest tests/unit`, then the full gate with
+`pytest tests/unit tests/integration`. All tiers scrub stray `OLI_*`/SDK env
+vars at import time (`tests/integration/conftest.py` re-scrubs again for the
+subprocess tier) so every run is hermetic; integration cases that need the
+`sio`/`http` MCP subprocesses or a live `oli-server` are marker-gated
+(`@pytest.mark.integration`, `-m process` for tier 4).
