@@ -7,11 +7,12 @@ paths (extract_article and the fixed-endpoint helpers).
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from oli_bot.config import AppConfig
 from oli_bot.tools.manager import BuiltinToolManager, NETWORK_TOOLS, READ_ONLY_TOOLS
-from oli_bot.tools.web import _check_ssrf
+from oli_bot.tools.web import _check_ssrf, _MAX_REDIRECTS, _ssrf_safe_request
 
 NEW_SEARCH_TOOLS = {
     "search_stackoverflow",
@@ -71,3 +72,97 @@ def test_extract_article_rejects_loopback_url():
 def test_fixed_search_endpoints_are_ssrf_clean():
     # Maintainer-defined public endpoints must not be refused by the guard.
     assert _check_ssrf("https://openlibrary.org/search.json") is None
+
+
+# --------------------------------------------------------------------------- #
+# SSRF redirect-chain protection (every hop is re-validated)                  #
+# --------------------------------------------------------------------------- #
+
+
+def _redirect_client(resp_fn):
+    """A client whose transport returns ``resp_fn(request)`` for every request.
+
+    httpx's synchronous ``handle_async_request`` is caught here; ``resp_fn``
+    is called in the same synchronous context.
+    """
+
+    class StubTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            return resp_fn(request)
+
+    return httpx.AsyncClient(transport=StubTransport())
+
+
+@pytest.mark.asyncio
+async def test_ssrf_redirect_into_linklocal_is_blocked():
+    # A public URL that 302s to the cloud-metadata namespace. With
+    # follow_redirects=True the old code would happily land there; the manual
+    # hop re-validation must refuse to follow.
+    def resp(request):
+        return httpx.Response(
+            302,
+            headers={"location": "http://169.254.169.254/latest/meta-data/"},
+            request=request,
+        )
+
+    async with _redirect_client(resp) as client:
+        response, err = await _ssrf_safe_request(
+            client, "get", "https://example.com/start"
+        )
+    assert response is None
+    assert err is not None
+    assert "SSRF" in err
+
+
+@pytest.mark.asyncio
+async def test_ssrf_redirect_into_loopback_is_blocked():
+    def resp(request):
+        return httpx.Response(
+            302, headers={"location": "http://127.0.0.1:64999/admin"}, request=request
+        )
+
+    async with _redirect_client(resp) as client:
+        response, err = await _ssrf_safe_request(
+            client, "get", "https://example.com/start"
+        )
+    assert response is None
+    assert err is not None
+    assert "SSRF" in err
+
+
+@pytest.mark.asyncio
+async def test_ssrf_redirect_budget_is_bounded():
+    hops = {"n": 0}
+
+    def resp(request):
+        hops["n"] += 1
+        return httpx.Response(
+            302, headers={"location": "/loop"}, request=request
+        )
+
+    async with _redirect_client(resp) as client:
+        response, err = await _ssrf_safe_request(
+            client, "get", "https://example.com/start"
+        )
+    assert response is None
+    assert "Too many redirects" in err
+    assert hops["n"] == _MAX_REDIRECTS + 1
+
+
+@pytest.mark.asyncio
+async def test_ssrf_safe_relative_redirect_is_still_followed():
+    # Legitimate same-host relative redirects must keep working.
+    def resp(request):
+        if request.url.path == "/start":
+            return httpx.Response(
+                302, headers={"location": "/finish"}, request=request
+            )
+        return httpx.Response(200, text="ok", request=request)
+
+    async with _redirect_client(resp) as client:
+        response, err = await _ssrf_safe_request(
+            client, "get", "https://example.com/start"
+        )
+    assert err is None
+    assert response is not None
+    assert response.status_code == 200

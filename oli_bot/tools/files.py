@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 
 
-from .web import _check_ssrf, _FETCH_USER_AGENTS
+from .web import _check_ssrf, _FETCH_USER_AGENTS, _ssrf_safe_request
 from .manager import BuiltinToolManager
 from ..models import ImageAttachment
 
@@ -347,9 +347,14 @@ async def _fetch_image_bytes(url: str) -> tuple[bytes, str, str | None]:
     }
     try:
         async with httpx.AsyncClient(
-            timeout=_VIEW_IMAGE_FETCH_TIMEOUT, follow_redirects=True
+            timeout=_VIEW_IMAGE_FETCH_TIMEOUT, follow_redirects=False
         ) as client:
-            response = await client.get(url, headers=headers)
+            response, ssrf_err = await _ssrf_safe_request(
+                client, "get", url, headers=headers
+            )
+            if ssrf_err:
+                return b"", url, ssrf_err
+            assert response is not None
             response.raise_for_status()
     except httpx.HTTPStatusError as e:
         return b"", url, f"Error: HTTP {e.response.status_code} — {url}"

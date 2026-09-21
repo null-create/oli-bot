@@ -876,7 +876,10 @@ class AgentPool:
              installed as a real wheel with the file shipped as package data).
           3. ``<repo_root>/agents.yaml`` — one level above the package (local
              source checkouts keep it next to ``pyproject.toml``).
-          4. ``~/.config/oli/agents.yaml`` — user config dir.
+          4. ``<cwd>/agents.yaml`` — the current working directory, so a
+             project-local pool can be picked up just by launching ``oli``
+             from the repo root (no env var required).
+          5. ``~/.config/oli/agents.yaml`` — user config dir.
         The first path that exists is returned.
         """
         candidates: List[str] = []
@@ -886,6 +889,8 @@ class AgentPool:
         package_dir = os.path.abspath(os.path.dirname(__file__))
         candidates.append(os.path.join(package_dir, "agents.yaml"))
         candidates.append(os.path.join(os.path.dirname(package_dir), "agents.yaml"))
+        candidates.append(os.path.join(package_dir, "oli_bot", "agents.yaml"))
+        candidates.append(str(Path.cwd() / "agents.yaml"))
         candidates.append(os.path.join(Path.home(), ".config", "oli", "agents.yaml"))
         for candidate in candidates:
             if os.path.exists(candidate):
@@ -899,8 +904,9 @@ class AgentPool:
             # pool must be surfaced rather than quietly skipped.
             logger.error(
                 "No agents.yaml found for agent pooling. Checked $OLI_AGENTS_YAML, "
-                "the package dir, the repo root, and ~/.config/oli. "
-                "The 'dispatch' tool will not be available."
+                "the package dir, package/oli_bot, the repo root, the current "
+                "working directory, and ~/.config/oli. The 'dispatch' tool will "
+                "not be available."
             )
             return  # No agents.yaml file found, skip building the agent pool
 
@@ -985,4 +991,14 @@ class AgentPool:
 
                 if pool_name not in self.agent_pool:
                     self.agent_pool[pool_name] = {}
+                if role in self.agent_pool[pool_name]:
+                    # Silently overwriting a delegate with a same-named later
+                    # entry makes pool confusion easy to miss — surface it.
+                    logger.warning(
+                        "Duplicate agent name '%s' in pool '%s': '%s' is being "
+                        "overwritten by a later entry in agents.yaml.",
+                        role,
+                        pool_name,
+                        role,
+                    )
                 self.agent_pool[pool_name][role] = agent

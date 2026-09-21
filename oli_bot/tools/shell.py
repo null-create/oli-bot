@@ -305,9 +305,12 @@ def register_tools(manager: BuiltinToolManager) -> None:
         "restore, clean, rebase, merge, cherry-pick, revert, add, rm, mv, stash, tag, "
         "branch, remote, config, submodule, apply, am, gc, reflog, worktree, init, clone) "
         "are blocked. "
-        "Blocked: input redirects (<), subshells `()`, backticks/`$()`, sed/awk in-place "
-        "edit (`-i`), awk `-f` script files, `xargs` invoking a non-allowlisted command, "
-        "and `find -exec`/`-delete` (use `xargs` with an allowlisted command instead).",
+        "Blocked: input redirects (<), subshells `()`, and shell expansion "
+        "(`$`, backticks, `$()`, `${...}`, `{}`, `!`) — including when the "
+        "expansion is wrapped in double quotes — plus sed/awk in-place edit "
+        "(`-i`), awk `-f` script files, `xargs` invoking a non-allowlisted "
+        "command, and `find -exec`/`-delete` (use `xargs` with an allowlisted "
+        "command instead).",
         parameters={
             "type": "object",
             "properties": {
@@ -404,14 +407,21 @@ def _has_unquoted_dangerous_chars(segment: str) -> Optional[str]:
             i += 1
             continue
 
-        if in_single or in_double:
+        if in_single:
+            # Single quotes suppress ALL shell expansion in POSIX shells, so
+            # content inside '...' is exported to the child literally and can
+            # never smuggle code past this scanner. Double quotes do NOT
+            # suppress expansion — $()/`...`/${...}` still run — so the
+            # metacharacter checks below MUST still apply inside "...".
             i += 1
             continue
 
         if c in ("$", "`", "{", "}", "!"):
             return "Error: Shell metacharacters ($, `, {}, !) are not allowed."
 
-        if c in ("(", ")"):
+        if not in_double and c in ("(", ")"):
+            # `(...)` inside double quotes is literal text (e.g. the body of
+            # `python -c "print(1)"`); unquoted parens are a subshell.
             return "Error: Subshell operators () are not allowed."
 
         # ``>`` and ``>>`` are now conditionally allowed: the redirect target is

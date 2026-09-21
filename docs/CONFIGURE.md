@@ -81,8 +81,9 @@ python chat.py
 > **`OLI_AGENTS_YAML`** maps to the `agents_yaml` config field — settable via
 > the env var, a `.env` line, `settings.json` under `model_params.agents_yaml`,
 > or the `/config` screen. When it is empty, the pool config is auto-located
-> (in order) beside the oli package, at the repo root, or at
-> `~/.config/oli/agents.yaml` — see [AGENT-POOLING.md](AGENT-POOLING.md).
+> (in order) beside the oli package, at the repo root, in the current working
+> directory, or at `~/.config/oli/agents.yaml` — see
+> [AGENT-POOLING.md](AGENT-POOLING.md).
 
 ## Sessions
 

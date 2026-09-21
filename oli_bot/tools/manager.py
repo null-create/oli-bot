@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from ..models import ImageAttachment
 
 from ..config import AppConfig
-from .permissions import PermissionGate
+from .permissions import PermissionGate, PermissionDecision
 from .truncation import TruncationManager, TruncationConfig
 
 logger = logging.getLogger(__name__)

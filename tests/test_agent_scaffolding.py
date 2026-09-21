@@ -275,11 +275,6 @@ def test_agent_pool_last_agent_wins_on_duplicate_name(pool):
 
 
 def test_agent_pool_finds_agents_yaml_at_repo_root(monkeypatch, tmp_path):
-    """Regression: agents.yaml next to pyproject.toml (one level above the
-    package) must be found WITHOUT patching os.path.exists. This is the root
-    cause of the 'dispatch tool never registered' bug — the pool built empty
-    because the config lived at the repo root, not inside the package dir.
-    """
     from oli_bot import agent as agent_module
 
     # Fake the package dir so the "repo root" candidate becomes tmp_path.
@@ -312,6 +307,94 @@ def test_agent_pool_finds_agents_yaml_at_repo_root(monkeypatch, tmp_path):
     assert pool.list_agents("default") == ["worker"]
     assert pool.has_agents() is True
     assert pool.select_agent("default", "worker").backend.model == "gemma"
+
+
+def test_agent_pool_finds_agents_yaml_at_cwd(monkeypatch, tmp_path):
+    """A project-local ./agents.yaml must be picked up from the current
+    working directory — the cwd candidate added for 'run from the repo root,
+    no env var required'. It should be found even when the file lives
+    nowhere near the package dir or repo root.
+    """
+    from oli_bot import agent as agent_module
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    (project_dir / "agents.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "agent-pools": [
+                    {
+                        "name": "default",
+                        "agents": [
+                            {
+                                "name": "cwd-agent",
+                                "model": "qwen",
+                                "backend": {"type": "ollama"},
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+
+    monkeypatch.setattr(agent_module, "__file__", str(tmp_path / "pkg" / "agent.py"))
+    monkeypatch.chdir(project_dir)
+
+    pool = AgentPool(_StubMCP())
+
+    assert pool.list_agents("default") == ["cwd-agent"]
+    assert pool.select_agent("default", "cwd-agent").backend.model == "qwen"
+
+
+def test_agent_pool_warns_on_duplicate_agent_name(monkeypatch, tmp_path, caplog):
+    """Two agents listing the same name in one pool log a warning; the later
+    entry wins for dispatch (regression for silent overwrite)."""
+    from oli_bot import agent as agent_module
+    import logging
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    (project_dir / "agents.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "agent-pools": [
+                    {
+                        "name": "default",
+                        "agents": [
+                            {
+                                "name": "clash",
+                                "model": "m-one",
+                                "backend": {"type": "ollama"},
+                            },
+                            {
+                                "name": "clash",
+                                "model": "m-two",
+                                "backend": {"type": "ollama"},
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+
+    monkeypatch.setattr(agent_module, "__file__", str(tmp_path / "pkg" / "agent.py"))
+    monkeypatch.chdir(project_dir)
+
+    with caplog.at_level(logging.WARNING, logger="oli_bot.agent"):
+        pool = AgentPool(_StubMCP())
+
+    # Later duplicate wins for dispatch lookup...
+    assert pool.select_agent("default", "clash").backend.model == "m-two"
+    # ...but the collision is surfaced in the logs instead of being silent.
+    assert any(
+        record.name == "oli_bot.agent"
+        and "Duplicate agent name" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_agent_pool_respects_oli_agents_yaml_override(monkeypatch, tmp_path):
@@ -408,6 +491,10 @@ def test_agent_pool_missing_config_logs_error_and_builds_empty(
         @staticmethod
         def home():
             return fake_home
+
+        @staticmethod
+        def cwd():
+            return tmp_path / "cwd"
 
     monkeypatch.setattr(agent_module, "Path", _FakePath)
 

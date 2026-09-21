@@ -5,6 +5,7 @@ harness as ``test_api_server.py``, but point the ``ConversationStore`` at a
 temporary directory so nothing touches ``~/.config/oli/sessions``.
 """
 
+import asyncio
 import json
 
 import pytest
@@ -75,7 +76,7 @@ class _API:
     def reset(self, backend) -> None:
         self.application.state.agent = _make_harness(backend)
         api_server._wire_todo_relay(self.application.state.agent)
-        self.application.state.lock = api_server._Lock()
+        self.application.state.lock = asyncio.Lock()
         self.application.state.config = AppConfig(_env_file=None, backend="ollama")
         self.application.state.session_store = self.store
 
