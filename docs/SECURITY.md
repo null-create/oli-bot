@@ -48,11 +48,11 @@ Independent of the runtime prompt system, each agent profile (`profiles/<name>/p
 
 - `allow_tools` / `deny_tools` accept glob patterns (`*` matches any tool name; `builtin__write_*` matches all write tools).
 - Profiles can inherit from a `base` profile. Enforcement across the inheritance chain is layered and deliberately conservative:
-  1. **Deny overrides allow at the same level.**
-  2. **A child's deny overrides a parent's allow.**
-  3. **Both the child and the parent must allow a tool for it to be callable.**
+  1. **Deny overrides allow at the same level** (`deny_match → False`, no exception for an overlapping allow).
+  2. **The child's own `allow_tools` must permit the tool** (default `["builtin__*"]`); a child that never lists a tool cannot call it, regardless of what its base allows.
+  3. **The base chain must permit it too** — `check_tool` returns `child_allowed and base_allowed`, recursing to the root. A deny anywhere in the chain blocks the call, and a tool absent from any ancestor's `allow_tools` is blocked as well.
 
-In other words, permissiveness never propagates downward by default — a child profile can only narrow what it inherits, never broaden it. A permissive base profile does not make a restrictive child profile permissive; the reverse direction is the only one that's structurally possible.
+In other words, permissiveness never propagates downward by default — a child profile can only narrow what it inherits, never broaden it. A permissive base profile does not make a restrictive child profile permissive; the reverse direction is the only one that's structurally possible. Because the base's allow/deny lists are themselves consulted (the AND at every level), a restrictive base genuinely tightens every child pointing at it.
 
 This manifest is evaluated independently of, and prior to, the runtime prompt tiers above — a tool denied by the profile manifest never reaches the prompt system at all.
 

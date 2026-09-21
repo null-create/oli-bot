@@ -14,13 +14,13 @@ path comes from the `agents_yaml` config field (`OLI_AGENTS_YAML` env var, a
 `.env` line, `settings.json` `model_params.agents_yaml`, or the `/config`
 screen). Otherwise the file is auto-located from (in order) the package dir
 (beside `agent.py`), the repo root (beside `pyproject.toml`, e.g. for local
-source checkouts), or `~/.config/oli/agents.yaml` — the first that exists
-wins. Each named pool becomes a `dict` of `Agent` instances keyed by agent
-name. When pooling is enabled, a `dispatch` built-in tool is registered on
-the root agent. The root agent can call `dispatch` with a batch of
-`{agent, task}` pairs; all tasks are run **concurrently** (`asyncio.gather`,
-never sequentially) and the results are aggregated into a single labeled
-string returned to the root agent's tool loop.
+source checkouts), the current working directory (`./agents.yaml`), or
+`~/.config/oli/agents.yaml` — the first that exists wins. Each named pool
+becomes a `dict` of `Agent` instances keyed by agent name. When pooling is
+enabled, a `dispatch` built-in tool is registered on the root agent. The root
+agent can call `dispatch` with a batch of `{agent, task}` pairs; all tasks are
+run **concurrently** (`asyncio.gather`, never sequentially) and the results are
+aggregated into a single labeled string returned to the root agent's tool loop.
 
 Each sub-agent runs its own full `Agent.process()` loop — its own model call,
 its own tool-calling iterations — with the shared tool set (minus `dispatch`
@@ -83,7 +83,7 @@ Each agent:
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`    | Agent identifier used by the `dispatch` tool. Names `root-agent`/`root` are **excluded** — they represent the primary chat agent, not a delegate target. |
 | `model`   | Model name for this agent. Required.                                                                                                                     |
-| `profile` | Declared in the sample config as a hint, but the pool builder does not currently read it — sub-agents are built with the default profile.                |
+| `profile` | Optional profile name (default `"default"`). Sub-agents are built against a named profile — `profile_name` — and branch on it. Duplicate `name` entries within a pool are warned about (`logger.warning`) and the later entry overwrites the earlier one. |
 | `backend` | Nested backend config — `type`, optional `base_url`, optional `api_key`. Required `type`.                                                                |
 
 ### Backend field

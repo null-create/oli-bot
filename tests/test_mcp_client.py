@@ -347,3 +347,113 @@ async def test_get_plan_tools_combines_mcp_and_builtin_plan_tools(
         f"builtin__{n}" for n in PLAN_TOOLS
     }
     assert "builtin__write_file" not in names
+
+
+# --------------------------------------------------------------------------- #
+# MCP permission gating (profile enforcer + offline/transport + dry-run)       #
+# --------------------------------------------------------------------------- #
+
+
+class _DenyAllEnforcer:
+    def check_tool(self, tool_name):
+        return False
+
+
+class _AllowAllEnforcer:
+    def check_tool(self, tool_name):
+        return True
+
+
+def _gate(tmp_path, monkeypatch, *, config=None, mcp_servers=None, enforcer=None):
+    from oli_bot.mcp_client import MCPToolManager
+
+    return MCPToolManager(
+        config=config,
+        session=DummySession(),
+        mcp_servers=mcp_servers or {},
+        permission_enforcer=enforcer,
+    )
+
+
+def test_profile_deny_blocks_mcp_tool(tmp_path, monkeypatch):
+    from oli_bot.config import AppConfig
+
+    gate = _gate(
+        tmp_path,
+        monkeypatch,
+        config=AppConfig(_env_file=None, offline_mode=False, dry_run=False),
+        mcp_servers={"srv": SimpleNamespace(transport="stdio")},
+        enforcer=_DenyAllEnforcer(),
+    )
+    decision = gate._evaluate_permission("srv__write", {}, skip_session=True)
+    assert decision.outcome == "deny"
+    assert decision.source == "profile"
+
+
+def test_profile_deny_does_not_block_allowed_tool(tmp_path, monkeypatch):
+    from oli_bot.config import AppConfig
+
+    gate = _gate(
+        tmp_path,
+        monkeypatch,
+        config=AppConfig(_env_file=None, offline_mode=False, dry_run=False),
+        mcp_servers={"srv": SimpleNamespace(transport="stdio")},
+        enforcer=_AllowAllEnforcer(),
+    )
+    decision = gate._evaluate_permission("srv__write", {}, skip_session=True)
+    assert decision.outcome == "allow"
+
+
+def test_offline_mode_blocks_http_transport_but_not_stdio(tmp_path, monkeypatch):
+    from oli_bot.config import AppConfig
+
+    gate = _gate(
+        tmp_path,
+        monkeypatch,
+        config=AppConfig(_env_file=None, offline_mode=True, dry_run=False),
+        mcp_servers={
+            "http-srv": SimpleNamespace(transport="http"),
+            "stdio-srv": SimpleNamespace(transport="stdio"),
+        },
+    )
+
+    http_decision = gate._evaluate_permission(
+        "http-srv__tool", {}, skip_session=True
+    )
+    assert http_decision.outcome == "deny"
+    assert http_decision.source == "offline"
+
+    # A local stdio server must remain callable under the default offline config.
+    stdio_decision = gate._evaluate_permission(
+        "stdio-srv__tool", {}, skip_session=True
+    )
+    assert stdio_decision.outcome == "allow"
+
+
+def test_online_http_transport_is_not_offline_blocked(tmp_path, monkeypatch):
+    from oli_bot.config import AppConfig
+
+    gate = _gate(
+        tmp_path,
+        monkeypatch,
+        config=AppConfig(_env_file=None, offline_mode=False, dry_run=False),
+        mcp_servers={"http-srv": SimpleNamespace(transport="http")},
+    )
+    decision = gate._evaluate_permission("http-srv__tool", {}, skip_session=True)
+    assert decision.outcome == "allow"
+
+
+def test_dry_run_returns_preview_for_mcp_tool(tmp_path, monkeypatch):
+    from oli_bot.config import AppConfig
+
+    gate = _gate(
+        tmp_path,
+        monkeypatch,
+        config=AppConfig(_env_file=None, offline_mode=False, dry_run=True),
+        mcp_servers={"srv": SimpleNamespace(transport="stdio")},
+    )
+    decision = gate._evaluate_permission(
+        "srv__tool", {"a": 1}, skip_session=True
+    )
+    assert decision.outcome == "preview"
+    assert "DRY RUN" in (decision.preview or "")

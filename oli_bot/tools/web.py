@@ -39,6 +39,41 @@ _FETCH_TEXTUAL_TYPES = (
     "application/json",
 )
 _ALLOWED_URL_SCHEMES: frozenset[str] = frozenset({"http", "https"})
+_MAX_REDIRECTS = 5
+
+
+async def _ssrf_safe_request(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    max_redirects: int = _MAX_REDIRECTS,
+    **kwargs: Any,
+) -> tuple[httpx.Response | None, str | None]:
+    """Perform ``method`` against ``url``, following redirects manually.
+
+    ``_check_ssrf`` validates the initial URL, but httpx's built-in redirect
+    following would silently follow any ``Location`` header without
+    re-validating — a public URL can 302 to ``http://169.254.169.254/...`` or
+    a loopback/private address. This helper re-runs the guard on *every* hop
+    (resolving relative ``Location`` headers against the current URL) before
+    following it. Returns ``(response, None)`` on success or
+    ``(None, error_string)`` when a hop is rejected or the hop budget is
+    exhausted.
+    """
+    next_url = url
+    for _ in range(max_redirects + 1):
+        ssrf_err = _check_ssrf(next_url)
+        if ssrf_err:
+            return None, ssrf_err
+        response = await getattr(client, method)(next_url, **kwargs)
+        if response.is_redirect:
+            location = response.headers.get("location")
+            if not location:
+                return response, None
+            next_url = urljoin(next_url, location)
+            continue
+        return response, None
+    return None, f"Error: Too many redirects (>{max_redirects})."
 
 
 def register_tools(manager: BuiltinToolManager) -> None:
@@ -371,9 +406,14 @@ async def _fetch_handler(
     headers = {"User-Agent": random.choice(_FETCH_USER_AGENTS)}
     try:
         async with httpx.AsyncClient(
-            timeout=_FETCH_TIMEOUT, follow_redirects=True
+            timeout=_FETCH_TIMEOUT, follow_redirects=False
         ) as client:
-            response = await client.get(url, headers=headers)
+            response, ssrf_err = await _ssrf_safe_request(
+                client, "get", url, headers=headers
+            )
+            if ssrf_err:
+                return ssrf_err
+            assert response is not None
             response.raise_for_status()
     except httpx.HTTPStatusError as e:
         return f"Error: HTTP {e.response.status_code} — {url}"
@@ -465,9 +505,14 @@ async def _download_file_handler(url, file_path):
     headers = {"User-Agent": random.choice(_FETCH_USER_AGENTS)}
     try:
         async with httpx.AsyncClient(
-            timeout=_FETCH_TIMEOUT, follow_redirects=True
+            timeout=_FETCH_TIMEOUT, follow_redirects=False
         ) as client:
-            response = await client.get(url, headers=headers)
+            response, ssrf_err = await _ssrf_safe_request(
+                client, "get", url, headers=headers
+            )
+            if ssrf_err:
+                return ssrf_err
+            assert response is not None
             response.raise_for_status()
     except httpx.HTTPStatusError as e:
         return f"Error: HTTP {e.response.status_code} — {url}"
@@ -502,13 +547,21 @@ async def _upload_file_handler(url, file_path, method="PUT", field_name="file"):
         return f"Error: Not a file: {file_path}"
 
     try:
-        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-            if method == "POST":
+        async with httpx.AsyncClient(timeout=60, follow_redirects=False) as client:
+            method_l = method.lower()
+            if method_l == "post":
                 files = {field_name: (path.name, path.read_bytes())}
-                response = await client.post(url, files=files)
+                response, ssrf_err = await _ssrf_safe_request(
+                    client, "post", url, files=files
+                )
             else:
                 data = path.read_bytes()
-                response = await client.put(url, content=data)
+                response, ssrf_err = await _ssrf_safe_request(
+                    client, "put", url, content=data
+                )
+            if ssrf_err:
+                return ssrf_err
+            assert response is not None
             response.raise_for_status()
     except httpx.HTTPStatusError as e:
         return f"Error: HTTP {e.response.status_code} — {url}"

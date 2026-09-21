@@ -88,16 +88,22 @@ class MCPToolManager:
                 return decision
 
         if self._config is not None and self._config.offline_mode:
-            decision = PermissionDecision(
-                outcome="deny",
-                reason=(
-                    "Network access blocked by offline mode. "
-                    "Use /config to disable offline mode, or restart without --offline."
-                ),
-                source="offline",
-            )
-            logger.info("permission deny: tool=%s source=%s", name, decision.source)
-            return decision
+            # Mirror the built-in NETWORK_TOOLS gating: offline mode blocks
+            # network-backed MCP servers (HTTP transport), NOT local stdio
+            # servers. Blocking every external tool would break local MCP
+            # servers under the default (offline) configuration.
+            server_cfg = self._mcp_servers.get(server_name)
+            if server_cfg is not None and server_cfg.transport == "http":
+                decision = PermissionDecision(
+                    outcome="deny",
+                    reason=(
+                        "Network access blocked by offline mode. "
+                        "Use /config to disable offline mode, or restart without --offline."
+                    ),
+                    source="offline",
+                )
+                logger.info("permission deny: tool=%s source=%s", name, decision.source)
+                return decision
 
         if self._config is not None and self._config.dry_run:
             args_str = ", ".join(f"{k}={v!r}" for k, v in arguments.items())
