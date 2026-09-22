@@ -412,7 +412,7 @@ async def _fetch_handler(
     headers = {"User-Agent": random.choice(_FETCH_USER_AGENTS)}
     try:
         async with httpx.AsyncClient(
-            timeout=_FETCH_TIMEOUT, follow_redirects=False, verify=False
+            timeout=_FETCH_TIMEOUT, follow_redirects=False, verify=ctx
         ) as client:
             response, ssrf_err = await _ssrf_safe_request(
                 client, "get", url, headers=headers
@@ -511,7 +511,7 @@ async def _download_file_handler(url, file_path):
     headers = {"User-Agent": random.choice(_FETCH_USER_AGENTS)}
     try:
         async with httpx.AsyncClient(
-            timeout=_FETCH_TIMEOUT, follow_redirects=False
+            timeout=_FETCH_TIMEOUT, follow_redirects=False, verify=ctx
         ) as client:
             response, ssrf_err = await _ssrf_safe_request(
                 client, "get", url, headers=headers
@@ -553,7 +553,9 @@ async def _upload_file_handler(url, file_path, method="PUT", field_name="file"):
         return f"Error: Not a file: {file_path}"
 
     try:
-        async with httpx.AsyncClient(timeout=60, follow_redirects=False) as client:
+        async with httpx.AsyncClient(
+            timeout=60, follow_redirects=False, verify=False
+        ) as client:
             method_l = method.lower()
             if method_l == "post":
                 files = {field_name: (path.name, path.read_bytes())}
@@ -665,7 +667,7 @@ def _search_github(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
             "per_page": min(max_results, 100),
         }
         headers = {"User-Agent": random.choice(_FETCH_USER_AGENTS)}
-        response = httpx.get(url, params=params, headers=headers)
+        response = httpx.get(url, params=params, headers=headers, verify=ctx)
         response.raise_for_status()
 
         data = response.json()
@@ -796,6 +798,7 @@ def _search_open_library_sync(query: str, max_results: int = 5) -> str:
             url,
             params={"q": query, "limit": max_results},
             timeout=_FETCH_TIMEOUT,
+            verify=ctx,
         )
         resp.raise_for_status()
         docs = resp.json().get("docs", [])
