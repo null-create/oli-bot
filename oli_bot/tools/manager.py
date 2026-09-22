@@ -51,6 +51,7 @@ READ_ONLY_TOOLS: set[str] = {
     "fetch",
     "think",
     "compare",
+    "question",
     "search_stackoverflow",
     "search_open_library",
     "extract_article",
@@ -86,6 +87,7 @@ class BuiltinToolManager:
         self._todos: list[dict] = []
         self._todo_change_callback: Optional[Callable[[list[dict]], None]] = None
         self._sub_todo_change_callback: Optional[Callable] = None
+        self._question_callback: Optional[Callable[[list[dict]], Any]] = None
         self._pending_attachments: list["ImageAttachment"] = []
         self._pending_caption: str = ""
         self._register_default_tools()
@@ -141,6 +143,7 @@ class BuiltinToolManager:
         from .shell import register_tools as reg_shell
         from .parsing import register_tools as reg_parsing
         from .memory import register_tools as reg_memory
+        from .question import register_tools as reg_question
 
         reg_files(self)
         reg_dirs(self)
@@ -148,6 +151,7 @@ class BuiltinToolManager:
         reg_shell(self)
         reg_parsing(self)
         reg_memory(self)
+        reg_question(self)
 
     def register_tool(
         self,
@@ -245,6 +249,18 @@ class BuiltinToolManager:
         The callback receives ``(run: SubAgentRun, todos: list[dict])``.
         """
         self._sub_todo_change_callback = callback
+
+    def set_question_callback(
+        self, callback: Optional[Callable[[list[dict]], Any]]
+    ) -> None:
+        """Register the ``question`` tool's interaction callback.
+
+        The callback receives the raw question items the model posed and returns
+        the user's answers as a string (or ``None`` on cancel), which becomes
+        the tool result fed back to the model. When no callback is registered
+        (e.g. headless API runs), the tool returns an error instead.
+        """
+        self._question_callback = callback
 
     def attach_image(self, attachment: "ImageAttachment") -> None:
         """Push an image attachment onto the pending queue for the current tool call."""

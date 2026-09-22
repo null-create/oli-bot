@@ -206,3 +206,128 @@ async def test_write_then_read_file_via_tools(
     assert any(
         e.full_text == "Wrote and read back." for e in events if isinstance(e, Done)
     )
+
+
+@pytest.mark.integration
+async def test_question_tool_awaits_user_answer_and_resumes(
+    make_full_agent, mock_openai, auto_allow
+):
+    agent, session = make_full_agent(workspace=None, offline_mode=False)
+    mocked_answers = "Question 1: Which environment?\nUser answer: Production"
+
+    def fake_question_callback(questions):
+        assert questions == [
+            {
+                "question": "Which environment?",
+                "options": ["Staging", "Production"],
+                "recommended": "2",
+            }
+        ]
+        return mocked_answers
+
+    agent.mcp_manager._builtin_tools.set_question_callback(fake_question_callback)
+
+    mock_openai.script(
+        (
+            "stream",
+            [
+                cc(
+                    delta={
+                        "tool_calls": [
+                            tool_delta(
+                                0,
+                                tc_id="q1",
+                                name="builtin__question",
+                                args=(
+                                    '{"questions": [{"question": "Which environment?", '
+                                    '"options": ["Staging", "Production"], '
+                                    '"recommended": "2"}]}'
+                                ),
+                            )
+                        ]
+                    }
+                ),
+                cc(
+                    finish="tool_calls",
+                    usage={"prompt_tokens": 4, "completion_tokens": 2},
+                ),
+            ],
+        ),
+        (
+            "stream",
+            [
+                cc(content="Deploying to production as you chose."),
+                cc(finish="stop", usage={"prompt_tokens": 6, "completion_tokens": 3}),
+            ],
+        ),
+    )
+
+    from oli_bot.models import Done, Message, ToolCallResult
+
+    messages = [Message(role="user", content="pick the deploy target")]
+    events = [ev async for ev in agent.process(messages, confirm_callback=auto_allow)]
+    results = [e for e in events if isinstance(e, ToolCallResult)]
+    assert len(results) == 1
+    assert results[0].name == "builtin__question"
+    assert results[0].result == mocked_answers
+    assert any(
+        e.full_text == "Deploying to production as you chose."
+        for e in events
+        if isinstance(e, Done)
+    )
+    assert any(
+        msg.role == "tool" and "User answer: Production" in msg.content
+        for msg in messages
+    )
+    # The question tool never falls through to a permission prompt, so the
+    # session scope list must remain empty.
+    assert not session._session_grants
+
+
+@pytest.mark.integration
+async def test_question_tool_without_callback_returns_error(
+    make_full_agent, mock_openai, auto_allow
+):
+    agent, _ = make_full_agent(workspace=None, offline_mode=False)
+    mock_openai.script(
+        (
+            "stream",
+            [
+                cc(
+                    delta={
+                        "tool_calls": [
+                            tool_delta(
+                                0,
+                                tc_id="q1",
+                                name="builtin__question",
+                                args='{"questions": [{"question": "Proceed?"}]}',
+                            )
+                        ]
+                    }
+                ),
+                cc(
+                    finish="tool_calls",
+                    usage={"prompt_tokens": 4, "completion_tokens": 2},
+                ),
+            ],
+        ),
+        (
+            "stream",
+            [
+                cc(content="Proceeding on my own."),
+                cc(finish="stop", usage={"prompt_tokens": 6, "completion_tokens": 3}),
+            ],
+        ),
+    )
+
+    from oli_bot.models import Done, Message, ToolCallResult
+
+    messages = [Message(role="user", content="ask me something")]
+    events = [ev async for ev in agent.process(messages, confirm_callback=auto_allow)]
+    results = [e for e in events if isinstance(e, ToolCallResult)]
+    assert len(results) == 1
+    assert results[0].result.startswith("Error:")
+    assert "interactive user" in results[0].result
+    assert any(
+        e.full_text == "Proceeding on my own." for e in events if isinstance(e, Done)
+    )
