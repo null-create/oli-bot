@@ -76,6 +76,7 @@ from .screens import (
     WorkspaceListScreen,
     MCPSetupScreen,
     PermissionScreen,
+    QuestionScreen,
     ConfirmScreen,
     SessionListScreen,
     SubAgentViewScreen,
@@ -549,6 +550,7 @@ class OliBot(App):
         # Wire up the todo-change callback so updates fire immediately
         self._builtin_tools.set_todo_callback(self._on_todos_changed)
         self._builtin_tools.set_sub_todo_callback(self._on_sub_todos_changed)
+        self._builtin_tools.set_question_callback(self._question_callback)
 
         # Set border title for the todo panel
         todo_panel = self.query_one("#todo-panel", TodoWidget)
@@ -2628,6 +2630,14 @@ class OliBot(App):
         """
         async with self._permission_lock:
             return await self.push_screen_wait(PermissionScreen(description))
+
+    async def _question_callback(self, questions: list[dict]) -> str | None:
+        """Present the agent's ``builtin__question`` batch and return the
+        user's answers, serialized with permission prompts so concurrent
+        sub-agents queue their questions instead of stacking modals.
+        """
+        async with self._permission_lock:
+            return await self.push_screen_wait(QuestionScreen(questions))
 
     def _register_dispatch_tool(self) -> None:
         """Register the `dispatch` built-in tool that fans a batch of tasks

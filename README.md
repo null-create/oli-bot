@@ -38,8 +38,8 @@ Concretely, that means:
 ## Features
 
 - **Declarative sub-agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in an optional [agents.yaml](agents.yaml) file via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
-- **Agent profiles** — drop-in system prompts with permission manifests, base-profile inheritance, and auto-generated profiles via `/profile create`. Bundled profiles: `default`, `coder`, `reviewer`, `writer`, `planner`, `researcher`, `analyst`.
-- **Rich built-in tool set** — file ops, shell access, web search/fetch, Wikipedia/GitHub/arXiv search, task tracking, reasoning scratchpad, notebook, and more. Sandbox-locked with shell allowlists, SSRF protection, and sensitive-file gating.
+- **Agent profiles** — drop-in system prompts with permission manifests, base-profile inheritance, and auto-generated profiles via `/profile create`. Bundled profiles: `default`, `coder`, `reviewer`, `editor`, `writer`, `planner`, `researcher`, `analyst`.
+- **Rich built-in tool set** — file ops, shell access, web search/fetch, Wikipedia/GitHub/arXiv search, task tracking, reasoning scratchpad, notebook, interactive user-question modals, and more. Sandbox-locked with shell allowlists, SSRF protection, and sensitive-file gating.
 - **Permission system** — write operations and sensitive reads require user approval. Session grants, workspace scoping, and profile-level allow/deny lists.
 - **OpenAI-compatible API server** — run the same agent harness behind `/v1/models` and `/v1/chat/completions` (streaming + non-streaming) so any workflow that speaks the OpenAI wire protocol (the `openai` Python SDK, curl, or plain REST) can drive the agent.
 - **Voice mode (optional, experimental)** — `/voice` toggles a hands-free mic → STT → LLM → TTS loop (faster-whisper, Piper TTS, WebRTC VAD) for the TUI. Fully local; requires the `voice` extras and a downloaded Piper model.
@@ -85,6 +85,7 @@ oli --profile researcher
 | `default`    |   ✅   |   ✅   |  ✅  | General-purpose tasks                      |
 | `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end            |
 | `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis              |
+| `editor`     |   ✅   |   ❌   |  ❌  | Proofreading, grammar, prose, creative edits|
 | `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose           |
 | `planner`    |   ✅   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans  |
 | `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output   |

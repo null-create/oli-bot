@@ -12,6 +12,7 @@ from .input_prompt import InputPrompt
 from .mcp_setup import MCPSetupScreen
 from .model_picker import ModelPicker
 from .permission import PermissionScreen
+from .question import QuestionScreen
 from .server_list import ServerListScreen
 from .session_list import SessionListScreen
 from .sub_agent_view import SubAgentViewScreen
@@ -26,6 +27,7 @@ __all__ = [
     "MCPSetupScreen",
     "ModelPicker",
     "PermissionScreen",
+    "QuestionScreen",
     "ServerListScreen",
     "SessionListScreen",
     "SubAgentViewScreen",

@@ -73,6 +73,13 @@ async def _api_confirm(description: str) -> str:
     return "session"
 
 
+# Note: the ``builtin__question`` tool needs an interactive human. The API
+# server never registers a question callback on ``BuiltinToolManager``, so a
+# call to it returns an error result telling the model to proceed on its own.
+# If an out-of-band ask flow is ever desired, wire ``set_question_callback``
+# here the same way ``set_todo_callback`` is wired in ``_wire_todo_relay``.
+
+
 def _wire_todo_relay(agent: Agent) -> None:
     """Relay ``builtin__todowrite`` updates to WebSocket clients.
 
