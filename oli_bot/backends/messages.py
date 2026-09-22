@@ -245,6 +245,113 @@ def _format_tools(tools: list[dict]) -> List[Dict[str, Any]]:
     return formatted
 
 
+def _format_responses_messages(
+    messages: List[Message],
+    image_style: str = "openai",
+) -> List[Dict[str, Any]]:
+    """Serialize Messages into OpenAI Responses API input items.
+
+    Unlike the chat-completions wire format, the Responses API represents
+    tool activity as bare input items: each assistant tool call becomes a
+    ``function_call`` item and each ``role=tool`` result becomes a
+    ``function_call_output`` item (matched by ``call_id``). Plain
+    ``system``/``user``/``assistant`` messages become ``{"role", "content"}``
+    items.
+
+    ``image_style`` mirrors ``_format_messages``: ``"openai"`` rewrites
+    user-role content into ``input_text`` / ``input_image`` parts (the
+    Responses-native equivalents of the chat ``content`` parts); any other
+    style drops the bytes and appends a bracketed text note, since Bedrock /
+    Ollama image blocks are not valid in the Responses wire format.
+    """
+    formatted: List[Dict[str, Any]] = []
+    for m in messages:
+        content = m.content
+        images = m.images or None
+
+        if m.role == "tool":
+            formatted.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": m.tool_call_id or "",
+                    "output": content,
+                }
+            )
+            continue
+
+        if m.role == "assistant" and m.tool_calls:
+            if content and content.strip():
+                formatted.append({"role": "assistant", "content": content})
+            for tc in m.tool_calls:
+                func = tc.get("function", tc) if isinstance(tc, dict) else tc
+                name = func.get("name", "") if isinstance(func, dict) else ""
+                raw_args = (
+                    func.get("arguments", "{}") if isinstance(func, dict) else "{}"
+                )
+                if isinstance(raw_args, (dict, list)):
+                    raw_args = json.dumps(raw_args)
+                formatted.append(
+                    {
+                        "type": "function_call",
+                        "call_id": (tc.get("id", "") if isinstance(tc, dict) else ""),
+                        "name": name,
+                        "arguments": raw_args or "{}",
+                    }
+                )
+            continue
+
+        if images and image_style == "openai" and m.role == "user":
+            parts: List[Dict[str, Any]] = []
+            if content and content.strip():
+                parts.append({"type": "input_text", "text": content.strip()})
+            for att in images:
+                if not att.data:
+                    logger.warning(
+                        "Skipping image attachment with empty data in message"
+                    )
+                    continue
+                b64 = _b64.b64encode(att.data).decode("ascii")
+                parts.append(
+                    {
+                        "type": "input_image",
+                        "image_url": f"data:{att.media_type};base64,{b64}",
+                    }
+                )
+            if parts:
+                formatted.append({"role": m.role, "content": parts})
+                continue
+
+        if images and m.role == "user":
+            content = _append_image_placeholder_text(content, images)
+
+        formatted.append({"role": m.role, "content": content})
+    return formatted
+
+
+def _format_responses_tools(tools: Optional[List[Dict]]) -> List[Dict[str, Any]]:
+    """Convert the flat tool list to the Responses API ``FunctionToolParam`` shape.
+
+    Responses function tools are flat (``name``/``description``/``parameters``
+    at the top level) rather than nested under a ``function`` key like the
+    chat-completions format.
+    """
+    if not tools:
+        return []
+    formatted = []
+    for t in tools:
+        func = t.get("function", t)
+        params = func.get("parameters", {})
+        formatted.append(
+            {
+                "type": "function",
+                "name": func.get("name", ""),
+                "description": func.get("description", ""),
+                "parameters": _strip_none_values(params) if params else {},
+            }
+        )
+    return formatted
+
+
 __all__ = [
     "_format_messages",
     "_validate_message_content_blocks",
@@ -252,4 +359,6 @@ __all__ = [
     "_append_image_placeholder_text",
     "_strip_none_values",
     "_format_tools",
+    "_format_responses_messages",
+    "_format_responses_tools",
 ]

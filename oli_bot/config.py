@@ -45,6 +45,9 @@ class AppConfig(BaseSettings):
     # Optional headers to include in OpenAI API requests. This can be used to
     # pass additional headers required by certain OpenAI-compatible endpoints.
     openai_optional_headers: Optional[dict] = Field(default={})
+    # Use the OpenAI Responses API (/v1/responses) instead of Chat Completions
+    # (/v1/chat/completions) for the OpenAI backend.
+    openai_responses_enabled: bool = Field(default=False)
 
     # Ollama
     ollama_base_url: str = Field(default="http://localhost:11434")
