@@ -23,6 +23,7 @@ When a profile is loaded, both `AGENTS.md` and `SKILLS.md` are combined into the
 | `analyst`    | Specialist data-analyst agent — extracts claims, triangulates across sources, flags tensions     |
 | `coder`      | Software-engineer profile — read, write, and run access for end-to-end development workflows     |
 | `reviewer`   | Code-review profile — read-only analysis with test/lint execution; no file modifications         |
+| `editor`     | Writing-editor profile — proofreading, grammar and prose health, creative-writing feedback       |
 | `writer`     | Technical writer profile — prose, documentation, READMEs, changelogs, and guides                 |
 | `planner`    | Planning agent — decomposes goals into structured, saved plans; no file modifications            |
 

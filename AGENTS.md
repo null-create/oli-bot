@@ -50,6 +50,7 @@ Built-in profiles:
 | `analyst`    | Data-analyst specialist — extracts claims, triangulates sources, flags tensions              |
 | `coder`      | Software-engineer profile — read, write, and run access for end-to-end development workflows |
 | `reviewer`   | Code-review profile — read-only analysis with test/lint execution; no file modifications     |
+| `editor`     | Writing-editor profile — proofreading, grammar and prose health, feedback on creative writing |
 | `writer`     | Technical writer profile — prose, documentation, READMEs, changelogs, and guides             |
 | `planner`    | Planning agent — decomposes goals into structured, saved plans; no file modifications        |
 

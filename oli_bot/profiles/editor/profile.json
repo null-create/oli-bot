@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "name": "editor",
+  "version": "1.0.0",
+  "description": "Writing-editor profile — proofreading, grammar and prose health, feedback on creative and general writing",
+  "default_model_tier": "large",
+  "base": null,
+  "required_tools": [
+    "builtin__read_file",
+    "builtin__write_file",
+    "builtin__edit_file",
+    "builtin__glob",
+    "builtin__grep",
+    "builtin__list_directory",
+    "builtin__tree",
+    "builtin__compare",
+    "builtin__think",
+    "builtin__todowrite",
+    "builtin__notebook"
+  ],
+  "permissions": {
+    "allow_tools": [
+      "builtin__read_file",
+      "builtin__write_file",
+      "builtin__edit_file",
+      "builtin__glob",
+      "builtin__grep",
+      "builtin__list_directory",
+      "builtin__tree",
+      "builtin__compare",
+      "builtin__think",
+      "builtin__todowrite",
+      "builtin__notebook",
+      "builtin__view_image"
+    ],
+    "deny_tools": [
+      "builtin__run_command",
+      "builtin__download_file",
+      "builtin__upload_file",
+      "builtin__websearch",
+      "builtin__fetch",
+      "builtin__search_wikipedia",
+      "builtin__search_github",
+      "builtin__search_arxiv",
+      "builtin__search_stackoverflow",
+      "builtin__search_open_library",
+      "builtin__extract_article"
+    ]
+  }
+}
