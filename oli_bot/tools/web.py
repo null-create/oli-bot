@@ -554,7 +554,7 @@ async def _upload_file_handler(url, file_path, method="PUT", field_name="file"):
 
     try:
         async with httpx.AsyncClient(
-            timeout=60, follow_redirects=False, verify=False
+            timeout=60, follow_redirects=False, verify=ctx
         ) as client:
             method_l = method.lower()
             if method_l == "post":
