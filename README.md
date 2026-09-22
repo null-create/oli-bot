@@ -170,7 +170,7 @@ Type `/voice` again (or `Ctrl+Q` to quit the app) to exit voice mode — the mic
 | [docs/TOOLS.md](docs/TOOLS.md)                 | Built-in tools, permission system, security, dry-run/offline modes, truncation  |
 | [docs/BACKENDS.md](docs/BACKENDS.md)           | Backend setup (Ollama, OpenAI, HuggingFace, Transformers), model tier switching |
 | [docs/PROFILES.md](docs/PROFILES.md)           | Profile structure, manifests, built-in profiles, creating and loading profiles  |
-| [docs/AGENT-POOLING.md](docs/AGENT-POOLING.md) | Agent pooling configuration, parsing, and usage                                 |
+| [docs/AGENT_POOLING.md](docs/AGENT_POOLING.md) | Agent pooling configuration, parsing, and usage                                 |
 | [docs/SECURITY.md](docs/SECURITY.md)           | Security precedence and settings                                                |
 
 ## Docker
@@ -287,12 +287,12 @@ OpenAI-style tool-call flushing, in-process API `TestClient` routes) and
 **integration** under `tests/integration/` (slow, scriptable real wire server
 on a real localhost port):
 
-| tier | wire | real HTTP/SSE | real MCP server | real subprocess |
-| ---- | ---- | ------------- | --------------- | --------------- |
-| 1    | mock wire (openai/ollama) | yes | – | – |
-| 2    | mock wire | yes | MSQL stdio + streamable-HTTP (real `mcp` SDK subprocess) | – |
-| 3    | mock wire | yes | yes | real `run_command`/`git`/file handlers over real tools |
-| 4    | mock wire | yes | yes | real `oli-server` process (`python -m oli_bot.api`) boots + streams |
+| tier | wire                      | real HTTP/SSE | real MCP server                                          | real subprocess                                                     |
+| ---- | ------------------------- | ------------- | -------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1    | mock wire (openai/ollama) | yes           | –                                                        | –                                                                   |
+| 2    | mock wire                 | yes           | MSQL stdio + streamable-HTTP (real `mcp` SDK subprocess) | –                                                                   |
+| 3    | mock wire                 | yes           | yes                                                      | real `run_command`/`git`/file handlers over real tools              |
+| 4    | mock wire                 | yes           | yes                                                      | real `oli-server` process (`python -m oli_bot.api`) boots + streams |
 
 Run the fast tier first with `pytest tests/unit`, then the full gate with
 `pytest tests/unit tests/integration`. All tiers scrub stray `OLI_*`/SDK env

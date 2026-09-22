@@ -79,12 +79,12 @@ Each pool:
 
 Each agent:
 
-| Key       | Description                                                                                                                                              |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`    | Agent identifier used by the `dispatch` tool. Names `root-agent`/`root` are **excluded** — they represent the primary chat agent, not a delegate target. |
-| `model`   | Model name for this agent. Required.                                                                                                                     |
+| Key       | Description                                                                                                                                                                                                                                               |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`    | Agent identifier used by the `dispatch` tool. Names `root-agent`/`root` are **excluded** — they represent the primary chat agent, not a delegate target.                                                                                                  |
+| `model`   | Model name for this agent. Required.                                                                                                                                                                                                                      |
 | `profile` | Optional profile name (default `"default"`). Sub-agents are built against a named profile — `profile_name` — and branch on it. Duplicate `name` entries within a pool are warned about (`logger.warning`) and the later entry overwrites the earlier one. |
-| `backend` | Nested backend config — `type`, optional `base_url`, optional `api_key`. Required `type`.                                                                |
+| `backend` | Nested backend config — `type`, optional `base_url`, optional `api_key`. Required `type`.                                                                                                                                                                 |
 
 ### Backend field
 
