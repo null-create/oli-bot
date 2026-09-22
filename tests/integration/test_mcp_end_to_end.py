@@ -51,7 +51,9 @@ async def test_stdio_structured_content_surfaces(mcp_manager_factory, mcp_stdio_
 
 
 @pytest.mark.integration
-async def test_stdio_tool_error_surfaces_as_error(mcp_manager_factory, mcp_stdio_script):
+async def test_stdio_tool_error_surfaces_as_error(
+    mcp_manager_factory, mcp_stdio_script
+):
     m = await _make_stdio_manager(mcp_manager_factory, mcp_stdio_script)
     result = await m.call_tool("mock__fail", {"message": "boom"})
     assert result.startswith("Error:")
@@ -79,12 +81,18 @@ async def test_agent_calls_real_mcp_tool_over_wire(
                     delta={
                         "tool_calls": [
                             tool_delta(
-                                0, tc_id="t1", name="mock__add", args='{"a": 200, "b": 22}'
+                                0,
+                                tc_id="t1",
+                                name="mock__add",
+                                args='{"a": 200, "b": 22}',
                             )
                         ]
                     }
                 ),
-                cc(finish="tool_calls", usage={"prompt_tokens": 4, "completion_tokens": 2}),
+                cc(
+                    finish="tool_calls",
+                    usage={"prompt_tokens": 4, "completion_tokens": 2},
+                ),
             ],
         ),
         (
@@ -103,7 +111,9 @@ async def test_agent_calls_real_mcp_tool_over_wire(
     events = [ev async for ev in agent.process(messages, confirm_callback=auto_allow)]
     finals = [e.full_text for e in events if isinstance(e, Done)]
     assert finals == ["The sum is 222."]
-    assert any(isinstance(e, StreamChunk) and e.text.startswith("The sum") for e in events)
+    assert any(
+        isinstance(e, StreamChunk) and e.text.startswith("The sum") for e in events
+    )
     # The tool round-trip really hit the subprocess: the model's tool call was
     # executed against the real stdio MCP server and the result was relayed
     # back into the conversation as role= tool before the final reply.

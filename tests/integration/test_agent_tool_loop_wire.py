@@ -14,7 +14,9 @@ from .conftest import cc, tool_delta
 
 
 @pytest.mark.integration
-async def test_run_command_executes_real_subprocess(make_full_agent, mock_openai, auto_allow, tmp_path):
+async def test_run_command_executes_real_subprocess(
+    make_full_agent, mock_openai, auto_allow, tmp_path
+):
     agent, _ = make_full_agent(workspace=None, offline_mode=False)
     mock_openai.script(
         (
@@ -32,7 +34,10 @@ async def test_run_command_executes_real_subprocess(make_full_agent, mock_openai
                         ]
                     }
                 ),
-                cc(finish="tool_calls", usage={"prompt_tokens": 4, "completion_tokens": 2}),
+                cc(
+                    finish="tool_calls",
+                    usage={"prompt_tokens": 4, "completion_tokens": 2},
+                ),
             ],
         ),
         (
@@ -54,7 +59,10 @@ async def test_run_command_executes_real_subprocess(make_full_agent, mock_openai
     assert "hello from integration" in results[0].result
     finals = [e.full_text for e in events if isinstance(e, Done)]
     assert finals == ["Command output captured."]
-    assert any(msg.role == "tool" and "hello from integration" in msg.content for msg in messages)
+    assert any(
+        msg.role == "tool" and "hello from integration" in msg.content
+        for msg in messages
+    )
 
 
 @pytest.mark.integration
@@ -81,7 +89,10 @@ async def test_git_readonly_allowed_push_denied(
                         ]
                     }
                 ),
-                cc(finish="tool_calls", usage={"prompt_tokens": 3, "completion_tokens": 2}),
+                cc(
+                    finish="tool_calls",
+                    usage={"prompt_tokens": 3, "completion_tokens": 2},
+                ),
             ],
         ),
         (
@@ -99,7 +110,10 @@ async def test_git_readonly_allowed_push_denied(
                         ]
                     }
                 ),
-                cc(finish="tool_calls", usage={"prompt_tokens": 3, "completion_tokens": 2}),
+                cc(
+                    finish="tool_calls",
+                    usage={"prompt_tokens": 3, "completion_tokens": 2},
+                ),
             ],
         ),
         (
@@ -145,7 +159,10 @@ async def test_write_then_read_file_via_tools(
                         ]
                     }
                 ),
-                cc(finish="tool_calls", usage={"prompt_tokens": 4, "completion_tokens": 2}),
+                cc(
+                    finish="tool_calls",
+                    usage={"prompt_tokens": 4, "completion_tokens": 2},
+                ),
             ],
         ),
         (
@@ -163,7 +180,10 @@ async def test_write_then_read_file_via_tools(
                         ]
                     }
                 ),
-                cc(finish="tool_calls", usage={"prompt_tokens": 4, "completion_tokens": 2}),
+                cc(
+                    finish="tool_calls",
+                    usage={"prompt_tokens": 4, "completion_tokens": 2},
+                ),
             ],
         ),
         (
@@ -183,4 +203,6 @@ async def test_write_then_read_file_via_tools(
     assert len(results) == 2
     assert target.exists()
     assert "hello world" in results[1]
-    assert any(e.full_text == "Wrote and read back." for e in events if isinstance(e, Done))
+    assert any(
+        e.full_text == "Wrote and read back." for e in events if isinstance(e, Done)
+    )

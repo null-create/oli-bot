@@ -112,9 +112,7 @@ def make_dispatch_handler(agent: Agent, pool: AgentPool) -> Callable[[List[dict]
             return "Error: dispatch called with no tasks"
 
         available_tools = await agent.mcp_manager.get_available_tools()
-        sub_tools = [
-            t for t in available_tools if t.get("name") != "builtin__dispatch"
-        ]
+        sub_tools = [t for t in available_tools if t.get("name") != "builtin__dispatch"]
 
         now = datetime.now(timezone.utc).isoformat()
         runs: List[SubAgentRun] = []

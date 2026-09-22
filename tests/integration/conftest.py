@@ -151,9 +151,7 @@ class WireMockServer:
         self.handler = None
         self.route_prefix = route_prefix
         self.app = FastAPI()
-        self.app.add_api_route(
-            f"{route_prefix}/models", self._models, methods=["GET"]
-        )
+        self.app.add_api_route(f"{route_prefix}/models", self._models, methods=["GET"])
         self.app.add_api_route(
             f"{route_prefix}/chat/completions", self._chat, methods=["POST"]
         )
@@ -165,9 +163,7 @@ class WireMockServer:
         self._start()
 
     def _start(self):
-        config = uvicorn.Config(
-            self.app, host="127.0.0.1", port=0, log_level="warning"
-        )
+        config = uvicorn.Config(self.app, host="127.0.0.1", port=0, log_level="warning")
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, daemon=True)
         self._thread.start()
@@ -217,6 +213,7 @@ class WireMockServer:
 
             return StreamingResponse(gen(), media_type="text/event-stream")
         if kind == "ollama":
+
             async def ollama_gen():
                 for part in spec[1]:
                     if isinstance(part, dict):
@@ -293,8 +290,7 @@ def ollama_backend(mock_ollama):
 # Real MCP servers (official SDK in a subprocess)                             #
 # --------------------------------------------------------------------------- #
 
-_MCP_STDIO_SERVER_SRC = textwrap.dedent(
-    """\
+_MCP_STDIO_SERVER_SRC = textwrap.dedent("""\
     import asyncio
 
     from mcp.server.mcpserver import MCPServer
@@ -318,8 +314,7 @@ _MCP_STDIO_SERVER_SRC = textwrap.dedent(
         raise RuntimeError(message)
 
     asyncio.run(server.run_stdio_async())
-    """
-)
+    """)
 
 
 @pytest.fixture
@@ -345,8 +340,7 @@ def mcp_http_script(tmp_path):
     """
     port = _free_port()
     url = f"http://127.0.0.1:{port}/mcp"
-    src = textwrap.dedent(
-        f"""\
+    src = textwrap.dedent(f"""\
         import asyncio
 
         from mcp.server.mcpserver import MCPServer
@@ -364,8 +358,7 @@ def mcp_http_script(tmp_path):
         asyncio.run(server.run_streamable_http_async(
             host="127.0.0.1", port={port}, streamable_http_path="/mcp"
         ))
-        """
-    )
+        """)
     path = tmp_path / "mock_mcp_http_server.py"
     path.write_text(src)
     proc = subprocess.Popen(

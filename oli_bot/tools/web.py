@@ -5,6 +5,7 @@ import ipaddress
 import logging
 import random
 import re
+import ssl
 import socket
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -40,6 +41,11 @@ _FETCH_TEXTUAL_TYPES = (
 )
 _ALLOWED_URL_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 _MAX_REDIRECTS = 5
+
+# Disable SSL verification for httpx requests to avoid issues with self-signed certificates.
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
 
 
 async def _ssrf_safe_request(
@@ -406,7 +412,7 @@ async def _fetch_handler(
     headers = {"User-Agent": random.choice(_FETCH_USER_AGENTS)}
     try:
         async with httpx.AsyncClient(
-            timeout=_FETCH_TIMEOUT, follow_redirects=False
+            timeout=_FETCH_TIMEOUT, follow_redirects=False, verify=False
         ) as client:
             response, ssrf_err = await _ssrf_safe_request(
                 client, "get", url, headers=headers

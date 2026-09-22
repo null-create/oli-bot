@@ -435,7 +435,7 @@ def test_shell_rejects_double_quoted_command_substitution():
 
 
 def test_shell_rejects_double_quoted_backtick_substitution():
-    err = _is_command_allowed("echo \"`id`\"")
+    err = _is_command_allowed('echo "`id`"')
     assert err is not None
     assert "Shell metacharacters" in err
 

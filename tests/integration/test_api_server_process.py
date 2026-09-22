@@ -88,7 +88,9 @@ def test_server_boots_and_streams_chat_completion(server_env, tmp_path):
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()
-        assert data["choices"][0]["message"]["content"] == "Hello from the mocked backend."
+        assert (
+            data["choices"][0]["message"]["content"] == "Hello from the mocked backend."
+        )
         assert mock.calls  # the chat completion really went out over the wire
 
         models = httpx.get(f"http://127.0.0.1:{port}/v1/models", timeout=15)
