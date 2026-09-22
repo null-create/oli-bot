@@ -136,9 +136,7 @@ async def test_ssrf_redirect_budget_is_bounded():
 
     def resp(request):
         hops["n"] += 1
-        return httpx.Response(
-            302, headers={"location": "/loop"}, request=request
-        )
+        return httpx.Response(302, headers={"location": "/loop"}, request=request)
 
     async with _redirect_client(resp) as client:
         response, err = await _ssrf_safe_request(
@@ -154,9 +152,7 @@ async def test_ssrf_safe_relative_redirect_is_still_followed():
     # Legitimate same-host relative redirects must keep working.
     def resp(request):
         if request.url.path == "/start":
-            return httpx.Response(
-                302, headers={"location": "/finish"}, request=request
-            )
+            return httpx.Response(302, headers={"location": "/finish"}, request=request)
         return httpx.Response(200, text="ok", request=request)
 
     async with _redirect_client(resp) as client:

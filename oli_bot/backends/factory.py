@@ -36,6 +36,7 @@ def create_model_backend(
             base_url=base_url or configs.openai_base_url,
             model=model or configs.openai_model,
             vision_style=configs.openai_vision_style,
+            responses_enabled=configs.openai_responses_enabled,
         )
 
     elif backend_type == "ollama":

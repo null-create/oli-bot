@@ -79,9 +79,7 @@ async def test_reasoning_content_becomes_thinking_chunk(openai_backend, mock_ope
 
 
 @pytest.mark.integration
-async def test_tool_call_fragments_round_trip_over_wire(
-    openai_backend, mock_openai
-):
+async def test_tool_call_fragments_round_trip_over_wire(openai_backend, mock_openai):
     """Argument JSON split across SSE deltas must be reassembled server-side."""
     mock_openai.script(
         (
@@ -90,7 +88,9 @@ async def test_tool_call_fragments_round_trip_over_wire(
                 cc(
                     delta={
                         "tool_calls": [
-                            tool_delta(0, tc_id="c1", name="run_command", args='{"command"'),
+                            tool_delta(
+                                0, tc_id="c1", name="run_command", args='{"command"'
+                            ),
                         ]
                     }
                 ),
@@ -120,7 +120,14 @@ async def test_parallel_tool_calls_by_index_over_wire(openai_backend, mock_opena
                         ]
                     }
                 ),
-                cc(delta={"tool_calls": [tool_delta(0, args="1}"), tool_delta(1, args="2}")]}),
+                cc(
+                    delta={
+                        "tool_calls": [
+                            tool_delta(0, args="1}"),
+                            tool_delta(1, args="2}"),
+                        ]
+                    }
+                ),
                 cc(finish="tool_calls"),
             ],
         )
@@ -139,7 +146,13 @@ async def test_flush_on_stop_finish_reason_over_wire(openai_backend, mock_openai
         (
             "stream",
             [
-                cc(delta={"tool_calls": [tool_delta(0, tc_id="c1", name="do", args='{"a": 1}')]}),
+                cc(
+                    delta={
+                        "tool_calls": [
+                            tool_delta(0, tc_id="c1", name="do", args='{"a": 1}')
+                        ]
+                    }
+                ),
                 cc(finish="stop"),
             ],
         )

@@ -14,9 +14,7 @@ router = APIRouter(prefix="/v1/mcp", tags=["mcp"])
 
 def _mcp_list(agent: Agent) -> List[Dict[str, Any]]:
     """Snapshot the current MCP server configs as a JSON-safe list."""
-    return [
-        dataclasses.asdict(cfg) for cfg in agent.mcp_manager.list_servers()
-    ]
+    return [dataclasses.asdict(cfg) for cfg in agent.mcp_manager.list_servers()]
 
 
 def _validate_mcp_config(cfg: MCPServerConfig) -> Optional[str]:

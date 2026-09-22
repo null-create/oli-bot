@@ -75,13 +75,9 @@ async def set_workspace(
     try:
         path = Path(path_str).expanduser().resolve()
     except (OSError, RuntimeError):
-        raise HTTPException(
-            status_code=422, detail=f"Invalid path: {path_str}"
-        )
+        raise HTTPException(status_code=422, detail=f"Invalid path: {path_str}")
     if not path.is_dir():
-        raise HTTPException(
-            status_code=422, detail=f"Not a valid directory: {path}"
-        )
+        raise HTTPException(status_code=422, detail=f"Not a valid directory: {path}")
     session = agent._session
     session.workspace = path
     session._session_grants.clear()
@@ -117,9 +113,7 @@ async def list_fs_directory(path: str = "/") -> Any:
     try:
         entries = _list_dir(resolved)
     except PermissionError:
-        raise HTTPException(
-            status_code=403, detail=f"Permission denied: {resolved}"
-        )
+        raise HTTPException(status_code=403, detail=f"Permission denied: {resolved}")
     return {
         "path": str(resolved),
         "sensitive": is_sensitive_path(resolved),

@@ -68,9 +68,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
                                 store, agent, connection_session_id, [], 0, False
                             )
                         except Exception as e:
-                            logger.warning(
-                                "Failed to clear persisted session: %s", e
-                            )
+                            logger.warning("Failed to clear persisted session: %s", e)
                             new_id = connection_session_id
                         if new_id != connection_session_id:
                             connection_session_id = new_id
@@ -130,9 +128,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
                         if isinstance(event, Done):
                             if event.full_text:
                                 messages.append(
-                                    Message(
-                                        role="assistant", content=event.full_text
-                                    )
+                                    Message(role="assistant", content=event.full_text)
                                 )
                             if requested_session and store is not None:
                                 try:

@@ -31,7 +31,9 @@ async def test_streams_text_over_real_wire(ollama_backend, mock_ollama):
             [
                 ollama_part(content="Hello "),
                 ollama_part(content="world"),
-                ollama_part(done=True, counts={"prompt_eval_count": 9, "eval_count": 4}),
+                ollama_part(
+                    done=True, counts={"prompt_eval_count": 9, "eval_count": 4}
+                ),
             ],
         )
     )
@@ -54,7 +56,9 @@ async def test_tool_calls_round_trip_over_wire(ollama_backend, mock_ollama):
                 ollama_part(
                     tool_calls=[ollama_tool("run_command", {"command": "pwd"})]
                 ),
-                ollama_part(done=True, counts={"prompt_eval_count": 3, "eval_count": 2}),
+                ollama_part(
+                    done=True, counts={"prompt_eval_count": 3, "eval_count": 2}
+                ),
             ],
         )
     )

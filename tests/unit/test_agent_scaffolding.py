@@ -391,8 +391,7 @@ def test_agent_pool_warns_on_duplicate_agent_name(monkeypatch, tmp_path, caplog)
     assert pool.select_agent("default", "clash").backend.model == "m-two"
     # ...but the collision is surfaced in the logs instead of being silent.
     assert any(
-        record.name == "oli_bot.agent"
-        and "Duplicate agent name" in record.getMessage()
+        record.name == "oli_bot.agent" and "Duplicate agent name" in record.getMessage()
         for record in caplog.records
     )
 
