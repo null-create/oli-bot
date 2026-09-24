@@ -35,18 +35,14 @@ Concretely, that means:
 - **Declarative dispatch, not code-written orchestration.** Sub-agents are defined in `agents.yaml` and addressed through a single `dispatch` tool call. This is a deliberate reliability bet: tool-calling a fixed schema is something small local models handle far more consistently than authoring correct multi-agent orchestration code.
 - **Portable, bundled personas.** Profiles pair a system prompt and permission manifest with drop-in `AGENTS.md`/`SKILLS.md` content, aiming for compatibility with the open Agent Skills spec rather than a bespoke format.
 
-## TUI
-
-![tui-example-1](/docs/assets/example.PNG)
-
 ## Features
 
 - **Declarative sub-agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in an optional [agents.yaml](agents.yaml) file via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
-- **Agent profiles** — drop-in system prompts with permission manifests, base-profile inheritance, and auto-generated profiles via `/profile create`. Bundled profiles: `default`, `coder`, `reviewer`, `editor`, `writer`, `planner`, `researcher`, `analyst`.
-- **Rich built-in tool set** — file ops, shell access, web search/fetch, Wikipedia/GitHub/arXiv search, task tracking, reasoning scratchpad, notebook, interactive user-question modals, and more. Sandbox-locked with shell allowlists, SSRF protection, and sensitive-file gating.
+- **Agent profiles** — drop-in system prompts with permission manifests, base-profile inheritance, and auto-generated profiles via `/profile create`. Bundled profiles: `default`, `coder`, `reviewer`, `writer`, `planner`, `researcher`, `analyst`.
+- **Rich built-in tool set** — file ops, shell access, web search/fetch, Wikipedia/GitHub/arXiv search, Git, task tracking, reasoning scratchpad, notebook, and more. Sandbox-locked with shell allowlists, SSRF protection, and sensitive-file gating.
 - **Permission system** — write operations and sensitive reads require user approval. Session grants, workspace scoping, and profile-level allow/deny lists.
 - **OpenAI-compatible API server** — run the same agent harness behind `/v1/models` and `/v1/chat/completions` (streaming + non-streaming) so any workflow that speaks the OpenAI wire protocol (the `openai` Python SDK, curl, or plain REST) can drive the agent.
-- **Voice mode (optional, experimental)** — `/voice` toggles a hands-free mic → STT → LLM → TTS loop (faster-whisper, Piper TTS, WebRTC VAD) for the TUI. Fully local; requires the `voice` extras and a downloaded Piper model.
+- **Voice mode (optional)** — `/voice` toggles a hands-free mic → STT → LLM → TTS loop (faster-whisper, Piper TTS, WebRTC VAD) for the TUI. Fully local; requires the `voice` extras and a downloaded Piper model.
 - **Multi-backend support** — Ollama, OpenAI, HuggingFace (remote or local), and Transformers (local GPU/CPU). Switch at runtime.
 - **MCP integration** — add stdio or HTTP MCP servers at runtime for custom tools.
 
@@ -84,16 +80,15 @@ oli --profile researcher
 
 ### Bundled profiles
 
-| Profile      | Write? | Shell? | Web? | Best for                                     |
-| ------------ | :----: | :----: | :--: | -------------------------------------------- |
-| `default`    |   ✅   |   ✅   |  ✅  | General-purpose tasks                        |
-| `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end              |
-| `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis                |
-| `editor`     |   ✅   |   ❌   |  ❌  | Proofreading, grammar, prose, creative edits |
-| `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose             |
-| `planner`    |   ✅   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans    |
-| `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output     |
-| `analyst`    |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis   |
+| Profile      | Write? | Shell? | Web? | Best for                                   |
+| ------------ | :----: | :----: | :--: | ------------------------------------------ |
+| `default`    |   ✅   |   ✅   |  ✅  | General-purpose tasks                      |
+| `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end            |
+| `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis              |
+| `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose           |
+| `planner`    |   ✅   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans  |
+| `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output   |
+| `analyst`    |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis |
 
 See [docs/PROFILES.md](docs/PROFILES.md) for the full manifest schema, permission layering, and how to create your own.
 
@@ -139,7 +134,7 @@ can pick up where you left off.
 | `/home`                                                  | Return to the home screen                                                                |
 | `Ctrl+Q` / `Ctrl+L` / `Ctrl+Y`                           | Quit / Clear / Copy last message                                                         |
 
-## Voice mode (experimental)
+## Voice mode
 
 `/voice` toggles a hands-free loop: listen on the mic (WebRTC VAD auto-detects speech/silence), transcribe with faster-whisper, send the text through the normal chat pipeline, then speak the response back with Piper TTS. Everything runs locally — no network calls.
 
@@ -175,7 +170,7 @@ Type `/voice` again (or `Ctrl+Q` to quit the app) to exit voice mode — the mic
 | [docs/TOOLS.md](docs/TOOLS.md)                 | Built-in tools, permission system, security, dry-run/offline modes, truncation  |
 | [docs/BACKENDS.md](docs/BACKENDS.md)           | Backend setup (Ollama, OpenAI, HuggingFace, Transformers), model tier switching |
 | [docs/PROFILES.md](docs/PROFILES.md)           | Profile structure, manifests, built-in profiles, creating and loading profiles  |
-| [docs/AGENT_POOLING.md](docs/AGENT_POOLING.md) | Agent pooling configuration, parsing, and usage                                 |
+| [docs/AGENT-POOLING.md](docs/AGENT-POOLING.md) | Agent pooling configuration, parsing, and usage                                 |
 | [docs/SECURITY.md](docs/SECURITY.md)           | Security precedence and settings                                                |
 
 ## Docker
@@ -188,7 +183,7 @@ The Compose file runs the OpenAI-compatible API server in a container. The API s
 docker-compose up --build
 ```
 
-The API server listens on `localhost:9734` (the compose file sets it via the repo's `.env`), mounts `./oli_bot/profiles` and `~/.config/oli` to persist state across restarts, and is ready to accept OpenAI-compatible chat completions requests.
+The API server listens on `localhost:9734` (the compose file sets it via the repo's `.env`), mounts `./oli_bot/profiles`, `~/.config/oli`, and `./notes` to persist state across restarts, and is ready to accept OpenAI-compatible chat completions requests.
 
 **Run the TUI agent locally (optional):**
 
@@ -222,7 +217,7 @@ It listens on `0.0.0.0:9734` by default (override with `OLI_API_HOST`/`OLI_API_P
 
 REST conversations are **stateless** (like real OpenAI): each `/v1/chat/completions` request carries its full message history. The server holds a single process-private `Agent` instance (backend, tool registrations, MCP wiring) shared across requests, and serializes concurrent in-flight requests in-process. Because there is no human to prompt at permission time, the API auto-allows permission scopes for the current request; offline and dry-run gating from `AppConfig` still apply.
 
-The `WS /v1/chat` WebSocket is the stateful counterpart for real-time browser UIs: the server keeps a per-connection `messages` history, so a client sends each next turn as `{"content": "..."}` and receives every `AgentEvent` back as a typed JSON frame (`text_chunk`/`thinking`/`tool_call_executing`/`tool_call_result`/`assistant_response`/`usage`/`error`/`done`), plus `sub_agent_started`/`sub_agent_progress`/`sub_agent_completed` and `todo` frames for delegated runs and live task lists; `{"action": "clear"}` resets the history. See [docs/API_SERVER.md](docs/API_SERVER.md) for the full frame reference.
+The `WS /v1/chat` WebSocket is the stateful counterpart for real-time browser UIs: the server keeps a per-connection `messages` history, so a client sends each next turn as `{"content": "..."}` and receives every `AgentEvent` back as a typed JSON frame (`text_chunk`/`thinking`/`tool_call_executing`/`tool_call_result`/`assistant_response`/`usage`/`error`/`done`); `{"action": "clear"}` resets the history. See [docs/API_SERVER.md](docs/API_SERVER.md) for the full frame reference.
 
 ### curl
 
@@ -285,23 +280,4 @@ pip install -e '.[dev]'
 pytest
 ```
 
-Tests live in two hermetic suites: **unit** under `tests/unit/` (fast, no I/O,
-~397 cases: sub-agent scaffolding, config env-var precedence, session
-round-trip, permission matrix, truncation boundaries, security regressions,
-OpenAI-style tool-call flushing, in-process API `TestClient` routes) and
-**integration** under `tests/integration/` (slow, scriptable real wire server
-on a real localhost port):
-
-| tier | wire                      | real HTTP/SSE | real MCP server                                          | real subprocess                                                     |
-| ---- | ------------------------- | ------------- | -------------------------------------------------------- | ------------------------------------------------------------------- |
-| 1    | mock wire (openai/ollama) | yes           | –                                                        | –                                                                   |
-| 2    | mock wire                 | yes           | MSQL stdio + streamable-HTTP (real `mcp` SDK subprocess) | –                                                                   |
-| 3    | mock wire                 | yes           | yes                                                      | real `run_command`/`git`/file handlers over real tools              |
-| 4    | mock wire                 | yes           | yes                                                      | real `oli-server` process (`python -m oli_bot.api`) boots + streams |
-
-Run the fast tier first with `pytest tests/unit`, then the full gate with
-`pytest tests/unit tests/integration`. All tiers scrub stray `OLI_*`/SDK env
-vars at import time (`tests/integration/conftest.py` re-scrubs again for the
-subprocess tier) so every run is hermetic; integration cases that need the
-`sio`/`http` MCP subprocesses or a live `oli-server` are marker-gated
-(`@pytest.mark.integration`, `-m process` for tier 4).
+Tests live under `tests/` and cover: sub-agent scaffolding, config env-var precedence, session round-trip, permission matrix, truncation boundaries, security regressions, OpenAI-style tool-call flushing, and the OpenAI-compatible API server endpoints. `tests/conftest.py` clears stray `OLI_*` env vars so runs are hermetic.

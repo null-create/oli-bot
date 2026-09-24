@@ -2351,6 +2351,13 @@ class OliBot(App):
         think_widget: Collapsible | None = None
         think_inner: Static | None = None
         think_text = ""
+        # Track whether an Error event was already shown for the current
+        # tool-loop round so that AgentDone(full_text="") — which is emitted
+        # as a history-safety sentinel after every error path — does NOT
+        # overwrite the real error message with the generic "No response
+        # received" fallback.  Reset alongside the other per-round state in
+        # the AssistantResponse handler.
+        _had_error: bool = False
 
         await start_spinner()
         try:
@@ -2414,6 +2421,7 @@ class OliBot(App):
                         think_widget = None
                         think_inner = None
                         think_text = ""
+                        _had_error = False
                     case ThinkingChunk(text=thinking_text):
                         stop_spinner()
                         if think_widget is None:
@@ -2468,6 +2476,7 @@ class OliBot(App):
                         chat_log.scroll_end(animate=False)
                     case AgentError(message):
                         stop_spinner()
+                        _had_error = True
                         self.notify(message, severity="error")
                         if msg_widget is None:
                             msg_widget = Static(classes="message")
@@ -2497,7 +2506,13 @@ class OliBot(App):
                             await chat_log.mount(msg_widget)
                             chat_log.scroll_end(animate=False)
                         full_response = full_text
-                        if not full_response:
+                        if not full_response and not _had_error:
+                            # Only show the generic fallback when no more
+                            # specific Error event was already displayed.
+                            # Done(full_text="") is also emitted as a
+                            # history-safety sentinel after every error path
+                            # in agent.py; showing this message in that case
+                            # would silently overwrite the real error text.
                             try:
                                 ts_display = (
                                     self._format_timestamp(assistant_ts)

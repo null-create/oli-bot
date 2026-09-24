@@ -2,12 +2,12 @@
 
 oli supports four model backends, selected via the `backend` setting (`OLI_BACKEND` env var):
 
-| Backend        | Description                                            |
-| -------------- | ------------------------------------------------------ |
-| `ollama`       | Local Ollama server (default)                          |
-| `openai`       | OpenAI API or any OpenAI-compatible endpoint           |
-| `huggingface`  | HuggingFace Inference API (remote) or TGI/vLLM (local) |
-| `transformers` | Local model inference via HuggingFace `transformers`   |
+| Backend        | Description                                                         |
+| -------------- | ------------------------------------------------------------------- |
+| `ollama`       | Local Ollama server (default)                                       |
+| `openai`       | OpenAI API or any OpenAI-compatible endpoint                        |
+| `huggingface`  | HuggingFace Inference API (remote) or TGI/vLLM (local)              |
+| `transformers` | Local model inference via HuggingFace `transformers`                |
 
 ## Ollama
 
@@ -25,20 +25,13 @@ Multiple Ollama servers can be configured via `/servers` and persisted to `ollam
 
 Works with the OpenAI API or any compatible endpoint (Azure, local proxies, etc.).
 
-| Setting                    | Default                     | Env var                       |
-| -------------------------- | --------------------------- | ----------------------------- |
-| `openai_api_key`           | `""`                        | `OLI_OPENAI_API_KEY`          |
-| `openai_base_url`          | `https://api.openai.com/v1` | `OLI_OPENAI_BASE_URL`         |
-| `openai_model`             | `gpt-4o`                    | `OLI_OPENAI_MODEL`            |
-| `openai_small_model`       | `gpt-4o-mini`               | `OLI_OPENAI_SMALL_MODEL`      |
-| `openai_vision_style`      | `openai`                    | `OLI_OPENAI_VISION_STYLE`     |
-| `openai_responses_enabled` | `false`                     | `OLI_OPENAI_RESPONSES_ENABLED` |
-
-By default the backend targets Chat Completions (`POST /v1/chat/completions`). Set
-`openai_responses_enabled: true` (or `OLI_OPENAI_RESPONSES_ENABLED=true`) to use
-the Responses API (`POST /v1/responses`) instead; tool calling, usage accounting,
-and streaming are supported on both paths. Providers that only expose one of the
-two wire formats must be configured with the matching flag.
+| Setting              | Default                     | Env var                  |
+| -------------------- | --------------------------- | ------------------------ |
+| `openai_api_key`     | `""`                        | `OLI_OPENAI_API_KEY`     |
+| `openai_base_url`    | `https://api.openai.com/v1` | `OLI_OPENAI_BASE_URL`    |
+| `openai_model`       | `gpt-4o`                    | `OLI_OPENAI_MODEL`       |
+| `openai_small_model` | `gpt-4o-mini`               | `OLI_OPENAI_SMALL_MODEL` |
+| `openai_vision_style` | `openai`                   | `OLI_OPENAI_VISION_STYLE` |
 
 `openai_vision_style` controls how the `view_image` tool serializes attachments for the OpenAI backend:
 

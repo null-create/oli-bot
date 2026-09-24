@@ -5,22 +5,17 @@ on:
     branches: [main]
     paths:
       - "**.py"
-      - "pyproject.toml"
-      - "**.md"
-      - ".github/workflows/ci.yaml"
   pull_request:
     branches: [main]
     paths:
       - "**.py"
-      - "pyproject.toml"
-      - "**.md"
-      - ".github/workflows/ci.yaml"
   workflow_dispatch:
 
 jobs:
-  tests:
-    name: Unit and Integration tests
+  CI-tests:
+    name: Tests
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v6
 
@@ -29,7 +24,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e '.[dev]'
+        run: pip install -e .[dev]
 
-      - name: Run unit + integration (unit gates integration)
-        run: pytest -p no:cacheprovider tests/unit tests/integration
+      - name: Run tests
+        run: pytest tests/

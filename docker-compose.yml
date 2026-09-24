@@ -5,10 +5,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: oli-api
-    user: "root"
     env_file: .env
     environment:
-      - HOME=/app
       - OLI_OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLI_LOG_FILE=/app/logs/backend.ndjson
     ports:
@@ -16,8 +14,9 @@ services:
     restart: "unless-stopped"
     working_dir: /app
     volumes:
-      - ~/.config/oli:/app/.config/oli
+      - ~/.config/oli:/.config/oli
       - ./oli_bot/profiles:/usr/local/lib/python3.12/site-packages/oli_bot/profiles
+      - ./notes:/app/notes
       - oli-logs:/app/logs
 
 volumes:
