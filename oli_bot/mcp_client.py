@@ -121,45 +121,40 @@ class MCPToolManager:
 
     async def check_permission(
         self,
-        server_name: str,
-        tool_name: str,
+        name: str,
+        arguments: Dict[str, Any],
         confirm_callback: Optional[Callable[[str], Any]] = None,
-    ) -> str:
-        if self._permission_enforcer is None:
-            return "Error: No permission enforcer configured for MCP tools."
-
-        if not self._mcp_servers or server_name not in self._mcp_servers:
-            return f"Error: Unknown server: {server_name}"
-
+        permission_enforcer: Optional["ProfilePermissionEnforcer"] = None,
+    ) -> Optional[str]:
         decision = self._evaluate_permission(
-            tool_name,
-            arguments={},
-            skip_session=False,
-            permission_enforcer=self._permission_enforcer,
+            name,
+            arguments,
+            permission_enforcer=permission_enforcer,
         )
-        if decision.outcome == "deny":
-            return f"Error: tool {tool_name} denied by permissions enforcer"
-        if decision.outcome == "preview":
-            return decision.preview
-        if decision.outcome == "prompt":
-            if not confirm_callback:
-                return "Error: Permission prompt required but no confirm_callback was provided"
-            user = await confirm_callback("prompt")
-            match user:
-                case "once":
-                    pass
-                case "session":
-                    decision = PermissionDecision(
-                        outcome="approve",
-                        reason=f"Permission approved for tool: {tool_name}",
-                        source="user",
-                        scope=f"tool:{tool_name}",
+        match decision.outcome:
+            case "deny":
+                return (
+                    f"Error: tool {name} denied by permissions enforcer: "
+                    f"{decision.reason}"
+                )
+            case "preview":
+                return decision.preview
+            case "prompt":
+                if not confirm_callback:
+                    return (
+                        "Error: Permission prompt required but no "
+                        "confirm_callback was provided"
                     )
-                    if self._session is not None:
-                        self._session.grant(decision.scope, session=True)
-                case _:
-                    return "Error: Permission denied by user"
-        return "Permission granted"
+                user = await confirm_callback(decision.description)
+                match user:
+                    case "once":
+                        pass
+                    case "session":
+                        if self._session is not None and decision.scope is not None:
+                            self._session.grant(decision.scope, session=True)
+                    case _:
+                        return "Error: Permission denied by user"
+        return None
 
 
 class MCPClientManager:
@@ -345,13 +340,14 @@ class MCPClientManager:
         if server_name not in self.servers:
             return f"Error: Unknown server: {server_name}"
 
-        decision = await self._gate.check_permission(
+        gate_result = await self._gate.check_permission(
             tool_name,
             arguments,
             confirm_callback=confirm_callback,
+            permission_enforcer=permission_enforcer,
         )
-        if decision.startswith("Error:"):
-            return decision
+        if gate_result is not None:
+            return gate_result
 
         # If the decision is "Permission granted", proceed to call the tool
         try:
