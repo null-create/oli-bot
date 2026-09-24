@@ -345,44 +345,29 @@ class MCPClientManager:
         if server_name not in self.servers:
             return f"Error: Unknown server: {server_name}"
 
-        decision = self._gate._evaluate_permission(
+        decision = await self._gate.check_permission(
             tool_name,
-            arguments=arguments,
-            permission_enforcer=permission_enforcer,
+            arguments,
+            confirm_callback=confirm_callback,
         )
-        match decision.outcome:
-            case "deny":
-                return f"Error: tool {tool_name} denied by permissions enforcer: {decision.reason}"
-            case "preview":
-                return decision.preview
-            case "prompt":
-                if not confirm_callback:
-                    return "Error: Permission prompt required but no confirm_callback was provided"
-                user = await confirm_callback("prompt")
-                match user:
-                    case "once":
-                        pass
-                    case "session":
-                        decision = PermissionDecision(
-                            outcome="approve",
-                            reason=f"Permission approved for tool: {tool_name}",
-                            source="user",
-                            scope=f"tool:{tool_name}",
-                        )
-                        if self._session is not None:
-                            self._session.grant(decision.scope, session=True)
-                    case _:
-                        return "Error: Permission denied by user"
+        if decision.startswith("Error:"):
+            return decision
 
-        # Call the tool on the appropriate MCP server.
-        client = await self._get_client(server_name)
-        result = await client.call_tool(actual_name, arguments)
-        text = "".join(c.text for c in result.content if hasattr(c, "text"))
-        if not text and result.structured_content is not None:
-            text = str(result.structured_content)
-        if result.is_error:
-            return f"Error: {text or result.content}"
-        return text or str(result.content)
+        # If the decision is "Permission granted", proceed to call the tool
+        try:
+            client = await self._get_client(server_name)
+            result = await client.call_tool(actual_name, arguments)
+            text = "".join(c.text for c in result.content if hasattr(c, "text"))
+            if not text and result.structured_content is not None:
+                text = str(result.structured_content)
+            if result.is_error:
+                return f"Error: {text or result.content}"
+            return text or str(result.content)
+        except Exception as e:
+            msg = f"Failed to call tool '{tool_name}': {e}"
+            logger.warning(msg)
+            self._warnings.append(msg)
+            return f"Error: {msg}"
 
     def drain_builtin_attachments(self) -> tuple:
         """Return (attachments, caption) produced by the last builtin tool call."""
