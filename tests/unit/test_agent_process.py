@@ -549,7 +549,12 @@ async def test_backend_no_tool_support_error_produces_actionable_message():
 async def test_tool_loop_timeout_yields_error_then_done_and_flips_generating_flag():
     a = _agent(
         _HangingStub(),
-        config=AppConfig(_env_file=None, max_tool_iterations=3, stream_timeout=0.05),
+        config=AppConfig(
+            _env_file=None,
+            max_tool_iterations=3,
+            stream_timeout=0.05,
+            first_chunk_timeout=0.05,
+        ),
     )
     events = await _run(a, [Message(role="user", content="hi")])
 

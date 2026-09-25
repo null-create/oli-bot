@@ -48,7 +48,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "request_timeout": 30.0,
         "max_messages": 100,
         "max_tool_iterations": 25,
-        "stream_timeout": 240.0,
+        "stream_timeout": 300.0,
+        "first_chunk_timeout": 600.0,
         "model_filters": "",
         "truncation_max_chars_small": 4000,
         "truncation_max_chars_large": 100000,
@@ -121,6 +122,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_MAX_MESSAGES": "model_params.max_messages",
     "OLI_MAX_TOOL_ITERATIONS": "model_params.max_tool_iterations",
     "OLI_STREAM_TIMEOUT": "model_params.stream_timeout",
+    "OLI_FIRST_CHUNK_TIMEOUT": "model_params.first_chunk_timeout",
     "OLI_MODEL_FILTERS": "model_params.model_filters",
     "OLI_TRUNCATION_SMALL": "model_params.truncation_max_chars_small",
     "OLI_TRUNCATION_LARGE": "model_params.truncation_max_chars_large",
@@ -337,7 +339,8 @@ class SettingsManager:
             request_timeout=mp.get("request_timeout", 30.0),
             max_messages=mp.get("max_messages", 100),
             max_tool_iterations=mp.get("max_tool_iterations", 25),
-            stream_timeout=mp.get("stream_timeout", 240.0),
+            stream_timeout=mp.get("stream_timeout", 300.0),
+            first_chunk_timeout=mp.get("first_chunk_timeout", 600.0),
             model_filters=mp.get("model_filters", ""),
             truncation_max_chars_small=mp.get("truncation_max_chars_small", 4000),
             truncation_max_chars_large=mp.get("truncation_max_chars_large", 100000),
@@ -398,6 +401,7 @@ class SettingsManager:
         settings["model_params"]["max_messages"] = config.max_messages
         settings["model_params"]["max_tool_iterations"] = config.max_tool_iterations
         settings["model_params"]["stream_timeout"] = config.stream_timeout
+        settings["model_params"]["first_chunk_timeout"] = config.first_chunk_timeout
         settings["model_params"]["model_filters"] = config.model_filters
         settings["model_params"][
             "truncation_max_chars_small"

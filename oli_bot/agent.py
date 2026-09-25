@@ -320,14 +320,26 @@ class Agent:
             pending_images: List = []
             pending_caption: str = ""
             try:
+                # Use a longer deadline for the very first chunk: large
+                # accumulated contexts (many tool-call rounds) legitimately
+                # take longer to start streaming than the inter-token gap.
+                # Subsequent chunks revert to the tighter stream_timeout so
+                # a mid-generation stall is still detected promptly.
+                _first_chunk = True
                 while True:
+                    timeout = (
+                        self.config.first_chunk_timeout
+                        if _first_chunk
+                        else self.config.stream_timeout
+                    )
                     try:
                         event = await asyncio.wait_for(
                             stream.__anext__(),
-                            timeout=self.config.stream_timeout,
+                            timeout=timeout,
                         )
                     except StopAsyncIteration:
                         break
+                    _first_chunk = False
                     if isinstance(event, TextChunk):
                         full_response += event.text
                         yield StreamChunk(event.text)
@@ -345,9 +357,15 @@ class Agent:
                                 tc.parameters,
                             )
             except asyncio.TimeoutError:
+                which = "first chunk" if _first_chunk else "inter-chunk gap"
+                deadline = (
+                    self.config.first_chunk_timeout
+                    if _first_chunk
+                    else self.config.stream_timeout
+                )
                 err_text = (
-                    f"Response timed out (no data for "
-                    f"{self.config.stream_timeout:.0f} seconds)"
+                    f"Response timed out waiting for {which} "
+                    f"(no data for {deadline:.0f} seconds)"
                 )
                 yield Error(err_text)
                 # Emit an empty Done so the UI layer's "skip empty assistant
@@ -508,13 +526,20 @@ class Agent:
             # OpenAI-compatible proxies) don't 400. ToolCallChunks from this
             # pass are ignored below — only text/thinking is consumed.
             stream = self.backend.stream_generate(messages, tools=tools)
+            _first_chunk = True
             while True:
+                timeout = (
+                    self.config.first_chunk_timeout
+                    if _first_chunk
+                    else self.config.stream_timeout
+                )
                 try:
                     event = await asyncio.wait_for(
-                        stream.__anext__(), timeout=self.config.stream_timeout
+                        stream.__anext__(), timeout=timeout
                     )
                 except StopAsyncIteration:
                     break
+                _first_chunk = False
                 if isinstance(event, TextChunk):
                     full_response += event.text
                     yield StreamChunk(event.text)
@@ -523,10 +548,18 @@ class Agent:
                 elif isinstance(event, UsageChunk):
                     usage = _merge_usage(usage, event.usage)
         except asyncio.TimeoutError:
-            err_text = (
-                f"Response timed out (no data for "
-                f"{self.config.stream_timeout:.0f} seconds)"
+            which = "first chunk" if _first_chunk else "inter-chunk gap"
+            deadline = (
+                self.config.first_chunk_timeout
+                if _first_chunk
+                else self.config.stream_timeout
             )
+            err_text = (
+                f"Response timed out waiting for {which} "
+                f"(no data for {deadline:.0f} seconds)"
+            )
+            errored = True
+            yield Error(err_text)
             errored = True
             yield Error(err_text)
         except Exception as e:
