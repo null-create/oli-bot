@@ -320,14 +320,26 @@ class Agent:
             pending_images: List = []
             pending_caption: str = ""
             try:
+                # Use a longer deadline for the very first chunk: large
+                # accumulated contexts (many tool-call rounds) legitimately
+                # take longer to start streaming than the inter-token gap.
+                # Subsequent chunks revert to the tighter stream_timeout so
+                # a mid-generation stall is still detected promptly.
+                _first_chunk = True
                 while True:
+                    timeout = (
+                        self.config.first_chunk_timeout
+                        if _first_chunk
+                        else self.config.stream_timeout
+                    )
                     try:
                         event = await asyncio.wait_for(
                             stream.__anext__(),
-                            timeout=self.config.stream_timeout,
+                            timeout=timeout,
                         )
                     except StopAsyncIteration:
                         break
+                    _first_chunk = False
                     if isinstance(event, TextChunk):
                         full_response += event.text
                         yield StreamChunk(event.text)
@@ -345,9 +357,15 @@ class Agent:
                                 tc.parameters,
                             )
             except asyncio.TimeoutError:
+                which = "first chunk" if _first_chunk else "inter-chunk gap"
+                deadline = (
+                    self.config.first_chunk_timeout
+                    if _first_chunk
+                    else self.config.stream_timeout
+                )
                 err_text = (
-                    f"Response timed out (no data for "
-                    f"{self.config.stream_timeout:.0f} seconds)"
+                    f"Response timed out waiting for {which} "
+                    f"(no data for {deadline:.0f} seconds)"
                 )
                 yield Error(err_text)
                 # Emit an empty Done so the UI layer's "skip empty assistant
@@ -367,6 +385,14 @@ class Agent:
                 yield Error(err_text)
                 yield Done(full_text="")
                 return
+            finally:
+                # Always close the backend stream so sockets/tasks held by
+                # the underlying async generator are released — even on
+                # timeout, error, or normal completion.
+                try:
+                    await stream.aclose()
+                except Exception:
+                    pass
 
             if not tool_calls:
                 if run_usage.total_tokens:
@@ -417,6 +443,7 @@ class Agent:
                             permission_enforcer=self.permission_enforcer,
                         )
                 except Exception as e:
+                    logger.exception("Tool call '%s' failed", tc.name)
                     result = f"Error: {e}"
                 yield ToolCallResult(name=tc.name, result=result)
                 messages.append(
@@ -490,6 +517,12 @@ class Agent:
                         yield event
                 else:
                     getter.cancel()
+                    # Finalize the cancellation so the task is fully unwound
+                    # and doesn't linger in asyncio's task registry.
+                    try:
+                        await getter
+                    except (asyncio.CancelledError, Exception):
+                        pass
         finally:
             self.mcp_manager.sub_agent_queue = None
         result_holder[0] = task.result()
@@ -502,19 +535,27 @@ class Agent:
         full_response = ""
         errored = False
         usage = Usage()
+        stream = None
         try:
             # Forward tools so backends that require a matching tool schema
             # for any toolUse/toolResult blocks in history (e.g. Bedrock via
             # OpenAI-compatible proxies) don't 400. ToolCallChunks from this
             # pass are ignored below — only text/thinking is consumed.
             stream = self.backend.stream_generate(messages, tools=tools)
+            _first_chunk = True
             while True:
+                timeout = (
+                    self.config.first_chunk_timeout
+                    if _first_chunk
+                    else self.config.stream_timeout
+                )
                 try:
                     event = await asyncio.wait_for(
-                        stream.__anext__(), timeout=self.config.stream_timeout
+                        stream.__anext__(), timeout=timeout
                     )
                 except StopAsyncIteration:
                     break
+                _first_chunk = False
                 if isinstance(event, TextChunk):
                     full_response += event.text
                     yield StreamChunk(event.text)
@@ -523,9 +564,15 @@ class Agent:
                 elif isinstance(event, UsageChunk):
                     usage = _merge_usage(usage, event.usage)
         except asyncio.TimeoutError:
+            which = "first chunk" if _first_chunk else "inter-chunk gap"
+            deadline = (
+                self.config.first_chunk_timeout
+                if _first_chunk
+                else self.config.stream_timeout
+            )
             err_text = (
-                f"Response timed out (no data for "
-                f"{self.config.stream_timeout:.0f} seconds)"
+                f"Response timed out waiting for {which} "
+                f"(no data for {deadline:.0f} seconds)"
             )
             errored = True
             yield Error(err_text)
@@ -535,6 +582,13 @@ class Agent:
             errored = True
             yield Error(err_text)
         finally:
+            # Release backend stream resources (sockets, background tasks)
+            # regardless of whether we exited via success, timeout, or error.
+            if stream is not None:
+                try:
+                    await stream.aclose()
+                except Exception:
+                    pass
             if errored:
                 # Keep error text out of persisted history; the Error event
                 # already drove the red UI panel.

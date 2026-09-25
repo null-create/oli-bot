@@ -56,6 +56,7 @@ async def add_mcp_server(
             env=cfg.env,
             transport=cfg.transport,
             url=cfg.url,
+            api_token=cfg.api_token,
         )
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -80,6 +81,7 @@ async def update_mcp_server(
             env=cfg.env,
             transport=cfg.transport,
             url=cfg.url,
+            api_token=cfg.api_token,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

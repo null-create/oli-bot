@@ -39,7 +39,7 @@ Switched via `/mode`. Orthogonal to the active profile.
 
 ## Profiles
 
-Profile directories live under [oli_bot/profiles/](oli_bot/profiles/) and require `AGENTS.md` + `profile.json`; `SKILLS.md` is optional and, when present, is appended after `AGENTS.md` in the system prompt. Load at startup with `--profile <name>` or at runtime with `/profile load <name>` (clears the conversation).
+Profile directories live under [oli_bot/profiles/](oli_bot/profiles/) and require `AGENTS.md` + `profile.json`; `SKILLS.md` is optional and, when present, is appended after `AGENTS.md` in the system prompt. Load at startup with `--profile <name>` (omitting the flag reads `session.default_profile` from `settings.json`, set via `/config` → Session & Workspace; ultimate fallback is `default`) or at runtime with `/profile load <name>` (clears the conversation).
 
 Built-in profiles:
 
@@ -128,7 +128,7 @@ oli [--model MODEL] [--url URL] [--profile PROFILE] \
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `--model`                    | Model name to select at startup                                                                                             |
 | `--url`                      | Ollama server URL (default `http://localhost:11434`)                                                                        |
-| `--profile`                  | Profile to load from `profiles/` (default `default`)                                                                        |
+| `--profile`                  | Profile to load from `profiles/`. If omitted, reads `session.default_profile` from `settings.json` (set via `/config`), falling back to `default`. |
 | `--resume-last`              | Auto-resume the most recent session for the active server (mutually exclusive with `-s`)                                    |
 | `-s`, `--load-session`       | Load a specific session UUID (mutually exclusive with `--resume-last`)                                                      |
 | `--dry-run`                  | Preview destructive actions without executing                                                                               |

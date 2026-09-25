@@ -491,6 +491,12 @@ class ConfigScreen(ModalScreen[dict | None]):
                     value=bool(ss.get("resume_prompt", True)),
                 )
                 yield Input(
+                    placeholder=f"Default profile on startup ({ss.get('default_profile', 'default')})",
+                    id="cfg-default-profile",
+                    classes="config-input",
+                    value=ss.get("default_profile", "default"),
+                )
+                yield Input(
                     placeholder=f"Max workspaces ({ws.get('max_workspaces', 20)})",
                     id="cfg-max-workspaces",
                     classes="config-input",
@@ -633,6 +639,7 @@ class ConfigScreen(ModalScreen[dict | None]):
             "session": {
                 "auto_save": self._bool("#cfg-auto-save"),
                 "resume_prompt": self._bool("#cfg-resume-prompt"),
+                "default_profile": self._val("#cfg-default-profile"),
             },
         }
         self.dismiss(settings)

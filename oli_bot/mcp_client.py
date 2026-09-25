@@ -11,8 +11,10 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 if TYPE_CHECKING:
     from .profiles.permissions import ProfilePermissionEnforcer
 
+import httpx2
 from mcp.client import Client
 from mcp.client.stdio import stdio_client, StdioServerParameters
+from mcp.client.streamable_http import streamable_http_client
 
 from .tools.manager import BuiltinToolManager
 from .tools.permissions import PermissionDecision
@@ -220,6 +222,7 @@ class MCPClientManager:
         env: Optional[Dict[str, str]] = None,
         transport: str = "stdio",
         url: str = "",
+        api_token: Optional[str] = None,
     ) -> None:
         if name in self.servers:
             raise ValueError(f"Server '{name}' already exists")
@@ -230,6 +233,7 @@ class MCPClientManager:
             args=args or [],
             env=env,
             url=url,
+            api_token=api_token,
         )
         self._gate._mcp_servers = self.servers
         self._invalidate_tool_cache(name)
@@ -243,6 +247,7 @@ class MCPClientManager:
         env: Optional[Dict[str, str]] = None,
         transport: str = "stdio",
         url: str = "",
+        api_token: Optional[str] = None,
     ) -> None:
         if name not in self.servers:
             raise ValueError(f"Server '{name}' not found")
@@ -256,6 +261,7 @@ class MCPClientManager:
             args=args or [],
             env=env,
             url=url,
+            api_token=api_token,
         )
         self._gate._mcp_servers = self.servers
         self._invalidate_tool_cache(name)
@@ -401,7 +407,20 @@ class MCPClientManager:
                 )
 
             if config.transport == "http":
-                client = await self._exit_stack.enter_async_context(Client(config.url))
+                if config.api_token:
+                    http_client = httpx2.AsyncClient(
+                        headers={"Authorization": f"Bearer {config.api_token}"}
+                    )
+                    # Register the httpx client with the exit stack so its
+                    # connection pool is closed on ``disconnect_all()`` —
+                    # the wrapping MCP ``Client`` doesn't own the injected
+                    # transport client's lifecycle.
+                    await self._exit_stack.enter_async_context(http_client)
+                    client = await self._exit_stack.enter_async_context(
+                        Client(streamable_http_client(config.url, http_client=http_client))
+                    )
+                else:
+                    client = await self._exit_stack.enter_async_context(Client(config.url))
             else:
                 params = StdioServerParameters(
                     command=config.command,

@@ -97,7 +97,16 @@ class AppConfig(BaseSettings):
     request_timeout: float = Field(default=30.0)
     max_messages: int = Field(default=100)
     max_tool_iterations: int = Field(default=25)
-    stream_timeout: float = Field(default=240.0)
+    # Per-chunk inter-token timeout: how long to wait between successive stream
+    # chunks once generation has started.  Raised from 240 → 300 s; fast
+    # models rarely go silent mid-generation, so a 5-minute gap is a safe
+    # signal that something is genuinely stuck.
+    stream_timeout: float = Field(default=300.0)
+    # First-chunk timeout: how long to wait for the *very first* token after
+    # sending a request.  Large accumulated contexts (many tool-call rounds)
+    # can legitimately take much longer to start streaming than a short chat
+    # turn, so this is kept well above stream_timeout.
+    first_chunk_timeout: float = Field(default=600.0)
     model_filters: str = Field(default="")
     profiles_dir: str = Field(default="profiles")
     logs_dir: str = Field(default="logs")
@@ -135,6 +144,9 @@ class AppConfig(BaseSettings):
     api_port: int = Field(default=9734)
     api_profile: str = Field(default="default")
     api_mode: str = Field(default="agent")
+
+    # Default profile loaded on TUI startup (overridden by --profile CLI flag)
+    default_profile: str = Field(default="default")
 
 
 # Global configuration instance

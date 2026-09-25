@@ -48,7 +48,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "request_timeout": 30.0,
         "max_messages": 100,
         "max_tool_iterations": 25,
-        "stream_timeout": 240.0,
+        "stream_timeout": 300.0,
+        "first_chunk_timeout": 600.0,
         "model_filters": "",
         "truncation_max_chars_small": 4000,
         "truncation_max_chars_large": 100000,
@@ -78,6 +79,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "session": {
         "auto_save": True,
         "resume_prompt": True,
+        "default_profile": "default",
     },
     "voice": {
         "whisper_model": "base",
@@ -121,6 +123,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_MAX_MESSAGES": "model_params.max_messages",
     "OLI_MAX_TOOL_ITERATIONS": "model_params.max_tool_iterations",
     "OLI_STREAM_TIMEOUT": "model_params.stream_timeout",
+    "OLI_FIRST_CHUNK_TIMEOUT": "model_params.first_chunk_timeout",
     "OLI_MODEL_FILTERS": "model_params.model_filters",
     "OLI_TRUNCATION_SMALL": "model_params.truncation_max_chars_small",
     "OLI_TRUNCATION_LARGE": "model_params.truncation_max_chars_large",
@@ -135,6 +138,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_API_PORT": "api_server.port",
     "OLI_API_PROFILE": "api_server.profile",
     "OLI_API_MODE": "api_server.mode",
+    "OLI_DEFAULT_PROFILE": "session.default_profile",
     "OLI_PROFILES_DIR": "paths.profiles_dir",
     "OLI_LOGS_DIR": "paths.logs_dir",
     "OLI_VOICE_WHISPER_MODEL": "voice.whisper_model",
@@ -284,6 +288,7 @@ class SettingsManager:
         api = settings.get("api_server", {})
         paths = settings.get("paths", {})
         voice = settings.get("voice", {})
+        ss = settings.get("session", {})
         openai_key = (
             op.get("api_key", "")
             or os.environ.get("OLI_OPENAI_API_KEY", "")
@@ -337,7 +342,8 @@ class SettingsManager:
             request_timeout=mp.get("request_timeout", 30.0),
             max_messages=mp.get("max_messages", 100),
             max_tool_iterations=mp.get("max_tool_iterations", 25),
-            stream_timeout=mp.get("stream_timeout", 240.0),
+            stream_timeout=mp.get("stream_timeout", 300.0),
+            first_chunk_timeout=mp.get("first_chunk_timeout", 600.0),
             model_filters=mp.get("model_filters", ""),
             truncation_max_chars_small=mp.get("truncation_max_chars_small", 4000),
             truncation_max_chars_large=mp.get("truncation_max_chars_large", 100000),
@@ -352,6 +358,7 @@ class SettingsManager:
             api_port=api.get("port", 9734),
             api_profile=api.get("profile", "default"),
             api_mode=api.get("mode", "agent"),
+            default_profile=ss.get("default_profile", "default"),
             profiles_dir=paths.get("profiles_dir", "profiles"),
             logs_dir=paths.get("logs_dir", "logs"),
             voice_whisper_model=voice.get("whisper_model", "base"),
@@ -398,6 +405,7 @@ class SettingsManager:
         settings["model_params"]["max_messages"] = config.max_messages
         settings["model_params"]["max_tool_iterations"] = config.max_tool_iterations
         settings["model_params"]["stream_timeout"] = config.stream_timeout
+        settings["model_params"]["first_chunk_timeout"] = config.first_chunk_timeout
         settings["model_params"]["model_filters"] = config.model_filters
         settings["model_params"][
             "truncation_max_chars_small"
@@ -413,6 +421,7 @@ class SettingsManager:
         settings["api_server"]["port"] = config.api_port
         settings["api_server"]["profile"] = config.api_profile
         settings["api_server"]["mode"] = config.api_mode
+        settings["session"]["default_profile"] = config.default_profile
         settings["paths"]["profiles_dir"] = config.profiles_dir
         settings["paths"]["logs_dir"] = config.logs_dir
         settings["voice"]["whisper_model"] = config.voice_whisper_model

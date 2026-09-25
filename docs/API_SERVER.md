@@ -32,7 +32,7 @@ settings. Four fields are specific to the server:
 | --------------------------------- | --------- | ----------------------------------------------- |
 | `api_host` (`OLI_API_HOST`)       | `0.0.0.0` | Bind address                                    |
 | `api_port` (`OLI_API_PORT`)       | `9734`    | Listen port                                     |
-| `api_profile` (`OLI_API_PROFILE`) | `default` | Profile loaded at startup (mirrors `--profile`) |
+| `api_profile` (`OLI_API_PROFILE`) | `default` | Profile the API server loads at startup (independent of the TUI's `OLI_DEFAULT_PROFILE`) |
 | `api_mode` (`OLI_API_MODE`)       | `agent`   | Mode: `agent` / `ask` / `chat` / `plan`         |
 
 Examples:

@@ -1,5 +1,6 @@
 """Agent execution for the REST chat endpoints."""
 
+import asyncio
 import json
 import logging
 import time
@@ -115,28 +116,60 @@ async def _stream_response(
 
     yield chunk({"role": "assistant", "content": ""})
 
-    error_text: Optional[str] = None
-    async with lock:
-        messages = [_to_message(m) for m in request.messages]
-        try:
-            tools = await _resolve_tools(agent)
-        except Exception as e:
-            logger.warning("Failed to list tools: %s", e)
-            tools = None
-        try:
-            async for event in agent.process(
-                messages, tools=tools, confirm_callback=_api_confirm
-            ):
-                if isinstance(event, StreamChunk):
-                    yield chunk({"content": event.text})
-                elif isinstance(event, AssistantResponse):
-                    yield chunk({"content": event.content})
-                elif isinstance(event, Error):
-                    error_text = event.message
-        except Exception as e:
-            logger.exception("Agent process failed during stream: %s", e)
-            error_text = str(e)
+    # Sentinel object marking end-of-stream on the queue.
+    _END = object()
+    queue: asyncio.Queue = asyncio.Queue()
+    error_holder: Dict[str, Optional[str]] = {"text": None}
 
+    async def _producer() -> None:
+        """Run the agent under the lock and enqueue SSE payloads.
+
+        The lock is held only for the duration of the agent run — not while
+        we're pushing bytes to the (potentially slow) HTTP client. This
+        prevents one stalled consumer from blocking every other API caller
+        that shares this process-wide ``Agent``.
+        """
+        async with lock:
+            messages = [_to_message(m) for m in request.messages]
+            try:
+                tools = await _resolve_tools(agent)
+            except Exception as e:
+                logger.warning("Failed to list tools: %s", e)
+                tools = None
+            try:
+                async for event in agent.process(
+                    messages, tools=tools, confirm_callback=_api_confirm
+                ):
+                    if isinstance(event, StreamChunk):
+                        await queue.put(chunk({"content": event.text}))
+                    elif isinstance(event, AssistantResponse):
+                        await queue.put(chunk({"content": event.content}))
+                    elif isinstance(event, Error):
+                        error_holder["text"] = event.message
+            except Exception as e:
+                logger.exception("Agent process failed during stream: %s", e)
+                error_holder["text"] = str(e)
+
+    producer_task = asyncio.create_task(_producer())
+    # Wire completion to enqueue the sentinel so the consumer loop exits
+    # even if the producer raises unexpectedly.
+    producer_task.add_done_callback(lambda _t: queue.put_nowait(_END))
+
+    try:
+        while True:
+            payload = await queue.get()
+            if payload is _END:
+                break
+            yield payload
+    finally:
+        if not producer_task.done():
+            producer_task.cancel()
+            try:
+                await producer_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    error_text = error_holder["text"]
     if error_text:
         error = {"message": error_text, "type": "server_error", "code": "agent_error"}
         yield "data: " + json.dumps({"error": error}) + "\n\n"

@@ -72,7 +72,7 @@ Practical consequence: permissiveness never propagates downward — a child can 
 
 ## Loading profiles
 
-- **Startup** -- `--profile <name>` (default: `default`)
+- **Startup** -- `--profile <name>` selects the profile; if omitted, the value of `default_profile` in `settings.json` (under `session.default_profile`) is used, falling back to `default`. Set a persistent startup profile via `/config` → **Session & Workspace → Default profile on startup**, or via `OLI_DEFAULT_PROFILE`.
 - **Runtime** -- `/profile load <name>` clears the conversation and prepends the new system message
 - **List** -- `/profile list` shows available profiles
 

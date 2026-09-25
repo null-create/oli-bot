@@ -83,6 +83,7 @@ class MCPServerConfig:
     args: List[str] = field(default_factory=list)
     env: Optional[Dict[str, str]] = None
     url: str = ""
+    api_token: Optional[str] = None
 
 
 @dataclass

@@ -35,10 +35,6 @@ Concretely, that means:
 - **Declarative dispatch, not code-written orchestration.** Sub-agents are defined in `agents.yaml` and addressed through a single `dispatch` tool call. This is a deliberate reliability bet: tool-calling a fixed schema is something small local models handle far more consistently than authoring correct multi-agent orchestration code.
 - **Portable, bundled personas.** Profiles pair a system prompt and permission manifest with drop-in `AGENTS.md`/`SKILLS.md` content, aiming for compatibility with the open Agent Skills spec rather than a bespoke format.
 
-## TUI
-
-![tui-example-1](/docs/assets/example.PNG)
-
 ## Features
 
 - **Declarative sub-agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in an optional [agents.yaml](agents.yaml) file via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
@@ -84,16 +80,16 @@ oli --profile researcher
 
 ### Bundled profiles
 
-| Profile      | Write? | Shell? | Web? | Best for                                     |
-| ------------ | :----: | :----: | :--: | -------------------------------------------- |
-| `default`    |   ✅   |   ✅   |  ✅  | General-purpose tasks                        |
-| `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end              |
-| `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis                |
-| `editor`     |   ✅   |   ❌   |  ❌  | Proofreading, grammar, prose, creative edits |
-| `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose             |
-| `planner`    |   ✅   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans    |
-| `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output     |
-| `analyst`    |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis   |
+| Profile      | Write? | Shell? | Web? | Best for                                   |
+| ------------ | :----: | :----: | :--: | ------------------------------------------ |
+| `default`    |   ✅   |   ✅   |  ✅  | General-purpose tasks                      |
+| `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end            |
+| `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis              |
+| `editor`     |   ✅   |   ❌   |  ❌  | Proofreading, grammar, prose, creative edits|
+| `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose           |
+| `planner`    |   ✅   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans  |
+| `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output   |
+| `analyst`    |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis |
 
 See [docs/PROFILES.md](docs/PROFILES.md) for the full manifest schema, permission layering, and how to create your own.
 
@@ -103,7 +99,7 @@ See [docs/PROFILES.md](docs/PROFILES.md) for the full manifest schema, permissio
 | ---------------------- | ------------------------------------------------------------------------------------------------ |
 | `--model`              | Model to use (inherits from server config if available)                                          |
 | `--url`                | API endpoint URL (defaults to Ollama `http://localhost:11434`)                                   |
-| `--profile`            | Agent profile (default `default`)                                                                |
+| `--profile`            | Agent profile to load on startup. If omitted, reads `session.default_profile` from `settings.json` (set via `/config`), falling back to `default`. |
 | `--resume-last`        | Resume the most recent session on startup (mutually exclusive with `-s`/`--load-session`)        |
 | `-s`, `--load-session` | Load a specific session by UUID on startup (mutually exclusive with `--resume-last`)             |
 | `--dry-run`            | Start in dry-run mode                                                                            |

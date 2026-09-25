@@ -312,7 +312,27 @@ class TransformersBackend(ModelBackend):
                 "streamer": streamer,
             }
 
-            thread = threading.Thread(target=self._model.generate, kwargs=gen_kwargs)
+            # Capture any exception raised inside the generation thread so
+            # we can surface it to the caller — otherwise a crash in
+            # `_model.generate` would silently stop the streamer and the
+            # async generator would yield nothing with no error.
+            gen_error: List[BaseException] = []
+
+            def _run_generate() -> None:
+                try:
+                    self._model.generate(**gen_kwargs)
+                except BaseException as exc:  # noqa: BLE001
+                    gen_error.append(exc)
+                    # Signal end-of-stream to the streamer so the outer loop
+                    # doesn't block forever waiting for tokens that will
+                    # never arrive. TextIteratorStreamer ends when it sees
+                    # its ``stop_signal`` (None by default) on the queue.
+                    try:
+                        streamer.text_queue.put(streamer.stop_signal)
+                    except Exception:
+                        pass
+
+            thread = threading.Thread(target=_run_generate)
             thread.start()
 
             accumulated = ""
@@ -332,6 +352,11 @@ class TransformersBackend(ModelBackend):
                     yield ThinkingChunk(text) if kind == "thinking" else TextChunk(text)
 
             thread.join()
+
+            if gen_error:
+                # Re-raise inside the outer try so the existing except-block
+                # logs and re-raises with proper context.
+                raise gen_error[0]
 
             if tools:
                 if accumulated:
