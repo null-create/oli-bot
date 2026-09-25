@@ -145,6 +145,9 @@ class AppConfig(BaseSettings):
     api_profile: str = Field(default="default")
     api_mode: str = Field(default="agent")
 
+    # Default profile loaded on TUI startup (overridden by --profile CLI flag)
+    default_profile: str = Field(default="default")
+
 
 # Global configuration instance
 configs = AppConfig()

@@ -31,6 +31,10 @@ def init_state(app: FastAPI) -> None:
     app.state.lock = asyncio.Lock()
     app.state.session_store = ConversationStore()
     app.state.workspace_manager = WorkspaceManager()
+    # Per-session-ID locks for the WebSocket endpoint. Serialize turns
+    # against the same session so concurrent connections can't clobber each
+    # other's persisted history (last-write-wins race).
+    app.state.session_locks: dict[str, asyncio.Lock] = {}
 
     # Relay todo-list updates (from ``builtin__todowrite``) to WebSocket
     # clients. The tool manager invokes these synchronously; we just append

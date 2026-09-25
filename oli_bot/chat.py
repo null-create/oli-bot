@@ -2863,8 +2863,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--profile",
-        default="default",
-        help="Agent profile to load from profiles/ (default: default)",
+        default=None,
+        help="Agent profile to load from profiles/ (default: reads 'default_profile' from settings, fallback 'default')",
     )
     resume_group = parser.add_mutually_exclusive_group()
     resume_group.add_argument(
@@ -2908,11 +2908,17 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _build_arg_parser().parse_args()
+    # Resolve profile: CLI flag > settings default_profile > hardcoded "default"
+    profile = args.profile
+    if profile is None:
+        _sm = SettingsManager()
+        _settings = _sm.load()
+        profile = _settings.get("session", {}).get("default_profile", "default") or "default"
     try:
         app = OliBot(
             model=args.model,
             base_url=args.url,
-            profile=args.profile,
+            profile=profile,
             resume_last=args.resume_last,
             load_session=args.load_session,
             dry_run=args.dry_run,

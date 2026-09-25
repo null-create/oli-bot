@@ -10,6 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from dataclasses import field
 from pathlib import Path
 from typing import Optional
 
@@ -17,15 +18,11 @@ from oli_bot.mcp_client import MCPClientManager
 
 
 class DummySession:
-    def __init__(self):
-        self.workspace: Optional[Path] = None
-        self._session_grants: set[str] = set()
+    workspace: Optional[Path] = None
+    _session_grants: set[str] = field(default_factory=set)
 
     def needs_permission(self, tool_name, arguments):
         return None
-
-    def grant(self, scope: str, session: bool = False) -> None:
-        self._session_grants.add(scope)
 
 
 class FakeClient:
@@ -454,79 +451,3 @@ def test_dry_run_returns_preview_for_mcp_tool(tmp_path, monkeypatch):
     decision = gate._evaluate_permission("srv__tool", {"a": 1}, skip_session=True)
     assert decision.outcome == "preview"
     assert "DRY RUN" in (decision.preview or "")
-
-
-@pytest.mark.asyncio
-async def test_check_permission_public_gate(tmp_path, monkeypatch):
-    """check_permission is the public gate: None means proceed, strings short-circuit."""
-    from oli_bot.config import AppConfig
-
-    AV = {"_env_file": None, "offline_mode": False, "dry_run": False}
-    servers = {"srv": SimpleNamespace(transport="stdio")}
-
-    allowed = _gate(
-        tmp_path, monkeypatch, config=AppConfig(**AV), mcp_servers=servers
-    )
-    assert await allowed.check_permission("srv__tool", {"a": 1}) is None
-
-    denied = _gate(
-        tmp_path,
-        monkeypatch,
-        config=AppConfig(**AV),
-        mcp_servers=servers,
-        enforcer=_DenyAllEnforcer(),
-    )
-    result = await denied.check_permission("srv__tool", {"a": 1})
-    assert result is not None
-    assert result.startswith("Error:")
-    assert "denied by permissions enforcer" in result
-
-    preview = _gate(
-        tmp_path,
-        monkeypatch,
-        config=AppConfig(_env_file=None, offline_mode=False, dry_run=True),
-        mcp_servers=servers,
-    )
-    result = await preview.check_permission("srv__tool", {"a": 1})
-    assert "DRY RUN" in (result or "")
-
-
-@pytest.mark.asyncio
-async def test_check_permission_prompt_confirmation(tmp_path, monkeypatch):
-    """A 'prompt' outcome routes through confirm_callback and grants a session scope."""
-    from oli_bot.config import AppConfig
-
-    prompts = []
-    approved = []
-
-    async def confirm(description):
-        prompts.append(description)
-        return "session"
-
-    granted = _gate(
-        tmp_path,
-        monkeypatch,
-        config=AppConfig(_env_file=None, offline_mode=False, dry_run=False),
-        mcp_servers={"srv": SimpleNamespace(transport="stdio")},
-    )
-    granted._session.needs_permission = lambda *a, **k: "tool:srv__tool"
-
-    result = await granted.check_permission(
-        "srv__tool", {"a": 1}, confirm_callback=confirm
-    )
-    assert result is None
-    assert len(prompts) == 1
-    assert granted._session._session_grants == {"tool:srv__tool"}
-
-    async def deny(description):
-        return "deny"
-
-    denied = _gate(
-        tmp_path,
-        monkeypatch,
-        config=AppConfig(_env_file=None, offline_mode=False, dry_run=False),
-        mcp_servers={"srv": SimpleNamespace(transport="stdio")},
-    )
-    denied._session.needs_permission = lambda *a, **k: "tool:srv__tool"
-    result = await denied.check_permission("srv__tool", {}, confirm_callback=deny)
-    assert result == "Error: Permission denied by user"

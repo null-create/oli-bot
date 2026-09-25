@@ -11,8 +11,10 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 if TYPE_CHECKING:
     from .profiles.permissions import ProfilePermissionEnforcer
 
+import httpx2
 from mcp.client import Client
 from mcp.client.stdio import stdio_client, StdioServerParameters
+from mcp.client.streamable_http import streamable_http_client
 
 from .tools.manager import BuiltinToolManager
 from .tools.permissions import PermissionDecision
@@ -121,40 +123,45 @@ class MCPToolManager:
 
     async def check_permission(
         self,
-        name: str,
-        arguments: Dict[str, Any],
+        server_name: str,
+        tool_name: str,
         confirm_callback: Optional[Callable[[str], Any]] = None,
-        permission_enforcer: Optional["ProfilePermissionEnforcer"] = None,
-    ) -> Optional[str]:
+    ) -> str:
+        if self._permission_enforcer is None:
+            return "Error: No permission enforcer configured for MCP tools."
+
+        if not self._mcp_servers or server_name not in self._mcp_servers:
+            return f"Error: Unknown server: {server_name}"
+
         decision = self._evaluate_permission(
-            name,
-            arguments,
-            permission_enforcer=permission_enforcer,
+            tool_name,
+            arguments={},
+            skip_session=False,
+            permission_enforcer=self._permission_enforcer,
         )
-        match decision.outcome:
-            case "deny":
-                return (
-                    f"Error: tool {name} denied by permissions enforcer: "
-                    f"{decision.reason}"
-                )
-            case "preview":
-                return decision.preview
-            case "prompt":
-                if not confirm_callback:
-                    return (
-                        "Error: Permission prompt required but no "
-                        "confirm_callback was provided"
+        if decision.outcome == "deny":
+            return f"Error: tool {tool_name} denied by permissions enforcer"
+        if decision.outcome == "preview":
+            return decision.preview
+        if decision.outcome == "prompt":
+            if not confirm_callback:
+                return "Error: Permission prompt required but no confirm_callback was provided"
+            user = await confirm_callback("prompt")
+            match user:
+                case "once":
+                    pass
+                case "session":
+                    decision = PermissionDecision(
+                        outcome="approve",
+                        reason=f"Permission approved for tool: {tool_name}",
+                        source="user",
+                        scope=f"tool:{tool_name}",
                     )
-                user = await confirm_callback(decision.description)
-                match user:
-                    case "once":
-                        pass
-                    case "session":
-                        if self._session is not None and decision.scope is not None:
-                            self._session.grant(decision.scope, session=True)
-                    case _:
-                        return "Error: Permission denied by user"
-        return None
+                    if self._session is not None:
+                        self._session.grant(decision.scope, session=True)
+                case _:
+                    return "Error: Permission denied by user"
+        return "Permission granted"
 
 
 class MCPClientManager:
@@ -215,6 +222,7 @@ class MCPClientManager:
         env: Optional[Dict[str, str]] = None,
         transport: str = "stdio",
         url: str = "",
+        api_token: Optional[str] = None,
     ) -> None:
         if name in self.servers:
             raise ValueError(f"Server '{name}' already exists")
@@ -225,6 +233,7 @@ class MCPClientManager:
             args=args or [],
             env=env,
             url=url,
+            api_token=api_token,
         )
         self._gate._mcp_servers = self.servers
         self._invalidate_tool_cache(name)
@@ -238,6 +247,7 @@ class MCPClientManager:
         env: Optional[Dict[str, str]] = None,
         transport: str = "stdio",
         url: str = "",
+        api_token: Optional[str] = None,
     ) -> None:
         if name not in self.servers:
             raise ValueError(f"Server '{name}' not found")
@@ -251,6 +261,7 @@ class MCPClientManager:
             args=args or [],
             env=env,
             url=url,
+            api_token=api_token,
         )
         self._gate._mcp_servers = self.servers
         self._invalidate_tool_cache(name)
@@ -340,30 +351,44 @@ class MCPClientManager:
         if server_name not in self.servers:
             return f"Error: Unknown server: {server_name}"
 
-        gate_result = await self._gate.check_permission(
+        decision = self._gate._evaluate_permission(
             tool_name,
-            arguments,
-            confirm_callback=confirm_callback,
+            arguments=arguments,
             permission_enforcer=permission_enforcer,
         )
-        if gate_result is not None:
-            return gate_result
+        match decision.outcome:
+            case "deny":
+                return f"Error: tool {tool_name} denied by permissions enforcer: {decision.reason}"
+            case "preview":
+                return decision.preview
+            case "prompt":
+                if not confirm_callback:
+                    return "Error: Permission prompt required but no confirm_callback was provided"
+                user = await confirm_callback("prompt")
+                match user:
+                    case "once":
+                        pass
+                    case "session":
+                        decision = PermissionDecision(
+                            outcome="approve",
+                            reason=f"Permission approved for tool: {tool_name}",
+                            source="user",
+                            scope=f"tool:{tool_name}",
+                        )
+                        if self._session is not None:
+                            self._session.grant(decision.scope, session=True)
+                    case _:
+                        return "Error: Permission denied by user"
 
-        # If the decision is "Permission granted", proceed to call the tool
-        try:
-            client = await self._get_client(server_name)
-            result = await client.call_tool(actual_name, arguments)
-            text = "".join(c.text for c in result.content if hasattr(c, "text"))
-            if not text and result.structured_content is not None:
-                text = str(result.structured_content)
-            if result.is_error:
-                return f"Error: {text or result.content}"
-            return text or str(result.content)
-        except Exception as e:
-            msg = f"Failed to call tool '{tool_name}': {e}"
-            logger.warning(msg)
-            self._warnings.append(msg)
-            return f"Error: {msg}"
+        # Call the tool on the appropriate MCP server.
+        client = await self._get_client(server_name)
+        result = await client.call_tool(actual_name, arguments)
+        text = "".join(c.text for c in result.content if hasattr(c, "text"))
+        if not text and result.structured_content is not None:
+            text = str(result.structured_content)
+        if result.is_error:
+            return f"Error: {text or result.content}"
+        return text or str(result.content)
 
     def drain_builtin_attachments(self) -> tuple:
         """Return (attachments, caption) produced by the last builtin tool call."""
@@ -382,7 +407,20 @@ class MCPClientManager:
                 )
 
             if config.transport == "http":
-                client = await self._exit_stack.enter_async_context(Client(config.url))
+                if config.api_token:
+                    http_client = httpx2.AsyncClient(
+                        headers={"Authorization": f"Bearer {config.api_token}"}
+                    )
+                    # Register the httpx client with the exit stack so its
+                    # connection pool is closed on ``disconnect_all()`` —
+                    # the wrapping MCP ``Client`` doesn't own the injected
+                    # transport client's lifecycle.
+                    await self._exit_stack.enter_async_context(http_client)
+                    client = await self._exit_stack.enter_async_context(
+                        Client(streamable_http_client(config.url, http_client=http_client))
+                    )
+                else:
+                    client = await self._exit_stack.enter_async_context(Client(config.url))
             else:
                 params = StdioServerParameters(
                     command=config.command,

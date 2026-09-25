@@ -79,6 +79,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "session": {
         "auto_save": True,
         "resume_prompt": True,
+        "default_profile": "default",
     },
     "voice": {
         "whisper_model": "base",
@@ -137,6 +138,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_API_PORT": "api_server.port",
     "OLI_API_PROFILE": "api_server.profile",
     "OLI_API_MODE": "api_server.mode",
+    "OLI_DEFAULT_PROFILE": "session.default_profile",
     "OLI_PROFILES_DIR": "paths.profiles_dir",
     "OLI_LOGS_DIR": "paths.logs_dir",
     "OLI_VOICE_WHISPER_MODEL": "voice.whisper_model",
@@ -286,6 +288,7 @@ class SettingsManager:
         api = settings.get("api_server", {})
         paths = settings.get("paths", {})
         voice = settings.get("voice", {})
+        ss = settings.get("session", {})
         openai_key = (
             op.get("api_key", "")
             or os.environ.get("OLI_OPENAI_API_KEY", "")
@@ -355,6 +358,7 @@ class SettingsManager:
             api_port=api.get("port", 9734),
             api_profile=api.get("profile", "default"),
             api_mode=api.get("mode", "agent"),
+            default_profile=ss.get("default_profile", "default"),
             profiles_dir=paths.get("profiles_dir", "profiles"),
             logs_dir=paths.get("logs_dir", "logs"),
             voice_whisper_model=voice.get("whisper_model", "base"),
@@ -417,6 +421,7 @@ class SettingsManager:
         settings["api_server"]["port"] = config.api_port
         settings["api_server"]["profile"] = config.api_profile
         settings["api_server"]["mode"] = config.api_mode
+        settings["session"]["default_profile"] = config.default_profile
         settings["paths"]["profiles_dir"] = config.profiles_dir
         settings["paths"]["logs_dir"] = config.logs_dir
         settings["voice"]["whisper_model"] = config.voice_whisper_model

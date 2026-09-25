@@ -342,4 +342,4 @@ def test_runtime_settings_sync_covers_all_appconfig_fields(tmp_path):
             cfg, field_name
         ), f"Field {field_name} was omitted by OliBot._sync_settings_from_runtime"
     assert bot.settings["workspace"] == {"max_workspaces": 37}
-    assert bot.settings["session"] == {"auto_save": False, "resume_prompt": False}
+    assert bot.settings["session"] == {"auto_save": False, "resume_prompt": False, "default_profile": "default"}

@@ -56,6 +56,7 @@ If `~/.config/oli/settings.json` does not exist, it is auto-created on first loa
 | `offline_mode`               | `true`                                 | `OLI_OFFLINE_MODE`             | Block network access for web tools and MCP servers                                                                                                |
 | `log_file`                   | `logs/backend.ndjson`                  | `OLI_LOG_FILE`                 | Path for NDJSON backend log file                                                                                                                  |
 | `log_level`                  | `INFO`                                 | `OLI_LOG_LEVEL`                | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR`                                                                                                |
+| `default_profile`            | `default`                              | `OLI_DEFAULT_PROFILE`          | Profile loaded on TUI startup when `--profile` is not passed; set persistently via `/config` → Session & Workspace                                |
 | `voice_whisper_model`        | `base`                                 | `OLI_VOICE_WHISPER_MODEL`      | faster-whisper model size: `tiny`/`base`/`small`/`medium`/`large`                                                                                 |
 | `voice_piper_model`          | `en_US-lessac-medium.onnx`             | `OLI_VOICE_PIPER_MODEL`        | Path to the local Piper TTS `.onnx` model file                                                                                                    |
 | `voice_sample_rate`          | `16000`                                | `OLI_VOICE_SAMPLE_RATE`        | Mic sample rate in Hz (required by WebRTC VAD)                                                                                                    |
@@ -89,6 +90,13 @@ python chat.py
 ## Sessions
 
 Conversations are automatically saved as JSON under `~/.config/oli/sessions/<server>/`. On startup without `--resume-last` or `--load-session`, if a previous session exists you'll be prompted to resume or start fresh. Manage sessions at runtime via `/sessions`.
+
+The profile loaded at startup is determined by this priority order:
+
+1. `--profile <name>` CLI flag (always wins when provided)
+2. `session.default_profile` in `~/.config/oli/settings.json` (set via `/config` → **Session & Workspace**)
+3. `OLI_DEFAULT_PROFILE` environment variable
+4. Hardcoded fallback: `default`
 
 ## Workspace
 

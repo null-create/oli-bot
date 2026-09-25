@@ -101,6 +101,12 @@ class MCPSetupScreen(ModalScreen[Optional[Dict[str, Any]]]):
                     id="mcp-url",
                     classes="mcp-input",
                 )
+                yield Input(
+                    placeholder="API token (optional, sent as Bearer auth header)",
+                    id="mcp-api-token",
+                    classes="mcp-input",
+                    password=True,
+                )
             with Container(id="mcp-stdio-fields"):
                 yield Input(
                     placeholder="Command (e.g., python, npx)",
@@ -140,6 +146,7 @@ class MCPSetupScreen(ModalScreen[Optional[Dict[str, Any]]]):
             rs.index = 1
             self._form.classes = "transport-http"
             self.query_one("#mcp-url", Input).value = existing.get("url", "")
+            self.query_one("#mcp-api-token", Input).value = existing.get("api_token") or ""
         else:
             rs.index = 0
             self._form.classes = "transport-stdio"
@@ -173,11 +180,13 @@ class MCPSetupScreen(ModalScreen[Optional[Dict[str, Any]]]):
                 if not url:
                     self._show_error("URL is required for HTTP transport")
                     return
+                api_token = self.query_one("#mcp-api-token", Input).value.strip() or None
                 self.dismiss(
                     {
                         "name": name,
                         "transport": "http",
                         "url": url,
+                        "api_token": api_token,
                     }
                 )
             else:

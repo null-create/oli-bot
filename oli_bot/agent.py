@@ -385,6 +385,14 @@ class Agent:
                 yield Error(err_text)
                 yield Done(full_text="")
                 return
+            finally:
+                # Always close the backend stream so sockets/tasks held by
+                # the underlying async generator are released — even on
+                # timeout, error, or normal completion.
+                try:
+                    await stream.aclose()
+                except Exception:
+                    pass
 
             if not tool_calls:
                 if run_usage.total_tokens:
@@ -435,6 +443,7 @@ class Agent:
                             permission_enforcer=self.permission_enforcer,
                         )
                 except Exception as e:
+                    logger.exception("Tool call '%s' failed", tc.name)
                     result = f"Error: {e}"
                 yield ToolCallResult(name=tc.name, result=result)
                 messages.append(
@@ -508,6 +517,12 @@ class Agent:
                         yield event
                 else:
                     getter.cancel()
+                    # Finalize the cancellation so the task is fully unwound
+                    # and doesn't linger in asyncio's task registry.
+                    try:
+                        await getter
+                    except (asyncio.CancelledError, Exception):
+                        pass
         finally:
             self.mcp_manager.sub_agent_queue = None
         result_holder[0] = task.result()
@@ -520,6 +535,7 @@ class Agent:
         full_response = ""
         errored = False
         usage = Usage()
+        stream = None
         try:
             # Forward tools so backends that require a matching tool schema
             # for any toolUse/toolResult blocks in history (e.g. Bedrock via
@@ -560,14 +576,19 @@ class Agent:
             )
             errored = True
             yield Error(err_text)
-            errored = True
-            yield Error(err_text)
         except Exception as e:
             err_text = f"Error: {e}"
             logger.exception("Streaming failed: %s", e)
             errored = True
             yield Error(err_text)
         finally:
+            # Release backend stream resources (sockets, background tasks)
+            # regardless of whether we exited via success, timeout, or error.
+            if stream is not None:
+                try:
+                    await stream.aclose()
+                except Exception:
+                    pass
             if errored:
                 # Keep error text out of persisted history; the Error event
                 # already drove the red UI panel.
