@@ -123,45 +123,45 @@ class MCPToolManager:
 
     async def check_permission(
         self,
-        server_name: str,
-        tool_name: str,
+        name: str,
+        arguments: Dict[str, Any],
         confirm_callback: Optional[Callable[[str], Any]] = None,
-    ) -> str:
-        if self._permission_enforcer is None:
-            return "Error: No permission enforcer configured for MCP tools."
+        permission_enforcer: Optional["ProfilePermissionEnforcer"] = None,
+    ) -> Optional[str]:
+        """Gate an external MCP tool call.
 
-        if not self._mcp_servers or server_name not in self._mcp_servers:
-            return f"Error: Unknown server: {server_name}"
-
+        Returns ``None`` when the call is allowed, otherwise the message to hand
+        back to the model in place of the tool result.
+        """
         decision = self._evaluate_permission(
-            tool_name,
-            arguments={},
-            skip_session=False,
-            permission_enforcer=self._permission_enforcer,
+            name,
+            arguments,
+            permission_enforcer=permission_enforcer,
         )
-        if decision.outcome == "deny":
-            return f"Error: tool {tool_name} denied by permissions enforcer"
-        if decision.outcome == "preview":
-            return decision.preview
-        if decision.outcome == "prompt":
-            if not confirm_callback:
-                return "Error: Permission prompt required but no confirm_callback was provided"
-            user = await confirm_callback("prompt")
-            match user:
-                case "once":
-                    pass
-                case "session":
-                    decision = PermissionDecision(
-                        outcome="approve",
-                        reason=f"Permission approved for tool: {tool_name}",
-                        source="user",
-                        scope=f"tool:{tool_name}",
+        match decision.outcome:
+            case "deny":
+                return (
+                    f"Error: tool {name} denied by permissions enforcer: "
+                    f"{decision.reason}"
+                )
+            case "preview":
+                return decision.preview
+            case "prompt":
+                if not confirm_callback:
+                    return (
+                        "Error: Permission prompt required but no "
+                        "confirm_callback was provided"
                     )
-                    if self._session is not None:
-                        self._session.grant(decision.scope, session=True)
-                case _:
-                    return "Error: Permission denied by user"
-        return "Permission granted"
+                user = await confirm_callback(decision.description)
+                match user:
+                    case "once":
+                        pass
+                    case "session":
+                        if self._session is not None and decision.scope is not None:
+                            self._session.grant(decision.scope, session=True)
+                    case _:
+                        return "Error: Permission denied by user"
+        return None
 
 
 class MCPClientManager:
@@ -200,8 +200,8 @@ class MCPClientManager:
         self._tool_cache: Dict[str, List[Dict[str, Any]]] = {}
         # Session object for permission checks. May be None if no session is active.
         self._session: Optional["Session"] = session
-        # MCPToolManger for profile-based permission enforcement.
-        # TODO: Not initialized with enforcer; should be replaced with a real one if available.
+        # MCPToolManager for external MCP tool permission gating. The profile
+        # enforcer is passed per call by the agent, so none is bound here.
         self._gate = MCPToolManager(
             config=config,
             session=self._session,
@@ -351,44 +351,30 @@ class MCPClientManager:
         if server_name not in self.servers:
             return f"Error: Unknown server: {server_name}"
 
-        decision = self._gate._evaluate_permission(
+        gate_result = await self._gate.check_permission(
             tool_name,
-            arguments=arguments,
+            arguments,
+            confirm_callback=confirm_callback,
             permission_enforcer=permission_enforcer,
         )
-        match decision.outcome:
-            case "deny":
-                return f"Error: tool {tool_name} denied by permissions enforcer: {decision.reason}"
-            case "preview":
-                return decision.preview
-            case "prompt":
-                if not confirm_callback:
-                    return "Error: Permission prompt required but no confirm_callback was provided"
-                user = await confirm_callback("prompt")
-                match user:
-                    case "once":
-                        pass
-                    case "session":
-                        decision = PermissionDecision(
-                            outcome="approve",
-                            reason=f"Permission approved for tool: {tool_name}",
-                            source="user",
-                            scope=f"tool:{tool_name}",
-                        )
-                        if self._session is not None:
-                            self._session.grant(decision.scope, session=True)
-                    case _:
-                        return "Error: Permission denied by user"
+        if gate_result is not None:
+            return gate_result
 
         # Call the tool on the appropriate MCP server.
-        client = await self._get_client(server_name)
-        result = await client.call_tool(actual_name, arguments)
-        text = "".join(c.text for c in result.content if hasattr(c, "text"))
-        if not text and result.structured_content is not None:
-            text = str(result.structured_content)
-        if result.is_error:
-            return f"Error: {text or result.content}"
-        return text or str(result.content)
+        try:
+            client = await self._get_client(server_name)
+            result = await client.call_tool(actual_name, arguments)
+            text = "".join(c.text for c in result.content if hasattr(c, "text"))
+            if not text and result.structured_content is not None:
+                text = str(result.structured_content)
+            if result.is_error:
+                return f"Error: {text or result.content}"
+            return text or str(result.content)
+        except Exception as e:
+            msg = f"Failed to call tool '{tool_name}': {e}"
+            logger.warning(msg)
+            self._warnings.append(msg)
+            return f"Error: {msg}"
 
     def drain_builtin_attachments(self) -> tuple:
         """Return (attachments, caption) produced by the last builtin tool call."""
@@ -417,10 +403,14 @@ class MCPClientManager:
                     # transport client's lifecycle.
                     await self._exit_stack.enter_async_context(http_client)
                     client = await self._exit_stack.enter_async_context(
-                        Client(streamable_http_client(config.url, http_client=http_client))
+                        Client(
+                            streamable_http_client(config.url, http_client=http_client)
+                        )
                     )
                 else:
-                    client = await self._exit_stack.enter_async_context(Client(config.url))
+                    client = await self._exit_stack.enter_async_context(
+                        Client(config.url)
+                    )
             else:
                 params = StdioServerParameters(
                     command=config.command,
