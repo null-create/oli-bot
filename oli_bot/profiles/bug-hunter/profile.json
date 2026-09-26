@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "name": "bug-hunter",
+  "version": "0.1.0",
+  "description": "",
+  "default_model_tier": "large",
+  "required_tools": [
+    "builtin__run_command",
+    "builtin__read_file",
+    "builtin__write_file",
+    "builtin__glob",
+    "builtin__grep",
+    "builtin__list_directory",
+    "builtin__tree",
+    "builtin__think",
+    "builtin__todowrite",
+    "builtin__notebook",
+    "builtin__websearch",
+    "builtin__fetch",
+    "builtin__search_github"
+  ],
+  "base": null,
+  "permissions": {
+    "allow_tools": [
+      "builtin__*"
+    ],
+    "deny_tools": []
+  }
+}
