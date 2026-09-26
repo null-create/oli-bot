@@ -2,8 +2,6 @@ import json
 import logging
 from contextlib import AsyncExitStack
 
-from oli_bot.config import AppConfig
-
 from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
@@ -16,6 +14,7 @@ from mcp.client import Client
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.streamable_http import streamable_http_client
 
+from .config import AppConfig
 from .tools.manager import BuiltinToolManager
 from .tools.permissions import PermissionDecision
 from .profiles.permissions import ProfilePermissionEnforcer
