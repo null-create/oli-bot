@@ -301,7 +301,9 @@ async def _view_image_handler(
     )
 
 
-def _decode_and_downscale(raw: bytes, max_edge_px: int):
+def _decode_and_downscale(
+    raw: bytes, max_edge_px: int
+) -> tuple[bytes, str, int, int, str]:
     img = Image.open(io.BytesIO(raw))
     img.load()
     orig_fmt = (img.format or "").upper() or "UNKNOWN"

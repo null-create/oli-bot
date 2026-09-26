@@ -40,7 +40,9 @@ def register_tools(manager: BuiltinToolManager) -> None:
     )
 
 
-def _compare_handler(target_a, target_b, mode="file", ignore_whitespace=False):
+def _compare_handler(
+    target_a: str, target_b: str, mode: str = "file", ignore_whitespace: bool = False
+) -> str:
     path_a = Path(target_a).expanduser().resolve()
     path_b = Path(target_b).expanduser().resolve()
     if not path_a.exists():
