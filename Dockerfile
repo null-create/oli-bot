@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create directories for logs and workspaces
-RUN mkdir -p /app/logs /workspace/logs
+RUN mkdir -p /app/logs
 
 # ── PyTorch (CPU-only) ────────────────────────────────────────────────────────
 # Install CPU-only PyTorch so the much larger CUDA build (~1.7 GB) is never
