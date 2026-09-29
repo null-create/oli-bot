@@ -177,6 +177,10 @@ class Agent:
         return self._profile_data
 
     @property
+    def profile_manager(self) -> ProfileManager:
+        return self._profile_manager
+
+    @property
     def permission_enforcer(self) -> ProfilePermissionEnforcer | None:
         if self._profile_data is not None:
             return self._profile_data.permission_enforcer

@@ -606,7 +606,12 @@ def _is_command_allowed(
     return None
 
 
-async def _run_command_handler(command, timeout=30, workdir=None, workspace=None):
+async def _run_command_handler(
+    command: str,
+    timeout: int = 30,
+    workdir: Optional[str] = None,
+    workspace: Optional[Path] = None,
+) -> str:
     not_allowed = _is_command_allowed(command, workspace=workspace)
     if not_allowed:
         return not_allowed
