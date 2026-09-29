@@ -103,6 +103,9 @@ async def update_config(request: Request, flat: Dict[str, Any]) -> Any:
     settings, so secrets/env-driven values untouched by the UI are preserved.
     The running agent is not rebuilt; restart the server for changes to take
     effect.
+
+    ``api_profile`` is the exception: it is only persisted here, and swapping
+    the live agent's profile needs ``PUT /v1/profiles/{name}``.
     """
     manager = SettingsManager()
     settings = _flat_to_nested(flat, manager.load())

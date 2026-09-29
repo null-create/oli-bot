@@ -336,8 +336,16 @@ curl -X PUT http://localhost:9734/v1/config \
 ```
 
 On validation failure it returns HTTP 422 with `{"error": {"message":
-"Invalid config: ..."}}`. Note the running agent is **not** rebuilt — restart the
-server for config changes to take effect.
+"Invalid config: ..."}}`.
+
+Most keys here require a restart: the write updates `settings.json` and the
+in-memory `AppConfig`, but the running agent is **not** rebuilt, so values baked
+into it at startup (backend selection, model, MCP wiring) keep their old values
+until the process restarts.
+
+The one exception is `api_profile`, which this endpoint only *persists*. To
+actually switch the live agent's profile use `PUT /v1/profiles/{name}` below,
+which takes effect on the next turn without a restart.
 
 ### `GET/POST /v1/mcp` and `PUT/DELETE /v1/mcp/{name}`
 
@@ -419,11 +427,11 @@ curl -X PUT http://localhost:9734/v1/profiles/coder
 The swap is serialized on the same process-wide lock as the chat endpoints, so a
 profile never changes mid-stream, and it takes effect on the next turn — the
 agent reads its system prompt from the loaded profile per turn rather than
-caching it at construction, so no restart is needed (unlike `PUT /v1/config`,
-which only persists). The selection is written to `settings.json` under
-`api_server.profile`, so a restart resumes on the same profile. An unknown name
-returns HTTP 404 with the usual `{"error": {"message": ...}}` body and leaves
-the active profile untouched.
+caching it at construction, so no restart is needed. The selection is written to
+`settings.json` under `api_server.profile`, so a restart resumes on the same
+profile and a plain `PUT /v1/config {"api_profile": ...}` is unnecessary. An
+unknown name returns HTTP 404 with the usual `{"error": {"message": ...}}` body
+and leaves the active profile untouched.
 
 Note the agent is a process-global singleton, so a switch applies to **every**
 connected client, not just the one that requested it. Switching also leaves any
