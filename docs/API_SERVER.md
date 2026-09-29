@@ -377,6 +377,60 @@ curl -X POST http://localhost:9734/v1/mcp \
   -d '{"name": "filesystem", "command": "/usr/local/bin/mcp-fs"}'
 ```
 
+### `GET /v1/profiles` and `PUT /v1/profiles/{name}`
+
+Lists the agent profiles found in the profiles directory and selects which one
+the shared agent runs as. Backs the browser UI's profile chip in the status bar
+(click `:: default` to pick a persona) and mirrors the TUI's `/profile list` and
+`/profile load <name>` commands.
+
+`GET /v1/profiles` returns one entry per profile directory, each with its
+manifest metadata and an `active` flag that is true for exactly one of them:
+
+```bash
+curl http://localhost:9734/v1/profiles
+```
+
+```json
+[
+  {
+    "name": "coder",
+    "active": true,
+    "description": "",
+    "version": "0.1.0",
+    "default_model_tier": "large",
+    "allow_tools": ["builtin__*"],
+    "deny_tools": []
+  }
+]
+```
+
+A profile whose manifest can't be resolved (e.g. a circular `base` chain) is
+still listed, with its `description` set to `unavailable: <reason>` and empty
+metadata, so one bad directory doesn't break the menu.
+
+`PUT /v1/profiles/{name}` makes that profile active and returns the same summary
+shape with `active: true`:
+
+```bash
+curl -X PUT http://localhost:9734/v1/profiles/coder
+```
+
+The swap is serialized on the same process-wide lock as the chat endpoints, so a
+profile never changes mid-stream, and it takes effect on the next turn — the
+agent reads its system prompt from the loaded profile per turn rather than
+caching it at construction, so no restart is needed (unlike `PUT /v1/config`,
+which only persists). The selection is written to `settings.json` under
+`api_server.profile`, so a restart resumes on the same profile. An unknown name
+returns HTTP 404 with the usual `{"error": {"message": ...}}` body and leaves
+the active profile untouched.
+
+Note the agent is a process-global singleton, so a switch applies to **every**
+connected client, not just the one that requested it. Switching also leaves any
+in-flight conversation history intact; clients that want a clean slate under
+the new persona should follow up with `{"action": "clear"}` on `/v1/chat`, which
+is what the TUI's `/profile load` does.
+
 ## Behavior notes
 
 - **Workspace** — the agent's workspace defaults to the process CWD unless the
@@ -387,6 +441,10 @@ curl -X POST http://localhost:9734/v1/mcp \
 - **Modes** — in `ask` / `plan` modes only read-only tools are exposed (plus
   MCP limits per mode); in `chat` mode no tools are offered at all. The mode also
   shapes the system prompt, exactly as in the TUI.
+- **Profiles** — `PUT /v1/profiles/{name}` mutates the single shared `Agent`, so
+  the new system prompt and tool permissions apply process-wide from the next
+  turn on, across every open WebSocket and in-flight request queue. There is no
+  per-session profile isolation.
 - **Concurrency** — requests are serialized on a process-wide lock; there is no
   horizontal multiplexing. For concurrent consumers, run multiple `oli-server`
   processes.
