@@ -25,16 +25,6 @@
 
 A lightweight, terminal-based AI agent harness for local-first, vendor-agnostic setups: bundled/drop-in personas with scoped tool sets, MCP extensibility, and configurable agent pools the root agent can delegate to at runtime.
 
-## Why oli
-
-Most agent harnesses today sit at one of a few extremes: single-agent skill runners with no delegation story, programmatic multi-agent orchestration that depends on a frontier model writing its own orchestration code, or production infrastructure platforms built around always-on gateways and cloud providers. oli is built for a narrower, specific case: **an interactive terminal session, running local models by default, where sub-agents are configurable, declarative, and inspectable.**
-
-Concretely, that means:
-
-- **Local-model-first, vendor-agnostic by design.** Ollama is the default backend. OpenAI, HuggingFace, and local Transformers backends are supported as peers, not afterthoughts — and pool entries can mix all of them in a single run.
-- **Declarative dispatch, not code-written orchestration.** Sub-agents are defined in `agents.yaml` and addressed through a single `dispatch` tool call. This is a deliberate reliability bet: tool-calling a fixed schema is something small local models handle far more consistently than authoring correct multi-agent orchestration code.
-- **Portable, bundled personas.** Profiles pair a system prompt and permission manifest with drop-in `AGENTS.md`/`SKILLS.md` content, aiming for compatibility with the open Agent Skills spec rather than a bespoke format.
-
 ## Features
 
 - **Declarative sub-agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in an optional [agents.yaml](agents.yaml) file via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
@@ -80,33 +70,33 @@ oli --profile researcher
 
 ### Bundled profiles
 
-| Profile      | Write? | Shell? | Web? | Best for                                   |
-| ------------ | :----: | :----: | :--: | ------------------------------------------ |
-| `default`    |   ✅   |   ✅   |  ✅  | General-purpose tasks                      |
-| `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end            |
-| `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis              |
-| `editor`     |   ✅   |   ❌   |  ❌  | Proofreading, grammar, prose, creative edits|
-| `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose           |
-| `planner`    |   ✅   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans  |
-| `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output   |
-| `analyst`    |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis |
+| Profile      | Write? | Shell? | Web? | Best for                                     |
+| ------------ | :----: | :----: | :--: | -------------------------------------------- |
+| `default`    |   ✅   |   ✅   |  ✅  | General-purpose tasks                        |
+| `coder`      |   ✅   |   ✅   |  ✅  | Software development end-to-end              |
+| `reviewer`   |   ❌   |   ✅   |  ❌  | Code review, quality analysis                |
+| `editor`     |   ✅   |   ❌   |  ❌  | Proofreading, grammar, prose, creative edits |
+| `writer`     |   ✅   |   ❌   |  ✅  | Docs, READMEs, changelogs, prose             |
+| `planner`    |   ✅   |   ❌   |  ✅  | Roadmaps, task decomposition, saved plans    |
+| `researcher` |   ❌   |   ❌   |  ✅  | Web research with structured JSON output     |
+| `analyst`    |   ❌   |   ❌   |  ✅  | Cross-source claim extraction and analysis   |
 
 See [docs/PROFILES.md](docs/PROFILES.md) for the full manifest schema, permission layering, and how to create your own.
 
 ### CLI flags
 
-| Flag                   | Description                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `--model`              | Model to use (inherits from server config if available)                                          |
-| `--url`                | API endpoint URL (defaults to Ollama `http://localhost:11434`)                                   |
+| Flag                   | Description                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--model`              | Model to use (inherits from server config if available)                                                                                            |
+| `--url`                | API endpoint URL (defaults to Ollama `http://localhost:11434`)                                                                                     |
 | `--profile`            | Agent profile to load on startup. If omitted, reads `session.default_profile` from `settings.json` (set via `/config`), falling back to `default`. |
-| `--resume-last`        | Resume the most recent session on startup (mutually exclusive with `-s`/`--load-session`)        |
-| `-s`, `--load-session` | Load a specific session by UUID on startup (mutually exclusive with `--resume-last`)             |
-| `--dry-run`            | Start in dry-run mode                                                                            |
-| `--offline`            | Force offline mode ON (already the default)                                                      |
-| `--no-offline`         | Start with offline mode OFF                                                                      |
-| `--verify-offline`     | Startup diagnostic -- warn if outbound calls are configured                                      |
-| `--use-pool`           | Enable agent pooling (root agent can dispatch tasks to sub-agents in [agents.yaml](agents.yaml)) |
+| `--resume-last`        | Resume the most recent session on startup (mutually exclusive with `-s`/`--load-session`)                                                          |
+| `-s`, `--load-session` | Load a specific session by UUID on startup (mutually exclusive with `--resume-last`)                                                               |
+| `--dry-run`            | Start in dry-run mode                                                                                                                              |
+| `--offline`            | Force offline mode ON (already the default)                                                                                                        |
+| `--no-offline`         | Start with offline mode OFF                                                                                                                        |
+| `--verify-offline`     | Startup diagnostic -- warn if outbound calls are configured                                                                                        |
+| `--use-pool`           | Enable agent pooling (root agent can dispatch tasks to sub-agents in [agents.yaml](agents.yaml))                                                   |
 
 Running with no session flags always starts a new session. On exit, the app
 prints a hint (`Resume this session with: -s <uuid> or --resume-last`) so you
