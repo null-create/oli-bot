@@ -42,6 +42,7 @@ def create_model_backend(
     elif backend_type == "ollama":
         return OllamaBackend(
             base_url=base_url or url or configs.ollama_base_url,
+            ctx_size=configs.ollama_context_window,
             model=model or configs.ollama_model,
         )
 
