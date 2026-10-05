@@ -325,7 +325,7 @@ class SettingsManager:
             ollama_base_url=ol.get("base_url", "http://localhost:11434"),
             ollama_model=ol.get("large_model", ""),
             ollama_small_model=ol.get("small_model", ""),
-            ollama_context_window=ol.get("context_window", 8192),
+            ollama_ctx_size=ol.get("context_window", 8192),
             huggingface_base_url=hf.get(
                 "base_url", "https://api-inference.huggingface.co"
             ),
@@ -387,7 +387,7 @@ class SettingsManager:
         settings["ollama"]["base_url"] = config.ollama_base_url
         settings["ollama"]["large_model"] = config.ollama_model
         settings["ollama"]["small_model"] = config.ollama_small_model
-        settings["ollama"]["context_window"] = config.ollama_context_window
+        settings["ollama"]["context_window"] = config.ollama_ctx_size
         settings["huggingface"]["base_url"] = config.huggingface_base_url
         settings["huggingface"]["api_key"] = config.huggingface_api_key
         settings["huggingface"]["large_model"] = config.huggingface_model
