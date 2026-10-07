@@ -53,6 +53,7 @@ class AppConfig(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_model: str = Field(default="ollama")
     ollama_small_model: str = Field(default="")
+    ollama_ctx_size: int = Field(default=8192)
 
     # Hugging Face
     huggingface_base_url: str = Field(default="https://api-inference.huggingface.co")

@@ -17,7 +17,7 @@ from typing import Optional
 
 from art import text2art
 from rich import box
-from rich.console import Group
+from rich.console import Group, RenderableType
 from rich.markdown import Markdown
 from rich.markup import escape as rich_escape
 from rich.padding import Padding
@@ -114,6 +114,113 @@ COMMANDS = (
     "/dry-run",
     "/voice",
 )
+
+# Max chars of tool arguments folded into a restored one-line tool summary
+_TOOL_SUMMARY_LEN = 120
+
+
+def _collapse(text: str) -> str:
+    """Collapse whitespace and trim a string for one-line tool summaries."""
+    one_line = " ".join(str(text).split())
+    if len(one_line) > _TOOL_SUMMARY_LEN:
+        return one_line[: _TOOL_SUMMARY_LEN - 1] + "…"
+    return one_line
+
+
+def _history_entries(
+    messages: list[Message],
+) -> list[tuple[str, str, RenderableType, str | None]]:
+    """Collapse persisted messages into scrollback entries for restore.
+
+    Returns ``(role, plain_text, body, timestamp)`` tuples. ``body`` is
+    always safe to hand to Rich/Textual (prose is wrapped in ``Markdown``,
+    tool summaries escape every substituted fragment); ``plain_text`` stays
+    unescaped for clipboard copy. Each tool call is merged with its result
+    into a single ``Tool Result`` line so restored history matches the live
+    one-line-per-call rendering, and the (potentially huge) result body is
+    never mounted.
+    """
+    entries: list[tuple[str, str, RenderableType, str | None]] = []
+    # Tool calls seen but not yet matched by a role=tool message, in order.
+    pending: list[dict] = []
+
+    def flush() -> None:
+        for item in pending:
+            plain = f"{item['name']} {item['args']}".strip()
+            body = (
+                f"[dim]◐[/dim] [bold]{rich_escape(item['name'])}[/bold]"
+                f"  [dim]· {rich_escape(_collapse(item['args']))}[/dim]"
+                if item["args"]
+                else f"[dim]◐[/dim] [bold]{rich_escape(item['name'])}[/bold]"
+            )
+            entries.append(("Tool Call", plain, body, item["ts"]))
+        pending.clear()
+
+    for msg in messages:
+        if msg.role == "system":
+            continue
+        if msg.role == "tool":
+            result_text = str(msg.content or "")
+            failed = result_text.lstrip().startswith("Error")
+            match = next(
+                (p for p in pending if p["id"] and p["id"] == msg.tool_call_id),
+                None,
+            )
+            if match is not None:
+                name = match["name"]
+                args = match["args"]
+            else:
+                name = str(msg.name or "tool")
+                args = ""
+            icon = "[red]✗[/red]" if failed else "[green]✓[/green]"
+            plain = name
+            if args:
+                plain = f"{name} {args}"
+                body = (
+                    f"{icon} [bold]{rich_escape(name)}[/bold]"
+                    f"  [dim]· {rich_escape(_collapse(args))}[/dim]"
+                )
+            else:
+                body = f"{icon} [bold]{rich_escape(name)}[/bold]"
+            if failed:
+                reason = _collapse(result_text)
+                plain = f"{plain}\n{reason}"
+                body += f"  [red]{rich_escape(reason)}[/red]"
+            entries.append(("Tool Result", plain, body, msg.timestamp))
+            if match is not None:
+                pending.remove(match)
+            continue
+
+        # Any non-tool message ends the current tool sequence.
+        flush()
+
+        if msg.role == "user":
+            content = str(msg.content or "")
+            entries.append(("You", content, Markdown(content), msg.timestamp))
+        elif msg.role == "assistant":
+            content = str(msg.content or "")
+            if content.strip():
+                entries.append(
+                    ("Assistant", content, Markdown(content), msg.timestamp)
+                )
+            for tc in msg.tool_calls or []:
+                if not isinstance(tc, dict):
+                    logger.warning(
+                        "Skipping non-dict tool_call while restoring history: %r",
+                        tc,
+                    )
+                    continue
+                func = tc.get("function") or {}
+                pending.append(
+                    {
+                        "id": str(tc.get("id") or ""),
+                        "name": str(func.get("name") or "unknown"),
+                        "args": str(func.get("arguments") or ""),
+                        "ts": msg.timestamp,
+                    }
+                )
+    flush()
+    return entries
 
 
 class OliBot(App):
@@ -239,6 +346,7 @@ class OliBot(App):
         "Assistant": "green",
         "System": "yellow",
         "Tool Call": "magenta",
+        "Tool Result": "cyan",
     }
 
     ROLE_ICONS = {
@@ -246,6 +354,7 @@ class OliBot(App):
         "Assistant": "\u25cf",
         "System": "\u25aa",
         "Tool Call": "\u25c6",
+        "Tool Result": "\u21a9",
     }
 
     BINDINGS = [
@@ -565,14 +674,7 @@ class OliBot(App):
                 severity="warning",
                 timeout=8,
             )
-        non_system = [m for m in self.messages if m.role != "system"]
-        if non_system:
-            self._remove_welcome()
-            for msg in non_system:
-                if msg.role == "user":
-                    self._add_message("You", msg.content, timestamp=msg.timestamp)
-                elif msg.role == "assistant":
-                    self._add_message("Assistant", msg.content, timestamp=msg.timestamp)
+        self._restore_history()
 
     def on_click(self, event: Click) -> None:
         if event.button != 2:
@@ -1079,12 +1181,7 @@ class OliBot(App):
         self.query_one("#chat-log").remove_children()
         self._clear_todo_widget()
         self._add_message("System", f"Switched to session [bold]{data['name']}[/bold].")
-        non_system = [m for m in self.messages if m.role != "system"]
-        for msg in non_system:
-            if msg.role == "user":
-                self._add_message("You", msg.content, timestamp=msg.timestamp)
-            elif msg.role == "assistant":
-                self._add_message("Assistant", msg.content, timestamp=msg.timestamp)
+        self._restore_history()
 
     def _sessions_delete(self, target: str) -> None:
         if self.agent.generating:
@@ -2373,9 +2470,12 @@ class OliBot(App):
                             )
                             if len(params) > 100:
                                 params = params[:100] + "…"
-                            base = f"[bold]{name}[/bold]  [dim]· {params}[/dim]"
+                            base = (
+                                f"[bold]{rich_escape(str(name))}[/bold]"
+                                f"  [dim]· {rich_escape(params)}[/dim]"
+                            )
                         else:
-                            base = f"[bold]{name}[/bold]"
+                            base = f"[bold]{rich_escape(str(name))}[/bold]"
                         content = f"[dim]◐[/dim] {base}"
                         widget = Static(content, classes="message")
                         widget.plain_text = content
@@ -2396,10 +2496,14 @@ class OliBot(App):
                                 if start is not None
                                 else ""
                             )
-                            base = getattr(widget, "_tool_base", f"[bold]{name}[/bold]")
+                            base = getattr(
+                                widget,
+                                "_tool_base",
+                                f"[bold]{rich_escape(str(name))}[/bold]",
+                            )
                             updated = f"{icon} {base}{elapsed}"
                             if self.config.log_level == "DEBUG":
-                                result_text = str(result)[:2000]
+                                result_text = rich_escape(str(result)[:2000])
                                 updated += f"\n  [dim]{result_text}[/dim]"
                             widget.update(updated)
                             widget.plain_text = updated
@@ -2410,7 +2514,10 @@ class OliBot(App):
                         if msg_widget is None:
                             ts = datetime.now(timezone.utc).isoformat()
                             self._add_message(
-                                f"Assistant {ICON_SUCCESS}", content, timestamp=ts
+                                f"Assistant {ICON_SUCCESS}",
+                                str(content or ""),
+                                body=Markdown(str(content or "")),
+                                timestamp=ts,
                             )
                         # This iteration's text was already streamed into msg_widget;
                         # reset per-iteration state so the next round mounts fresh
@@ -2439,7 +2546,7 @@ class OliBot(App):
                             try:
                                 rendered_think = Markdown(think_text)
                             except Exception:
-                                rendered_think = think_text
+                                rendered_think = RichText(think_text)
                             think_inner.update(rendered_think)
                         except Exception:
                             logger.warning("Failed to update thinking panel")
@@ -2461,7 +2568,7 @@ class OliBot(App):
                             try:
                                 rendered = Markdown(full_response)
                             except Exception:
-                                rendered = full_response
+                                rendered = RichText(full_response)
                             assistant_color = self._role_color("Assistant")
                             title = (
                                 f"[{assistant_color}]{self._role_icon('Assistant')} "
@@ -2573,13 +2680,34 @@ class OliBot(App):
             logger.debug("Failed to parse timestamp: %s", timestamp)
             return ""
 
+    def _restore_history(self) -> None:
+        """Re-render ``self.messages`` into the chat log after a session load.
+
+        Shared by ``on_mount`` (``--resume-last`` / ``-s``) and ``/sessions
+        switch``. Empty histories leave the welcome panel in place.
+        """
+        entries = _history_entries(self.messages)
+        if not entries:
+            return
+        if self.query("#welcome"):
+            self._remove_welcome()
+        for role, plain, body, ts in entries:
+            self._add_message(role, plain, body=body, timestamp=ts)
+
     def _add_message(
         self,
         role: str,
         text: str,
         border_style: str | None = None,
         timestamp: str | None = None,
+        body: RenderableType | None = None,
     ) -> None:
+        """Mount a message panel.
+
+        ``body`` overrides what is rendered when ``text`` is not safe to
+        parse as Rich markup (restored tool output, model prose); ``text``
+        always stays verbatim on the widget for clipboard copy.
+        """
         color = border_style or self._role_color(role)
         icon = self._role_icon(role)
         title = f"[{color}]{icon} {role}[/{color}]"
@@ -2587,7 +2715,8 @@ class OliBot(App):
         if ts:
             title += f" [dim]· {ts}[/dim]"
         chat_log = self.query_one("#chat-log")
-        static = Static(self._flat(text, title), classes="message")
+        rendered = text if body is None else body
+        static = Static(self._flat(rendered, title), classes="message")
         static.plain_text = text
         chat_log.mount(static)
         chat_log.scroll_end(animate=False)

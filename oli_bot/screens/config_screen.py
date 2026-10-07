@@ -196,6 +196,12 @@ class ConfigScreen(ModalScreen[dict | None]):
                         classes="config-input",
                         value=ol.get("small_model", ""),
                     )
+                    yield Input(
+                        placeholder="Context size (tokens)",
+                        id="cfg-ollama-ctx-size",
+                        classes="config-input",
+                        value=str(ol.get("context_window", 8192)),
+                    )
 
                 yield Label(
                     "HuggingFace",
@@ -575,6 +581,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "base_url": self._val("#cfg-ollama-base-url"),
                 "large_model": self._val("#cfg-ollama-large-model"),
                 "small_model": self._val("#cfg-ollama-small-model"),
+                "context_window": self._int("#cfg-ollama-ctx-size", 8192),
             },
             "huggingface": {
                 "base_url": self._val("#cfg-hf-base-url"),

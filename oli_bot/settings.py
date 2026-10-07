@@ -25,6 +25,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "base_url": "http://localhost:11434",
         "large_model": "",
         "small_model": "",
+        "context_window": 8192,
     },
     "huggingface": {
         "base_url": "https://api-inference.huggingface.co",
@@ -105,6 +106,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_OLLAMA_BASE_URL": "ollama.base_url",
     "OLI_OLLAMA_MODEL": "ollama.large_model",
     "OLI_OLLAMA_SMALL_MODEL": "ollama.small_model",
+    "OLI_OLLAMA_CONTEXT_WINDOW": "ollama.context_window",
     "OLI_HUGGINGFACE_BASE_URL": "huggingface.base_url",
     "OLI_HUGGINGFACE_API_KEY": "huggingface.api_key",
     "OLI_HUGGINGFACE_MODEL": "huggingface.large_model",
@@ -323,6 +325,7 @@ class SettingsManager:
             ollama_base_url=ol.get("base_url", "http://localhost:11434"),
             ollama_model=ol.get("large_model", ""),
             ollama_small_model=ol.get("small_model", ""),
+            ollama_ctx_size=ol.get("context_window", 8192),
             huggingface_base_url=hf.get(
                 "base_url", "https://api-inference.huggingface.co"
             ),
@@ -384,6 +387,7 @@ class SettingsManager:
         settings["ollama"]["base_url"] = config.ollama_base_url
         settings["ollama"]["large_model"] = config.ollama_model
         settings["ollama"]["small_model"] = config.ollama_small_model
+        settings["ollama"]["context_window"] = config.ollama_ctx_size
         settings["huggingface"]["base_url"] = config.huggingface_base_url
         settings["huggingface"]["api_key"] = config.huggingface_api_key
         settings["huggingface"]["large_model"] = config.huggingface_model
