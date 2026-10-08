@@ -76,6 +76,21 @@ def _manager(tmp_path, monkeypatch, *, make=None, stdio_capture=None):
     )
 
 
+def test_use_oauth_defaults_off_without_config(tmp_path):
+    m = MCPClientManager(config_path=str(tmp_path / "mcp_servers.json"))
+    assert m.use_oauth is False
+
+
+def test_use_oauth_reflects_config(tmp_path):
+    from oli_bot.config import AppConfig
+
+    m = MCPClientManager(
+        config=AppConfig(_env_file=None, use_oauth=True),
+        config_path=str(tmp_path / "mcp_servers.json"),
+    )
+    assert m.use_oauth is True
+
+
 @pytest.mark.asyncio
 async def test_list_tools_maps_snake_case_fields_and_prefixes(tmp_path, monkeypatch):
     fake = FakeClient(

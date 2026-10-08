@@ -149,6 +149,9 @@ class AppConfig(BaseSettings):
     # Default profile loaded on TUI startup (overridden by --profile CLI flag)
     default_profile: str = Field(default="default")
 
+    # OAuth configuration
+    use_oauth: bool = Field(default=False)
+
 
 # Global configuration instance
 configs = AppConfig()

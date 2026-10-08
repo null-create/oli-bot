@@ -2083,6 +2083,7 @@ class OliBot(App):
         self.agent.config = self.config
         self._builtin_tools._config = self.config
         self.mcp_manager._offline_mode = self.config.offline_mode
+        self.mcp_manager.use_oauth = self.config.use_oauth
 
         # Voice engine holds its own copy of the voice_* config; drop it so
         # the next /voice activation picks up the new values.

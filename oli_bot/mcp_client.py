@@ -14,6 +14,7 @@ from mcp.client import Client
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.streamable_http import streamable_http_client
 
+from .auth.oauth import OAuthHandler
 from .config import AppConfig
 from .tools.manager import BuiltinToolManager
 from .tools.permissions import PermissionDecision
@@ -183,6 +184,12 @@ class MCPClientManager:
         self._builtin_tools = builtin_tools
         self._offline_mode = offline_mode
         self._warnings: List[str] = []
+        # Third party OAuth handler for MCP servers that require OAuth. The handler is
+        # created on demand when the first server requiring OAuth is added, and is
+        # cleaned up on disconnect_all().
+        self.oauth_handler: Optional[OAuthHandler] = None
+        self.use_oauth = bool(config is not None and config.use_oauth)
+
         # Live sub-agent event queue. Set/cleared by the agent's tool loop
         # only while a `builtin__dispatch` call is in flight; the dispatch
         # handler pushes SubAgent* events here so they can be drained
@@ -396,16 +403,36 @@ class MCPClientManager:
                     http_client = httpx2.AsyncClient(
                         headers={"Authorization": f"Bearer {config.api_token}"}
                     )
-                    # Register the httpx client with the exit stack so its
-                    # connection pool is closed on ``disconnect_all()`` —
-                    # the wrapping MCP ``Client`` doesn't own the injected
-                    # transport client's lifecycle.
                     await self._exit_stack.enter_async_context(http_client)
                     client = await self._exit_stack.enter_async_context(
                         Client(
                             streamable_http_client(config.url, http_client=http_client)
                         )
                     )
+                elif self.use_oauth:
+                    if self.oauth_handler is None:
+                        self.oauth_handler = OAuthHandler()
+                        await self._exit_stack.enter_async_context(self.oauth_handler)
+                    access_token = await self.oauth_handler.discover_and_authorize(
+                        config.url
+                    )
+                    if access_token:
+                        auth_headers = self.oauth_handler.get_auth_headers()
+                        http_client = httpx2.AsyncClient(headers=auth_headers)
+                        await self._exit_stack.enter_async_context(http_client)
+                        client = await self._exit_stack.enter_async_context(
+                            Client(
+                                streamable_http_client(
+                                    config.url, http_client=http_client
+                                )
+                            )
+                        )
+                    else:
+                        raise Exception(
+                            f"OAuth authorization failed for server '{name}': "
+                            "No access token obtained."
+                        )
+
                 else:
                     client = await self._exit_stack.enter_async_context(
                         Client(config.url)
@@ -436,6 +463,7 @@ class MCPClientManager:
                 "Suppressed cancel scope error during MCP shutdown (known SDK issue)"
             )
         self._clients.clear()
+        self.oauth_handler = None
         self._invalidate_tool_cache()
 
     def _load_config(self) -> None:
