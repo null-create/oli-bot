@@ -51,6 +51,7 @@ _FLAT_TO_NESTED = {
     "truncation_max_chars_large": ("model_params", "truncation_max_chars_large"),
     "dry_run": ("model_params", "dry_run"),
     "offline_mode": ("model_params", "offline_mode"),
+    "use_oauth": ("model_params", "use_oauth"),
     "use_agent_pool": ("model_params", "use_agent_pool"),
     "agent_pool_size": ("model_params", "agent_pool_size"),
     "agents_yaml": ("model_params", "agents_yaml"),

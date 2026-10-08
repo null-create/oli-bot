@@ -34,7 +34,7 @@ A lightweight, terminal-based AI agent harness for local-first, vendor-agnostic 
 - **OpenAI-compatible API server** — run the same agent harness behind `/v1/models` and `/v1/chat/completions` (streaming + non-streaming) so any workflow that speaks the OpenAI wire protocol (the `openai` Python SDK, curl, or plain REST) can drive the agent.
 - **Voice mode (optional, experimental)** — `/voice` toggles a hands-free mic → STT → LLM → TTS loop (faster-whisper, Piper TTS, WebRTC VAD) for the TUI. Fully local; requires the `voice` extras and a downloaded Piper model.
 - **Multi-backend support** — Ollama, OpenAI, HuggingFace (remote or local), and Transformers (local GPU/CPU). Switch at runtime.
-- **MCP integration** — add stdio or HTTP MCP servers at runtime for custom tools.
+- **MCP integration** — add stdio or HTTP MCP servers at runtime for custom tools. HTTP servers can authenticate with a static API token or OAuth 2.1 (set `OLI_USE_OAUTH=true`, or toggle it under `/config`).
 
 ## Roadmap / areas of active exploration
 

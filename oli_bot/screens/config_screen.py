@@ -362,6 +362,13 @@ class ConfigScreen(ModalScreen[dict | None]):
                     value=bool(mp.get("dry_run", False)),
                 )
 
+                yield Label("OAuth", classes="section-title")
+                yield Checkbox(
+                    "Use OAuth 2.1 for HTTP MCP servers without an API token",
+                    id="cfg-use-oauth",
+                    value=bool(mp.get("use_oauth", False)),
+                )
+
                 yield Label("Agent Pool", classes="section-title")
                 yield Checkbox(
                     "Enable agent pool (root can dispatch to agents.yaml sub-agents)",
@@ -613,6 +620,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 ),
                 "offline_mode": self._bool("#cfg-offline-mode"),
                 "dry_run": self._bool("#cfg-dry-run"),
+                "use_oauth": self._bool("#cfg-use-oauth"),
                 "use_agent_pool": self._bool("#cfg-use-agent-pool"),
                 "agent_pool_size": self._int("#cfg-agent-pool-size", 5),
                 "agents_yaml": self._val("#cfg-agents-yaml"),

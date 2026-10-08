@@ -56,6 +56,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "truncation_max_chars_large": 100000,
         "dry_run": False,
         "offline_mode": True,
+        "use_oauth": False,
         "use_agent_pool": False,
         "agent_pool_size": 5,
         "agents_yaml": "",
@@ -131,6 +132,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_TRUNCATION_LARGE": "model_params.truncation_max_chars_large",
     "OLI_DRY_RUN": "model_params.dry_run",
     "OLI_OFFLINE_MODE": "model_params.offline_mode",
+    "OLI_USE_OAUTH": "model_params.use_oauth",
     "OLI_USE_AGENT_POOL": "model_params.use_agent_pool",
     "OLI_AGENT_POOL_SIZE": "model_params.agent_pool_size",
     "OLI_AGENTS_YAML": "model_params.agents_yaml",
@@ -352,6 +354,7 @@ class SettingsManager:
             truncation_max_chars_large=mp.get("truncation_max_chars_large", 100000),
             dry_run=mp.get("dry_run", False),
             offline_mode=mp.get("offline_mode", True),
+            use_oauth=mp.get("use_oauth", False),
             use_agent_pool=mp.get("use_agent_pool", False),
             agent_pool_size=mp.get("agent_pool_size", 5),
             agents_yaml=mp.get("agents_yaml", ""),
@@ -419,6 +422,7 @@ class SettingsManager:
         ] = config.truncation_max_chars_large
         settings["model_params"]["dry_run"] = config.dry_run
         settings["model_params"]["offline_mode"] = config.offline_mode
+        settings["model_params"]["use_oauth"] = config.use_oauth
         settings["logging"]["log_level"] = config.log_level
         settings["logging"]["log_file"] = config.log_file
         settings["api_server"]["host"] = config.api_host

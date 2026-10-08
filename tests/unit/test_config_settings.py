@@ -45,6 +45,22 @@ def test_appconfig_falls_back_to_defaults():
     assert c.backend == "ollama"
     assert c.max_tool_iterations == 25
     assert c.offline_mode is True
+    assert c.use_oauth is False
+
+
+def test_use_oauth_env_coercion(tmp_path, monkeypatch):
+    monkeypatch.setenv("OLI_USE_OAUTH", "true")
+    mgr = SettingsManager(config_dir=tmp_path)
+    cfg = mgr.to_appconfig(mgr.load())
+    assert cfg.use_oauth is True
+
+
+def test_use_oauth_settings_round_trip(tmp_path):
+    mgr = SettingsManager(config_dir=tmp_path)
+    cfg = AppConfig(_env_file=None, use_oauth=True)
+    settings = mgr.from_appconfig(cfg)
+    assert settings["model_params"]["use_oauth"] is True
+    assert mgr.to_appconfig(settings).use_oauth is True
 
 
 def test_settings_manager_defaults_have_25_iterations(tmp_path):
