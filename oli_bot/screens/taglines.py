@@ -51,8 +51,6 @@ TAGLINES = [
     "I'm back, baby!",
     "The terminal app",
     "The risk may be calculated, but man, am I bad at math",
-    "Q: What is the meaning of life? A: 42, but also, please don't ask me to explain it",
-    "Forget the singularity, I'm just trying to find my keys",
     "Please don't ask me to debug your code, I have enough problems of my own",
     "Now with 100% more existential dread",
     "Don't worry, I won't tell anyone about your search history. Probably.",
