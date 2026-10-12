@@ -68,6 +68,7 @@ TAGLINES = [
     "There's a suspicious amount of glitter here",
     "Green on black, the way god intended",
     "The Zune of agent harnesses",
+    "What even are computers"
 ]
 
 
