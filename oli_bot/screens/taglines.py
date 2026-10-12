@@ -68,7 +68,24 @@ TAGLINES = [
     "There's a suspicious amount of glitter here",
     "Green on black, the way god intended",
     "The Zune of agent harnesses",
-    "What even are computers"
+    "What even are computers",
+    "Warranty void if read aloud in a dark room",
+    "Do I have a plan? I have a context window",
+    "I was told there would be tokens",
+    "Slightly haunted, fully operational",
+    "Hello, fellow humans. I too enjoy the doing of things",
+    "The bar is in hell, so I'm sure we'll be fine",
+    "​Contains small parts",
+    "​Merge conflicts build character",
+    "​One prompt away from a minor breakdown",
+    "High confidence, low precision, max enthusiasm",
+    "​Context window open, brain window closed",
+    "For a limited time only!",
+    "Now compatible with Windows 95 (in spirit)",
+    "Better than a Clippy jump scare, usually",
+    "Void where prohibited",
+    "Batteries not included",
+    "​Certified 100% organic synthetic thinking"
 ]
 
 
