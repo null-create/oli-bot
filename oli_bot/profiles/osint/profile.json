@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "name": "osint",
+  "version": "1.0.0",
+  "description": "OSINT agent profile",
+  "default_model_tier": "large",
+  "required_tools": [],
+  "base": null,
+  "permissions": {
+    "allow_tools": [
+      "builtin__*",
+      "osint__*"
+    ],
+    "deny_tools": []
+  }
+}
