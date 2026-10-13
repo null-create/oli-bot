@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "description": "OSINT agent profile",
   "default_model_tier": "large",
-  "required_tools": [],
+  "required_tools": [
+    "osint__*"
+  ],
   "base": null,
   "permissions": {
     "allow_tools": [
