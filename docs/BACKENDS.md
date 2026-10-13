@@ -25,13 +25,13 @@ Multiple Ollama servers can be configured via `/servers` and persisted to `ollam
 
 Works with the OpenAI API or any compatible endpoint (Azure, local proxies, etc.).
 
-| Setting                    | Default                     | Env var                       |
-| -------------------------- | --------------------------- | ----------------------------- |
-| `openai_api_key`           | `""`                        | `OLI_OPENAI_API_KEY`          |
-| `openai_base_url`          | `https://api.openai.com/v1` | `OLI_OPENAI_BASE_URL`         |
-| `openai_model`             | `gpt-4o`                    | `OLI_OPENAI_MODEL`            |
-| `openai_small_model`       | `gpt-4o-mini`               | `OLI_OPENAI_SMALL_MODEL`      |
-| `openai_vision_style`      | `openai`                    | `OLI_OPENAI_VISION_STYLE`     |
+| Setting                    | Default                     | Env var                        |
+| -------------------------- | --------------------------- | ------------------------------ |
+| `openai_api_key`           | `""`                        | `OLI_OPENAI_API_KEY`           |
+| `openai_base_url`          | `https://api.openai.com/v1` | `OLI_OPENAI_BASE_URL`          |
+| `openai_model`             | `gpt-4o`                    | `OLI_OPENAI_MODEL`             |
+| `openai_small_model`       | `gpt-4o-mini`               | `OLI_OPENAI_SMALL_MODEL`       |
+| `openai_vision_style`      | `openai`                    | `OLI_OPENAI_VISION_STYLE`      |
 | `openai_responses_enabled` | `false`                     | `OLI_OPENAI_RESPONSES_ENABLED` |
 
 By default the backend targets Chat Completions (`POST /v1/chat/completions`). Set
@@ -43,7 +43,7 @@ two wire formats must be configured with the matching flag.
 `openai_vision_style` controls how the `view_image` tool serializes attachments for the OpenAI backend:
 
 - `openai` (default) — standard `{"type": "image_url", "image_url": {"url": "data:..."}}` blocks. Works with native OpenAI, Azure OpenAI, LiteLLM, DeepSeek, Groq, OpenRouter, etc.
-- `bedrock` — Bedrock-native `{"image": {"format": "png|jpeg|gif|webp", "source": {"bytes": "<base64>"}}}` blocks. Use when the OpenAI-compatible endpoint is actually a Kong/LiteLLM proxy fronting AWS Bedrock and the translator does not map `image_url` correctly (surfaces as `ContentBlock ... must set one of the following keys: text, image, toolUse, ...` 400s).
+- `bedrock` — Bedrock-native `{"image": {"format": "png|jpeg|gif|webp", "source": {"bytes": "<base64>"}}}` blocks. Use when the OpenAI-compatible endpoint is actually a proxy fronting AWS Bedrock and the translator does not map `image_url` correctly (surfaces as `ContentBlock ... must set one of the following keys: text, image, toolUse, ...` 400s).
 
 ## HuggingFace
 

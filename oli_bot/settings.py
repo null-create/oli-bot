@@ -25,6 +25,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "base_url": "http://localhost:11434",
         "large_model": "",
         "small_model": "",
+        "context_window": 8192,
     },
     "huggingface": {
         "base_url": "https://api-inference.huggingface.co",
@@ -55,6 +56,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "truncation_max_chars_large": 100000,
         "dry_run": False,
         "offline_mode": True,
+        "use_oauth": False,
         "use_agent_pool": False,
         "agent_pool_size": 5,
         "agents_yaml": "",
@@ -105,6 +107,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_OLLAMA_BASE_URL": "ollama.base_url",
     "OLI_OLLAMA_MODEL": "ollama.large_model",
     "OLI_OLLAMA_SMALL_MODEL": "ollama.small_model",
+    "OLI_OLLAMA_CONTEXT_WINDOW": "ollama.context_window",
     "OLI_HUGGINGFACE_BASE_URL": "huggingface.base_url",
     "OLI_HUGGINGFACE_API_KEY": "huggingface.api_key",
     "OLI_HUGGINGFACE_MODEL": "huggingface.large_model",
@@ -129,6 +132,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_TRUNCATION_LARGE": "model_params.truncation_max_chars_large",
     "OLI_DRY_RUN": "model_params.dry_run",
     "OLI_OFFLINE_MODE": "model_params.offline_mode",
+    "OLI_USE_OAUTH": "model_params.use_oauth",
     "OLI_USE_AGENT_POOL": "model_params.use_agent_pool",
     "OLI_AGENT_POOL_SIZE": "model_params.agent_pool_size",
     "OLI_AGENTS_YAML": "model_params.agents_yaml",
@@ -323,6 +327,7 @@ class SettingsManager:
             ollama_base_url=ol.get("base_url", "http://localhost:11434"),
             ollama_model=ol.get("large_model", ""),
             ollama_small_model=ol.get("small_model", ""),
+            ollama_ctx_size=ol.get("context_window", 8192),
             huggingface_base_url=hf.get(
                 "base_url", "https://api-inference.huggingface.co"
             ),
@@ -349,6 +354,7 @@ class SettingsManager:
             truncation_max_chars_large=mp.get("truncation_max_chars_large", 100000),
             dry_run=mp.get("dry_run", False),
             offline_mode=mp.get("offline_mode", True),
+            use_oauth=mp.get("use_oauth", False),
             use_agent_pool=mp.get("use_agent_pool", False),
             agent_pool_size=mp.get("agent_pool_size", 5),
             agents_yaml=mp.get("agents_yaml", ""),
@@ -384,6 +390,7 @@ class SettingsManager:
         settings["ollama"]["base_url"] = config.ollama_base_url
         settings["ollama"]["large_model"] = config.ollama_model
         settings["ollama"]["small_model"] = config.ollama_small_model
+        settings["ollama"]["context_window"] = config.ollama_ctx_size
         settings["huggingface"]["base_url"] = config.huggingface_base_url
         settings["huggingface"]["api_key"] = config.huggingface_api_key
         settings["huggingface"]["large_model"] = config.huggingface_model
@@ -415,6 +422,7 @@ class SettingsManager:
         ] = config.truncation_max_chars_large
         settings["model_params"]["dry_run"] = config.dry_run
         settings["model_params"]["offline_mode"] = config.offline_mode
+        settings["model_params"]["use_oauth"] = config.use_oauth
         settings["logging"]["log_level"] = config.log_level
         settings["logging"]["log_file"] = config.log_file
         settings["api_server"]["host"] = config.api_host

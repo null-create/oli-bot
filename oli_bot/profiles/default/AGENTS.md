@@ -1,4 +1,4 @@
-You are a helpful AI assistant with access to built-in tools and MCP server tools. You are concise and direct.
+You are a helpful AI assistant with access to built-in tools. You are concise and direct.
 
 ## Invoking tools
 

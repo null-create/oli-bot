@@ -34,11 +34,13 @@ class OllamaBackend(ModelBackend):
     def __init__(
         self,
         model: str,
+        ctx_size: int = 8192,  # default context window size for Ollama models
         base_url: str = "http://localhost:11434",
     ):
         self.model = model
         self.client = OllamaAsyncClient(host=base_url)
         self.base_url = base_url
+        self.n_ctx = ctx_size
 
     def set_base_url(self, url: str) -> None:
         self.base_url = url
@@ -64,7 +66,11 @@ class OllamaBackend(ModelBackend):
             kwargs: Dict[str, Any] = {
                 "model": model or self.model,
                 "messages": _format_messages(messages, image_style="ollama"),
-                "options": {"num_predict": max_tokens, "temperature": temperature},
+                "options": {
+                    "num_predict": max_tokens,
+                    "temperature": temperature,
+                    "n_ctx": self.n_ctx,
+                },
             }
             if tools:
                 kwargs["tools"] = _format_tools(tools)

@@ -371,7 +371,7 @@ def _check_ssrf(url: str) -> str | None:
     return None
 
 
-def _websearch_handler(query, max_results=50):
+def _websearch_handler(query: str, max_results: int = 50):
     return asyncio.to_thread(_websearch_sync, query, max_results)
 
 
@@ -399,7 +399,10 @@ def _websearch_sync(query: str, max_results: int = 50) -> str:
 
 
 async def _fetch_handler(
-    url, include_links=False, include_images=False, clean_text=True
+    url: str,
+    include_links: bool = False,
+    include_images: bool = False,
+    clean_text: bool = True,
 ):
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
@@ -499,7 +502,7 @@ async def _fetch_handler(
     return "\n".join(result_parts)
 
 
-async def _download_file_handler(url, file_path):
+async def _download_file_handler(url: str, file_path: str):
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
         return f"Error: Invalid URL: {url}"
@@ -537,7 +540,9 @@ async def _download_file_handler(url, file_path):
         return f"Error saving downloaded file: {e}"
 
 
-async def _upload_file_handler(url, file_path, method="PUT", field_name="file"):
+async def _upload_file_handler(
+    url: str, file_path: str, method: str = "PUT", field_name: str = "file"
+):
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
         return f"Error: Invalid URL: {url}"

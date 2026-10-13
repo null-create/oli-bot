@@ -22,7 +22,8 @@ class QuestionScreen(ModalScreen[str | None]):
 
     CSS = """
     #question-container {
-        width: 78;
+        width: 90%;
+        max-width: 78;
         height: 80%;
         border: round $primary;
         background: $surface;
@@ -33,6 +34,7 @@ class QuestionScreen(ModalScreen[str | None]):
         text-style: bold;
         content-align: center middle;
         padding: 0 0 1 0;
+        width: 1fr;
     }
     #question-scroll {
         height: 1fr;
@@ -41,22 +43,27 @@ class QuestionScreen(ModalScreen[str | None]):
     }
     .question-block {
         margin: 0 0 1 0;
+        width: 1fr;
     }
     .question-text {
         text-style: bold;
+        width: 1fr;
     }
     .question-meta {
         color: $text-muted;
+        width: 1fr;
     }
     RadioSet {
         margin: 0 0 1 0;
         border: round #6b7d74;
+        width: 1fr;
     }
     RadioSet:focus {
         border: round $primary;
     }
     .question-own-input {
         margin: 1 0 1 0;
+        width: 1fr;
     }
     #question-buttons {
         height: 3;

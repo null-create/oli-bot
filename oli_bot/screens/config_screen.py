@@ -196,6 +196,12 @@ class ConfigScreen(ModalScreen[dict | None]):
                         classes="config-input",
                         value=ol.get("small_model", ""),
                     )
+                    yield Input(
+                        placeholder="Context size (tokens)",
+                        id="cfg-ollama-ctx-size",
+                        classes="config-input",
+                        value=str(ol.get("context_window", 8192)),
+                    )
 
                 yield Label(
                     "HuggingFace",
@@ -354,6 +360,13 @@ class ConfigScreen(ModalScreen[dict | None]):
                     "Preview destructive actions without executing",
                     id="cfg-dry-run",
                     value=bool(mp.get("dry_run", False)),
+                )
+
+                yield Label("OAuth", classes="section-title")
+                yield Checkbox(
+                    "Use OAuth 2.1 for HTTP MCP servers without an API token",
+                    id="cfg-use-oauth",
+                    value=bool(mp.get("use_oauth", False)),
                 )
 
                 yield Label("Agent Pool", classes="section-title")
@@ -575,6 +588,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "base_url": self._val("#cfg-ollama-base-url"),
                 "large_model": self._val("#cfg-ollama-large-model"),
                 "small_model": self._val("#cfg-ollama-small-model"),
+                "context_window": self._int("#cfg-ollama-ctx-size", 8192),
             },
             "huggingface": {
                 "base_url": self._val("#cfg-hf-base-url"),
@@ -606,6 +620,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 ),
                 "offline_mode": self._bool("#cfg-offline-mode"),
                 "dry_run": self._bool("#cfg-dry-run"),
+                "use_oauth": self._bool("#cfg-use-oauth"),
                 "use_agent_pool": self._bool("#cfg-use-agent-pool"),
                 "agent_pool_size": self._int("#cfg-agent-pool-size", 5),
                 "agents_yaml": self._val("#cfg-agents-yaml"),

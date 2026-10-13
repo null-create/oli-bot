@@ -117,11 +117,11 @@ def register_tools(manager: BuiltinToolManager) -> None:
     )
 
 
-def _glob_handler(pattern, path="."):
+def _glob_handler(pattern: str, path: str = "."):
     return asyncio.to_thread(_glob_sync, pattern, path)
 
 
-def _glob_sync(pattern, path="."):
+def _glob_sync(pattern: str, path: str = "."):
     root = Path(path).expanduser().resolve()
     if not root.is_dir():
         return f"Error: Directory not found: {path}"
@@ -137,11 +137,15 @@ def _glob_sync(pattern, path="."):
     return "\n".join(matches)
 
 
-def _grep_handler(pattern, path=".", include=None, max_results=50):
+def _grep_handler(
+    pattern: str, path: str = ".", include: str = None, max_results: int = 50
+):
     return asyncio.to_thread(_grep_sync, pattern, path, include, max_results)
 
 
-def _grep_sync(pattern, path=".", include=None, max_results=50):
+def _grep_sync(
+    pattern: str, path: str = ".", include: str = None, max_results: int = 50
+):
     root = Path(path).expanduser().resolve()
     if not root.is_dir():
         return f"Error: Directory not found: {path}"
@@ -181,11 +185,11 @@ def _grep_sync(pattern, path=".", include=None, max_results=50):
     return result
 
 
-def _list_directory_handler(path=".", show_hidden=False):
+def _list_directory_handler(path: str = ".", show_hidden: bool = False):
     return asyncio.to_thread(_list_directory_sync, path, show_hidden)
 
 
-def _list_directory_sync(path=".", show_hidden=False):
+def _list_directory_sync(path: str = ".", show_hidden: bool = False) -> str:
     root = Path(path).expanduser().resolve()
     if not root.is_dir():
         return f"Error: Directory not found: {path}"
@@ -217,7 +221,7 @@ def _list_directory_sync(path=".", show_hidden=False):
         return f"Error listing directory: {e}"
 
 
-async def _tree_handler(path=".", depth=None):
+async def _tree_handler(path: str = ".", depth: int = None):
     target = Path(path).expanduser().resolve()
     if not target.is_dir():
         return f"Error: Directory not found: {path}"

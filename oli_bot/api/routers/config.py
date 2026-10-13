@@ -51,6 +51,7 @@ _FLAT_TO_NESTED = {
     "truncation_max_chars_large": ("model_params", "truncation_max_chars_large"),
     "dry_run": ("model_params", "dry_run"),
     "offline_mode": ("model_params", "offline_mode"),
+    "use_oauth": ("model_params", "use_oauth"),
     "use_agent_pool": ("model_params", "use_agent_pool"),
     "agent_pool_size": ("model_params", "agent_pool_size"),
     "agents_yaml": ("model_params", "agents_yaml"),
@@ -103,6 +104,9 @@ async def update_config(request: Request, flat: Dict[str, Any]) -> Any:
     settings, so secrets/env-driven values untouched by the UI are preserved.
     The running agent is not rebuilt; restart the server for changes to take
     effect.
+
+    ``api_profile`` is the exception: it is only persisted here, and swapping
+    the live agent's profile needs ``PUT /v1/profiles/{name}``.
     """
     manager = SettingsManager()
     settings = _flat_to_nested(flat, manager.load())

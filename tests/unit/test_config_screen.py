@@ -116,7 +116,11 @@ async def test_config_screen_renders_new_sections():
     settings["openai"]["vision_style"] = "bedrock"
     settings["huggingface"]["remote"] = True
     settings["transformers"]["is_multi_model"] = True
-    settings["model_params"] = {"use_agent_pool": True, "agent_pool_size": 8}
+    settings["model_params"] = {
+        "use_agent_pool": True,
+        "agent_pool_size": 8,
+        "use_oauth": True,
+    }
     settings["model_params"]["agents_yaml"] = "/custom/agents.yaml"
     settings["logging"] = {"log_level": "DEBUG", "log_file": "logs/x.ndjson"}
     settings["api_server"] = {
@@ -132,6 +136,7 @@ async def test_config_screen_renders_new_sections():
         screen = app.screen
         await pilot.pause()
         assert screen.query_one("#cfg-use-agent-pool").value is True
+        assert screen.query_one("#cfg-use-oauth").value is True
         assert screen.query_one("#cfg-agent-pool-size").value == "8"
         assert screen.query_one("#cfg-agents-yaml").value == "/custom/agents.yaml"
         assert screen.query_one("#cfg-log-file").value == "logs/x.ndjson"
@@ -155,7 +160,11 @@ async def test_config_screen_save_round_trips_new_sections():
     settings["openai"]["vision_style"] = "bedrock"
     settings["huggingface"]["remote"] = True
     settings["transformers"]["is_multi_model"] = True
-    settings["model_params"] = {"use_agent_pool": True, "agent_pool_size": 7}
+    settings["model_params"] = {
+        "use_agent_pool": True,
+        "agent_pool_size": 7,
+        "use_oauth": True,
+    }
     settings["model_params"]["agents_yaml"] = "/custom/agents.yaml"
     settings["logging"] = {"log_level": "WARNING", "log_file": "logs/z.ndjson"}
     settings["api_server"] = {
@@ -177,6 +186,7 @@ async def test_config_screen_save_round_trips_new_sections():
         assert result["huggingface"]["remote"] is True
         assert result["transformers"]["is_multi_model"] is True
         assert result["model_params"]["use_agent_pool"] is True
+        assert result["model_params"]["use_oauth"] is True
         assert result["model_params"]["agent_pool_size"] == 7
         assert result["model_params"]["agents_yaml"] == "/custom/agents.yaml"
         assert result["logging"]["log_level"] == "WARNING"
