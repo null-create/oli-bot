@@ -149,7 +149,7 @@ wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/me
 export OLI_VOICE_PIPER_MODEL=/path/to/en_US-lessac-medium.onnx
 ```
 
-Type `/voice` again (or `Ctrl+Q` to quit the app) to exit voice mode — the mic loop is interrupted immediately rather than waiting for the current recording to time out. All voice settings are configurable via env vars, `.env`, or the `/config` screen: `OLI_VOICE_WHISPER_MODEL` (default `base`), `OLI_VOICE_PIPER_MODEL`, plus VAD tunables (`OLI_VOICE_SAMPLE_RATE`, `OLI_VOICE_FRAME_DURATION_MS`, `OLI_VOICE_VAD_AGGRESSIVENESS`, `OLI_VOICE_SILENCE_TIMEOUT_MS`, `OLI_VOICE_MAX_RECORD_SECONDS`). See [docs/CONFIGURE.md](docs/CONFIGURE.md) for the full table.
+Type `/voice` again (or `Ctrl+Q` to quit the app) to exit voice mode — the mic loop is interrupted immediately rather than waiting for the current recording to time out. All voice settings are configurable via env vars, `.env`, or the `/config` screen. See [docs/CONFIGURE.md](docs/CONFIGURE.md) for the full table.
 
 ## Documentation
 

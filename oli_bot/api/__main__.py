@@ -83,7 +83,15 @@ def main() -> None:
         mode,
         profile,
     )
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="info",
+        # Base64 file/image attachments ride inside the chat WebSocket frame;
+        # the default 16 MiB frame cap is too small for larger uploads.
+        ws_max_size=64 * 1024 * 1024,
+    )
 
 
 if __name__ == "__main__":
