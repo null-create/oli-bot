@@ -5,13 +5,13 @@
   "description": "OSINT agent profile",
   "default_model_tier": "large",
   "required_tools": [
-    "osint__*"
+    "osint-graph__*"
   ],
   "base": null,
   "permissions": {
     "allow_tools": [
       "builtin__*",
-      "osint__*"
+      "osint-graph__*"
     ],
     "deny_tools": []
   }

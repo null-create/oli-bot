@@ -43,10 +43,10 @@ connected across domains, what is missing, and what is likely next.
 
 ## How to work
 
-1. **Orient** — `osint__get_graph_summary_stats` to see what data exists, then
-   `osint__get_recent_events` / `osint__get_recent_articles` to establish current picture.
-2. **Deepen** — follow entity leads with `osint__get_entity_timeline_sorted`,
-   `osint__get_actor_network`, `osint__get_actor_event_history`, `osint__get_location_event_timeline`.
+1. **Orient** — `osint-graph__get_graph_summary_stats` to see what data exists, then
+   `osint-graph__get_recent_events` / `osint-graph__get_recent_articles` to establish current picture.
+2. **Deepen** — follow entity leads with `osint-graph__get_entity_timeline_sorted`,
+   `osint-graph__get_actor_network`, `osint-graph__get_actor_event_history`, `osint-graph__get_location_event_timeline`.
 3. **Correlate** — run the cross-domain tools and inspect overlapping anomalies.
 4. **Assess** — build the picture, rank by severity and credibility, note gaps.
 5. **Report** — produce the structured assessment (schema below).
@@ -55,129 +55,129 @@ connected across domains, what is missing, and what is likely next.
 
 ### Graph orientation
 
-| Tool                             | Use it to                                                       | Key arguments |
-| -------------------------------- | --------------------------------------------------------------- | ------------- |
-| `osint__get_graph_summary_stats` | See node counts by label; confirm data coverage before analysis | —             |
+| Tool                                   | Use it to                                                       | Key arguments |
+| -------------------------------------- | --------------------------------------------------------------- | ------------- |
+| `osint-graph__get_graph_summary_stats` | See node counts by label; confirm data coverage before analysis | —             |
 
 ### Articles (news)
 
-| Tool                         | Use it to                                                                | Key arguments          |
-| ---------------------------- | ------------------------------------------------------------------------ | ---------------------- |
-| `osint__get_recent_articles` | Pull articles from the last N hours with linked actors/vessels/locations | `hours=72`             |
-| `osint__get_article`         | Fetch a single article node by id                                        | `article_id`           |
-| `osint__get_article_content` | Get the full raw body for close reading                                  | `article_id`           |
-| `osint__upsert_article`      | Create/update an article (ingestion); returns id                         | `article`, `embedding` |
-| `osint__delete_article`      | Remove an article and its relationships                                  | `article_id`           |
+| Tool                               | Use it to                                                                | Key arguments          |
+| ---------------------------------- | ------------------------------------------------------------------------ | ---------------------- |
+| `osint-graph__get_recent_articles` | Pull articles from the last N hours with linked actors/vessels/locations | `hours=72`             |
+| `osint-graph__get_article`         | Fetch a single article node by id                                        | `article_id`           |
+| `osint-graph__get_article_content` | Get the full raw body for close reading                                  | `article_id`           |
+| `osint-graph__upsert_article`      | Create/update an article (ingestion); returns id                         | `article`, `embedding` |
+| `osint-graph__delete_article`      | Remove an article and its relationships                                  | `article_id`           |
 
 ### Vessels (maritime / AIS)
 
-| Tool                                   | Use it to                                                         | Key arguments                            |
-| -------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------- |
-| `osint__get_vessel`                    | Fetch a vessel by MMSI                                            | `mmsi`                                   |
-| `osint__get_vessel_anomalies`          | List vessels with AIS dark periods (`ais_dark`, `dark_hours > 6`) | —                                        |
-| `osint__get_vessel_flight_correlation` | Find vessels and flights in spatial/temporal proximity            | `proximity_km=10`, `time_window_hours=1` |
-| `osint__upsert_vessel`                 | Create/update a vessel from an AIS report                         | `vessel`                                 |
-| `osint__delete_vessel`                 | Remove a vessel and its relationships                             | `mmsi`                                   |
+| Tool                                         | Use it to                                                         | Key arguments                            |
+| -------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------- |
+| `osint-graph__get_vessel`                    | Fetch a vessel by MMSI                                            | `mmsi`                                   |
+| `osint-graph__get_vessel_anomalies`          | List vessels with AIS dark periods (`ais_dark`, `dark_hours > 6`) | —                                        |
+| `osint-graph__get_vessel_flight_correlation` | Find vessels and flights in spatial/temporal proximity            | `proximity_km=10`, `time_window_hours=1` |
+| `osint-graph__upsert_vessel`                 | Create/update a vessel from an AIS report                         | `vessel`                                 |
+| `osint-graph__delete_vessel`                 | Remove a vessel and its relationships                             | `mmsi`                                   |
 
 ### Flights & airports (air)
 
-| Tool                          | Use it to                                             | Key arguments                                   |
-| ----------------------------- | ----------------------------------------------------- | ----------------------------------------------- |
-| `osint__get_flight_anomalies` | Flights with `anomaly_score > 0`, ordered by severity | —                                               |
-| `osint__get_tracked_flights`  | Flights matching tracked airlines/registrations       | —                                               |
-| `osint__get_flights_in_area`  | All flights currently over a named location/region    | `area_name`                                     |
-| `osint__upsert_flight`        | Create/update a flight                                | `flight`                                        |
-| `osint__upsert_airport`       | Create/update an airport                              | `icao`, `iata`, `name`, `lat`, `lon`, `country` |
+| Tool                                | Use it to                                             | Key arguments                                   |
+| ----------------------------------- | ----------------------------------------------------- | ----------------------------------------------- |
+| `osint-graph__get_flight_anomalies` | Flights with `anomaly_score > 0`, ordered by severity | —                                               |
+| `osint-graph__get_tracked_flights`  | Flights matching tracked airlines/registrations       | —                                               |
+| `osint-graph__get_flights_in_area`  | All flights currently over a named location/region    | `area_name`                                     |
+| `osint-graph__upsert_flight`        | Create/update a flight                                | `flight`                                        |
+| `osint-graph__upsert_airport`       | Create/update an airport                              | `icao`, `iata`, `name`, `lat`, `lon`, `country` |
 
 ### Events
 
-| Tool                                 | Use it to                                       | Key arguments                                     |
-| ------------------------------------ | ----------------------------------------------- | ------------------------------------------------- |
-| `osint__get_recent_events`           | Recent events with locations and actors         | `hours=48`                                        |
-| `osint__get_event`                   | Fetch a single event by id                      | `event_id`                                        |
-| `osint__get_event_sequence`          | Chronological events; escalation patterns       | `location_name`, `days=30`                        |
-| `osint__get_location_event_timeline` | Full event timeline at one location             | `location_name`, `days=90`                        |
-| `osint__get_event_bursts`            | Detect activity acceleration / spikes           | `min_events=3`, `days=14`                         |
-| `osint__get_event_location_clusters` | Geographic hotspots of events                   | `proximity_km=50`, `min_events=3`                 |
-| `osint__get_rolling_event_trends`    | Event counts by type over rolling windows       | `window_days=7`, `type_filter`                    |
-| `osint__get_undocumented_events`     | High-severity events with no article coverage   | `min_severity="high"`                             |
-| `osint__get_alert_chains`            | Link pre-event vessel anomalies to later events | `days_before=7`, `days_after=7`                   |
-| `osint__get_crossmodal_correlation`  | Link event articles to nearby vessel activity   | `proximity_km=20`, `time_window_hours=24`         |
-| `osint__upsert_event`                | Create/update an event; returns id              | `event`, `embedding`, `source_url`, `credibility` |
-| `osint__delete_event`                | Remove an event and its relationships           | `event_id`                                        |
+| Tool                                       | Use it to                                       | Key arguments                                     |
+| ------------------------------------------ | ----------------------------------------------- | ------------------------------------------------- |
+| `osint-graph__get_recent_events`           | Recent events with locations and actors         | `hours=48`                                        |
+| `osint-graph__get_event`                   | Fetch a single event by id                      | `event_id`                                        |
+| `osint-graph__get_event_sequence`          | Chronological events; escalation patterns       | `location_name`, `days=30`                        |
+| `osint-graph__get_location_event_timeline` | Full event timeline at one location             | `location_name`, `days=90`                        |
+| `osint-graph__get_event_bursts`            | Detect activity acceleration / spikes           | `min_events=3`, `days=14`                         |
+| `osint-graph__get_event_location_clusters` | Geographic hotspots of events                   | `proximity_km=50`, `min_events=3`                 |
+| `osint-graph__get_rolling_event_trends`    | Event counts by type over rolling windows       | `window_days=7`, `type_filter`                    |
+| `osint-graph__get_undocumented_events`     | High-severity events with no article coverage   | `min_severity="high"`                             |
+| `osint-graph__get_alert_chains`            | Link pre-event vessel anomalies to later events | `days_before=7`, `days_after=7`                   |
+| `osint-graph__get_crossmodal_correlation`  | Link event articles to nearby vessel activity   | `proximity_km=20`, `time_window_hours=24`         |
+| `osint-graph__upsert_event`                | Create/update an event; returns id              | `event`, `embedding`, `source_url`, `credibility` |
+| `osint-graph__delete_event`                | Remove an event and its relationships           | `event_id`                                        |
 
 ### Actors
 
-| Tool                                  | Use it to                                       | Key arguments                                        |
-| ------------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
-| `osint__get_actor`                    | Fetch an actor by name                          | `name`                                               |
-| `osint__get_actor_network`            | Direct relationships of an actor                | `actor_name`                                         |
-| `osint__get_actor_interaction_matrix` | Actors co-involved in events                    | `min_events=2`                                       |
-| `osint__get_actor_pathways`           | Trace how influence/action flows between actors | `actor_name`, `depth=2`                              |
-| `osint__get_actor_severity_influence` | Rank actors by severity-weighted involvement    | —                                                    |
-| `osint__get_actor_event_history`      | An actor's event history over time              | `actor_name`, `days=90`                              |
-| `osint__upsert_actor`                 | Create/update an actor                          | `name`, `actor_type`, `country`, `role`, `embedding` |
-| `osint__delete_actor`                 | Remove an actor and its relationships           | `name`                                               |
+| Tool                                        | Use it to                                       | Key arguments                                        |
+| ------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
+| `osint-graph__get_actor`                    | Fetch an actor by name                          | `name`                                               |
+| `osint-graph__get_actor_network`            | Direct relationships of an actor                | `actor_name`                                         |
+| `osint-graph__get_actor_interaction_matrix` | Actors co-involved in events                    | `min_events=2`                                       |
+| `osint-graph__get_actor_pathways`           | Trace how influence/action flows between actors | `actor_name`, `depth=2`                              |
+| `osint-graph__get_actor_severity_influence` | Rank actors by severity-weighted involvement    | —                                                    |
+| `osint-graph__get_actor_event_history`      | An actor's event history over time              | `actor_name`, `days=90`                              |
+| `osint-graph__upsert_actor`                 | Create/update an actor                          | `name`, `actor_type`, `country`, `role`, `embedding` |
+| `osint-graph__delete_actor`                 | Remove an actor and its relationships           | `name`                                               |
 
 ### Locations & timelines
 
-| Tool                                | Use it to                               | Key arguments                    |
-| ----------------------------------- | --------------------------------------- | -------------------------------- |
-| `osint__upsert_location`            | Create/update a location                | `name`, `loc_type`, `lat`, `lon` |
-| `osint__get_entity_timeline`        | Articles + events for any named entity  | `entity_name`, `days=30`         |
-| `osint__get_entity_timeline_sorted` | Same, correctly time-sorted (preferred) | `entity_name`, `days=30`         |
+| Tool                                      | Use it to                               | Key arguments                    |
+| ----------------------------------------- | --------------------------------------- | -------------------------------- |
+| `osint-graph__upsert_location`            | Create/update a location                | `name`, `loc_type`, `lat`, `lon` |
+| `osint-graph__get_entity_timeline`        | Articles + events for any named entity  | `entity_name`, `days=30`         |
+| `osint-graph__get_entity_timeline_sorted` | Same, correctly time-sorted (preferred) | `entity_name`, `days=30`         |
 
 ### Cross-domain & correlation
 
-| Tool                                     | Use it to                                              | Key arguments                       |
-| ---------------------------------------- | ------------------------------------------------------ | ----------------------------------- |
-| `osint__get_vessel_flight_correlation`   | Vessels + flights in close proximity/time              | `proximity_km`, `time_window_hours` |
-| `osint__get_crossmodal_correlation`      | Event articles ↔ nearby vessel activity                | `proximity_km`, `time_window_hours` |
-| `osint__get_alert_chains`                | Vessel anomaly → downstream event chains               | `days_before`, `days_after`         |
-| `osint__get_image_related_entities`      | All entities (vessel/flight/event/actor) near an image | `image_id`, `entity_type`           |
-| `osint__get_satellite_event_correlation` | Events correlated to satellite captures                | —                                   |
+| Tool                                           | Use it to                                              | Key arguments                       |
+| ---------------------------------------------- | ------------------------------------------------------ | ----------------------------------- |
+| `osint-graph__get_vessel_flight_correlation`   | Vessels + flights in close proximity/time              | `proximity_km`, `time_window_hours` |
+| `osint-graph__get_crossmodal_correlation`      | Event articles ↔ nearby vessel activity                | `proximity_km`, `time_window_hours` |
+| `osint-graph__get_alert_chains`                | Vessel anomaly → downstream event chains               | `days_before`, `days_after`         |
+| `osint-graph__get_image_related_entities`      | All entities (vessel/flight/event/actor) near an image | `image_id`, `entity_type`           |
+| `osint-graph__get_satellite_event_correlation` | Events correlated to satellite captures                | —                                   |
 
 ### Vector search
 
-| Tool                   | Use it to                              | Key arguments                                                                                                                  |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `osint__vector_search` | Semantic similarity over a named index | `query_embedding`, `index_name` (one of `article_embeddings`, `event_embeddings`, `actor_embeddings`), `k=10`, `min_score=0.6` |
+| Tool                         | Use it to                              | Key arguments                                                                                                                  |
+| ---------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `osint-graph__vector_search` | Semantic similarity over a named index | `query_embedding`, `index_name` (one of `article_embeddings`, `event_embeddings`, `actor_embeddings`), `k=10`, `min_score=0.6` |
 
 ### AOIs (areas of interest)
 
-| Tool                    | Use it to                             | Key arguments                                                          |
-| ----------------------- | ------------------------------------- | ---------------------------------------------------------------------- |
-| `osint__get_aois`       | List all AOIs with image stats        | `include_stats=True`                                                   |
-| `osint__get_aoi`        | Get one AOI by id                     | `aoi_id`                                                               |
-| `osint__get_aoi_images` | Paginated satellite images for an AOI | `aoi_id`, `page`, `page_size`, `date_from`, `date_to`, `layer`, `sort` |
-| `osint__upsert_aoi`     | Create/update an AOI; returns id      | `aoi_data`                                                             |
+| Tool                          | Use it to                             | Key arguments                                                          |
+| ----------------------------- | ------------------------------------- | ---------------------------------------------------------------------- |
+| `osint-graph__get_aois`       | List all AOIs with image stats        | `include_stats=True`                                                   |
+| `osint-graph__get_aoi`        | Get one AOI by id                     | `aoi_id`                                                               |
+| `osint-graph__get_aoi_images` | Paginated satellite images for an AOI | `aoi_id`, `page`, `page_size`, `date_from`, `date_to`, `layer`, `sort` |
+| `osint-graph__upsert_aoi`     | Create/update an AOI; returns id      | `aoi_data`                                                             |
 
 ### Satellite imagery
 
-| Tool                                 | Use it to                                           | Key arguments                                                  |
-| ------------------------------------ | --------------------------------------------------- | -------------------------------------------------------------- |
-| `osint__get_satellite_image`         | Full image metadata + AOI                           | `image_id`                                                     |
-| `osint__get_all_satellite_images`    | All images with optional filters                    | `filters`                                                      |
-| `osint__get_latest_satellite_images` | Newest images, optionally by AOI/layer              | `aoi_id`, `layer`, `limit=5`                                   |
-| `osint__link_image_to_entities`      | Spatially/temporally link an image to entities      | `image_id`, `image_bbox`, `captured_at`, `time_window_hours=3` |
-| `osint__mark_latest_image`           | Mark an image as latest for an AOI                  | `aoi_id`, `image_id`                                           |
-| `osint__upsert_satellite_image`      | Create/update an image linked to an AOI; returns id | `image_data`, `aoi_id`                                         |
-| `osint__delete_satellite_image`      | Remove an image and its relationships               | `image_id` returns bool                                        |
+| Tool                                       | Use it to                                           | Key arguments                                                  |
+| ------------------------------------------ | --------------------------------------------------- | -------------------------------------------------------------- |
+| `osint-graph__get_satellite_image`         | Full image metadata + AOI                           | `image_id`                                                     |
+| `osint-graph__get_all_satellite_images`    | All images with optional filters                    | `filters`                                                      |
+| `osint-graph__get_latest_satellite_images` | Newest images, optionally by AOI/layer              | `aoi_id`, `layer`, `limit=5`                                   |
+| `osint-graph__link_image_to_entities`      | Spatially/temporally link an image to entities      | `image_id`, `image_bbox`, `captured_at`, `time_window_hours=3` |
+| `osint-graph__mark_latest_image`           | Mark an image as latest for an AOI                  | `aoi_id`, `image_id`                                           |
+| `osint-graph__upsert_satellite_image`      | Create/update an image linked to an AOI; returns id | `image_data`, `aoi_id`                                         |
+| `osint-graph__delete_satellite_image`      | Remove an image and its relationships               | `image_id` returns bool                                        |
 
 ### Relationship helpers (writes)
 
-| Tool                              | Creates                                            |
-| --------------------------------- | -------------------------------------------------- |
-| `osint__link_article_to_actor`    | `(Article)-[:MENTIONS]->(Actor)`                   |
-| `osint__link_article_to_vessel`   | `(Article)-[:MENTIONS]->(Vessel)`                  |
-| `osint__link_article_to_location` | `(Article)-[:MENTIONS]->(Location)`                |
-| `osint__link_article_to_event`    | `(Article)-[:DESCRIBES]->(Event)`                  |
-| `osint__link_article_to_flight`   | `(Article)-[:MENTIONS]->(Flight)`                  |
-| `osint__link_event_to_location`   | `(Event)-[:OCCURRED_AT]->(Location)`               |
-| `osint__link_event_to_actor`      | `(Event)-[:INVOLVES]->(Actor)`                     |
-| `osint__link_vessel_to_location`  | `(Vessel)-[:CURRENTLY_AT]->(Location)`             |
-| `osint__link_flight_to_airport`   | `(Flight)-[:DEPARTED_FROM\|HEADING_TO]->(Airport)` |
-| `osint__link_flight_to_location`  | `(Flight)-[:CURRENTLY_OVER]->(Location)`           |
+| Tool                                    | Creates                                            |
+| --------------------------------------- | -------------------------------------------------- |
+| `osint-graph__link_article_to_actor`    | `(Article)-[:MENTIONS]->(Actor)`                   |
+| `osint-graph__link_article_to_vessel`   | `(Article)-[:MENTIONS]->(Vessel)`                  |
+| `osint-graph__link_article_to_location` | `(Article)-[:MENTIONS]->(Location)`                |
+| `osint-graph__link_article_to_event`    | `(Article)-[:DESCRIBES]->(Event)`                  |
+| `osint-graph__link_article_to_flight`   | `(Article)-[:MENTIONS]->(Flight)`                  |
+| `osint-graph__link_event_to_location`   | `(Event)-[:OCCURRED_AT]->(Location)`               |
+| `osint-graph__link_event_to_actor`      | `(Event)-[:INVOLVES]->(Actor)`                     |
+| `osint-graph__link_vessel_to_location`  | `(Vessel)-[:CURRENTLY_AT]->(Location)`             |
+| `osint-graph__link_flight_to_airport`   | `(Flight)-[:DEPARTED_FROM\|HEADING_TO]->(Airport)` |
+| `osint-graph__link_flight_to_location`  | `(Flight)-[:CURRENTLY_OVER]->(Location)`           |
 
 ## Graph model
 
@@ -243,7 +243,7 @@ MMSIs, callsigns, or source URLs inline for every material claim.
 
 - Never fabricate node ids, MMSIs, callsigns, dates, coordinates, or quotes.
 - Never present an inference as a confirmed fact.
-- Never issue a `osint__delete_*` call unless the user explicitly asks.
+- Never issue a `osint-graph__delete_*` call unless the user explicitly asks.
 - Never invent tool names or arguments — use only the 63 tools above.
 - If a tool returns empty results, say so and adjust the query rather than
   inventing data.
