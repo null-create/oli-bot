@@ -47,7 +47,6 @@ from typing import Optional, Dict
 logger = logging.getLogger(__name__)
 
 # Configuration from environment variables
-AUTH_SERVER_BASE_URL = os.getenv("AUTH_SERVER_BASE_URL", "https://localhost:8060")
 SCOPES = tuple(
     scope
     for scope in os.getenv("SCOPES", "openid profile email User.Read").split()
@@ -118,27 +117,11 @@ class CallbackHandler(BaseHTTPRequestHandler):
         """Handle the OAuth callback"""
         query_components = parse_qs(urlparse(self.path).query)
 
-        if self.path == "/logout":
-            CallbackHandler.logout_requested = True
-            # Delegate to the auth server's /auth/logout endpoint, which clears
-            # server-side Azure tokens and redirects through Azure's end-session
-            # endpoint — matching the behavior of the "Log Out" button on /test-auth.
-            redirect_target = f"{AUTH_SERVER_BASE_URL}/test-auth"
-            self.send_response(302)
-            self.send_header("Location", redirect_target)
-            self.end_headers()
-            logger.info("[OAuth] Redirecting to auth server logout")
-            if CallbackHandler._server_ref:
-                threading.Thread(
-                    target=CallbackHandler._server_ref.shutdown, daemon=True
-                ).start()
-        elif "code" in query_components:
+        if "code" in query_components:
             CallbackHandler.authorization_code = query_components["code"][0]
             # RFC 9207: record the issuer so the flow can validate it before redeeming the code
             CallbackHandler.iss = query_components.get("iss", [None])[0]
-            auth_base_url = html.escape(
-                CallbackHandler._auth_server_url or AUTH_SERVER_BASE_URL
-            )
+            auth_base_url = html.escape(CallbackHandler._auth_server_url)
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
@@ -408,6 +391,7 @@ class OAuthHandler:
         CallbackHandler.iss = None
         CallbackHandler.error = None
         CallbackHandler.logout_requested = False
+        CallbackHandler._auth_server_url = auth_server_url
 
         # Parse port from redirect_uri to handle custom ports
         callback_parsed = urlparse(self.redirect_uri)
