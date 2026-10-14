@@ -7,6 +7,7 @@ from typing import Any, List
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from ..attachments import attachment_note, save_attachments
 from ..convert import _event_to_frame
 from ..harness import _api_confirm
 from ...models import Done, Message, UsageEvent
@@ -167,7 +168,14 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 continue
 
             content = data.get("content")
-            if not content or not str(content).strip():
+            attachments = data.get("attachments") or []
+            if not isinstance(attachments, list):
+                await websocket.send_json(
+                    {"type": "error", "data": {"message": "attachments must be a list"}}
+                )
+                continue
+            has_text = bool(content and str(content).strip())
+            if not has_text and not attachments:
                 await websocket.send_json(
                     {"type": "error", "data": {"message": "Empty message"}}
                 )
@@ -200,7 +208,35 @@ async def websocket_chat(websocket: WebSocket) -> None:
                         )
                         continue
 
-                messages.append(Message(role="user", content=str(content)))
+                text = str(content) if content else ""
+                user_images = None
+                if attachments:
+                    config = getattr(websocket.app.state, "config", None) or getattr(
+                        agent, "config", None
+                    )
+                    try:
+                        images, saved = save_attachments(
+                            config, connection_session_id, attachments
+                        )
+                    except Exception as e:
+                        logger.warning("Failed to save attachments: %s", e)
+                        await websocket.send_json(
+                            {"type": "error", "data": {"message": str(e)}}
+                        )
+                        continue
+                    note = attachment_note(saved, images)
+                    if note:
+                        text = f"{text}\n\n{note}" if text.strip() else note
+                    user_images = images or None
+                if not text.strip():
+                    await websocket.send_json(
+                        {"type": "error", "data": {"message": "Empty message"}}
+                    )
+                    continue
+
+                messages.append(
+                    Message(role="user", content=text, images=user_images)
+                )
 
                 await _run_turn(
                     websocket,

@@ -8,6 +8,7 @@ fixture re-initializes ``app.state`` with the stub harness.
 """
 
 import asyncio
+import base64
 import json
 import threading
 
@@ -122,6 +123,19 @@ class _HistoryProbeStub:
     async def stream_generate(self, messages, tools=None):
         self.seen.append(len(messages))
         yield TextChunk(f"n={len(messages)}")
+
+
+class _MessageProbeStub:
+    """Captures the exact message list handed to the backend."""
+
+    model = "stub-msg-probe"
+
+    def __init__(self):
+        self.messages = []
+
+    async def stream_generate(self, messages, tools=None):
+        self.messages = list(messages)
+        yield TextChunk("ok")
 
 
 class _StubMCP:
@@ -487,6 +501,105 @@ def test_websocket_todo_relay(api):
         assert todo_frames[0]["data"]["todos"][0]["content"] == "do x"
         assert todo_frames[0]["data"]["todos"][0]["status"] == "pending"
         assert "task_id" not in todo_frames[0]["data"]
+
+
+def _use_tmp_uploads(api, tmp_path):
+    """Point the shared config's logs_dir at a tmp dir so uploads are isolated."""
+    api.application.state.config = AppConfig(
+        _env_file=None, backend="ollama", logs_dir=str(tmp_path / "logs")
+    )
+
+
+def _b64(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+def test_websocket_image_attachment(api, tmp_path):
+    api.reset(_MessageProbeStub())
+    _use_tmp_uploads(api, tmp_path)
+    probe = api.application.state.agent.backend
+    png = b"\x89PNG\r\n\x1a\n" + b"pixels" * 4
+    attachment = {
+        "name": "shot.png",
+        "media_type": "image/png",
+        "data": _b64(png),
+    }
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "look at this", "attachments": [attachment]})
+        frames = _recv_until_done(ws)
+    assert frames[-1]["type"] == "done"
+    user = [m for m in probe.messages if m.role == "user"][-1]
+    assert user.images and user.images[0].media_type == "image/png"
+    assert user.images[0].data == png
+    assert "shot.png" in user.content
+    assert "look at this" in user.content
+    saved = list((tmp_path / "uploads").rglob("*shot.png"))
+    assert saved and saved[0].read_bytes() == png
+
+
+def test_websocket_file_attachment(api, tmp_path):
+    api.reset(_MessageProbeStub())
+    _use_tmp_uploads(api, tmp_path)
+    probe = api.application.state.agent.backend
+    csv = b"a,b\n1,2\n"
+    attachment = {
+        "name": "data.csv",
+        "media_type": "text/csv",
+        "data": _b64(csv),
+    }
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "analyze", "attachments": [attachment]})
+        frames = _recv_until_done(ws)
+    assert frames[-1]["type"] == "done"
+    user = [m for m in probe.messages if m.role == "user"][-1]
+    assert user.images is None
+    assert "data.csv" in user.content
+    assert "read_file" in user.content
+    saved = list((tmp_path / "uploads").rglob("*data.csv"))
+    assert saved and saved[0].read_bytes() == csv
+
+
+def test_websocket_attachment_only_turn(api, tmp_path):
+    api.reset(_MessageProbeStub())
+    _use_tmp_uploads(api, tmp_path)
+    probe = api.application.state.agent.backend
+    attachment = {
+        "name": "note.txt",
+        "media_type": "text/plain",
+        "data": _b64(b"hello"),
+    }
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"attachments": [attachment]})
+        frames = _recv_until_done(ws)
+    assert all(f["type"] != "error" for f in frames)
+    assert frames[-1]["type"] == "done"
+    user = [m for m in probe.messages if m.role == "user"][-1]
+    assert "note.txt" in user.content
+
+
+def test_websocket_bad_attachment_keeps_connection(api, tmp_path):
+    api.reset(_TextStub())
+    _use_tmp_uploads(api, tmp_path)
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json(
+            {
+                "attachments": [
+                    {
+                        "name": "bad.bin",
+                        "media_type": "application/octet-stream",
+                        "data": "!!!not-base64!!!",
+                    }
+                ]
+            }
+        )
+        frame = ws.receive_json()
+        assert frame["type"] == "error"
+        ws.send_json({"content": "hi"})
+        assert _recv_until_done(ws)[-1]["type"] == "done"
 
 
 # --------------------------------------------------------------------------- #
