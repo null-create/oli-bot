@@ -2,326 +2,158 @@
 
 ## System Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                         User Terminal                            │
-│                    (Textual TUI Application)                     │
-└────────────────────────┬─────────────────────────────────────────┘
-                         │
-                         ▼
-            ┌────────────────────────────┐
-            │    chat.py (Main Loop)     │
-            │  - User input handling     │
-            │  - Command processing      │
-            │  - Markdown rendering      │
-            │  - Session management      │
-            └────────────┬───────────────┘
-                         │
-                         ▼
-            ┌────────────────────────────┐
-            │  Agent (agent.py)          │
-            │  - Process user input      │
-            │  - Generate tool calls     │
-            │  - Aggregate results       │
-            │  - Maintain context        │
-            └────────────┬───────────────┘
-                         │
-                ┌────────┴────────────┐
-                ▼                     ▼
-        ┌──────────────────┐ ┌──────────────────────┐
-        │  Tool Manager    │ │ Permission System    │
-        │  (tools/*)       │ │ (mcp_client.py +     │
-        │                  │ │  profiles/perm)      │
-        │                  │ │                      │
-        │ - read_file      │ │ - Validate actions   │
-        │ - write_file     │ │ - Grant/deny         │
-        │ - run_command    │ │ - Session tracking   │
-        │ - websearch      │ │ - Audit logging      │
-        │ - notebook       │ │ - Workspace scope    │
-        │ - dispatch       │ │                      │
-        └────────┬─────────┘ └──────────────────────┘
-                 │
-                 ▼
-        ┌──────────────────────────────┐
-        │   Backend Abstraction        │
-        │   (backend.py)               │
-        │                              │
-        │ - Unified interface          │
-        │ - Streaming aggregation      │
-        │ - Tool call parsing          │
-        │ - Token management           │
-        └─────┬──────────────────┬─────┘
-              │                  │
-    ┌─────────┴───────┐   ┌──────┴────────┐
-    ▼                 ▼   ▼               ▼
-┌────────────┐  ┌──────────────┐  ┌────────────────┐
-│  Ollama    │  │  OpenAI      │  │ HuggingFace    │
-│  (Local)   │  │  (Remote)    │  │ (Remote/Local) │
-└────────────┘  └──────────────┘  └────────────────┘
+```mermaid
+flowchart TD
+    User["User Terminal<br/>(Textual TUI Application)"]
+    Chat["chat.py (Main Loop)<br/>- User input handling<br/>- Command processing<br/>- Markdown rendering<br/>- Session management"]
+    AgentNode["Agent (agent.py)<br/>- Process user input<br/>- Generate tool calls<br/>- Aggregate results<br/>- Maintain context"]
+    Tools["Tool Manager (tools/*)<br/>- read_file<br/>- write_file<br/>- run_command<br/>- websearch<br/>- notebook<br/>- dispatch"]
+    Perm["Permission System<br/>(mcp_client.py + profiles/perm)<br/>- Validate actions<br/>- Grant/deny<br/>- Session tracking<br/>- Audit logging<br/>- Workspace scope"]
+    Backend["Backend Abstraction (backend.py)<br/>- Unified interface<br/>- Streaming aggregation<br/>- Tool call parsing<br/>- Token management"]
+    Ollama["Ollama (Local)"]
+    OpenAI["OpenAI (Remote)"]
+    HF["HuggingFace (Remote/Local)"]
+    TUI["TUI Display<br/>- Markdown rendering<br/>- Streaming updates<br/>- Status indicators"]
+    SessionStore["Session Persistence<br/>~/.config/oli/sessions/<br/>(JSON + metadata)"]
 
-                    ▼ (Response Stream)
-
-            ┌────────────────────────────┐
-            │  TUI Display               │
-            │  - Markdown rendering      │
-            │  - Streaming updates       │
-            │  - Status indicators       │
-            └────────────────────────────┘
-
-                    ▼ (Storage)
-
-            ┌────────────────────────────┐
-            │  Session Persistence       │
-            │  ~/.config/oli/sessions/   │
-            │  (JSON + metadata)         │
-            └────────────────────────────┘
+    User --> Chat --> AgentNode
+    AgentNode --> Tools
+    AgentNode --> Perm
+    Tools --> Backend
+    Backend --> Ollama
+    Backend --> OpenAI
+    Backend --> HF
+    Ollama -->|"Response Stream"| TUI
+    OpenAI -->|"Response Stream"| TUI
+    HF -->|"Response Stream"| TUI
+    TUI -->|"Storage"| SessionStore
 ```
 
 ---
 
 ## Data Flow Diagram
 
-```
-User Input
-    │
-    ▼
-┌─────────────────────────────────────────┐
-│ chat.py: Parse Input                    │
-│ - Command vs. message                   │
-│ - Session context lookup                │
-└─────────────┬───────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────┐
-│ Is it a command? (/help, /config, etc.) │
-├─────────────────────────────────────────┤
-│ Yes ──────► Execute Command Handler     │
-│            └──► Display Result          │
-└─────────────────────────────────────────┘
-              │ No
-              ▼
-┌─────────────────────────────────────────┐
-│ agent.py: Process Message               │
-│ - Add to conversation history           │
-│ - Generate system prompt                │
-│ - Format for LLM                        │
-└─────────────┬───────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────┐
-│ backend.py: Stream LLM Response         │
-│ - Connect to backend (Ollama/OpenAI)    │
-│ - Stream tokens                         │
-│ - Buffer tool calls                     │
-└─────────────┬───────────────────────────┘
-              │
-              ├─────► Display tokens in TUI
-              │
-              ▼
-┌─────────────────────────────────────────┐
-│ Parse Tool Calls                        │
-│ - Extract function calls                │
-│ - Validate schema                       │
-└─────────────┬───────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────┐
-│ Permission Check (permissions.py)      │
-│ - Tool enabled in profile?              │
-│ - Workspace boundary OK?                │
-│ - User approval needed?                 │
-└─────────────┬───────────────────────────┘
-              │
-       ┌──────┴───┐
-       ▼          ▼
-      DENY      GRANT
-       │          │
-       ▼          ▼
-    Error   ┌──────────────────────┐
-            │ tools/manager.py     │
-            │ Route to tool        │
-            └──────┬───────────────┘
-                   │
-                   ▼
-            ┌──────────────────────┐
-            │ tools/*.py           │
-            │ Execute tool         │
-            │ (files, shell, web)  │
-            └──────┬───────────────┘
-                   │
-                   ▼
-            ┌──────────────────────┐
-            │ Aggregate Result     │
-            │ into context         │
-            └──────┬───────────────┘
-                   │
-              Continue Loop?
-                   │
-          ┌────────┴────────┐
-          ▼                 ▼
-         YES               NO
-          │                 │
-          └──► Repeat    Store Result
-              from        Save Session
-              "Stream     Display Final
-              LLM         Response
-              Response"
+```mermaid
+flowchart TD
+    Input(["User Input"])
+    Parse["chat.py: Parse Input<br/>- Command vs. message<br/>- Session context lookup"]
+    CmdQ{"Is it a command?<br/>(/help, /config, etc.)"}
+    ExecCmd["Execute Command Handler"]
+    DispCmd["Display Result"]
+    Proc["agent.py: Process Message<br/>- Add to conversation history<br/>- Generate system prompt<br/>- Format for LLM"]
+    Stream["backend.py: Stream LLM Response<br/>- Connect to backend (Ollama/OpenAI)<br/>- Stream tokens<br/>- Buffer tool calls"]
+    Tok["Display tokens in TUI"]
+    ParseCalls["Parse Tool Calls<br/>- Extract function calls<br/>- Validate schema"]
+    PermCheck["Permission Check (permissions.py)<br/>- Tool enabled in profile?<br/>- Workspace boundary OK?<br/>- User approval needed?"]
+    DenyErr["Error"]
+    Route["tools/manager.py<br/>Route to tool"]
+    Exec["tools/*.py<br/>Execute tool<br/>(files, shell, web)"]
+    Agg["Aggregate Result<br/>into context"]
+    ContQ{"Continue Loop?"}
+    Final["Store Result<br/>Save Session<br/>Display Final Response"]
+
+    Input --> Parse --> CmdQ
+    CmdQ -->|Yes| ExecCmd --> DispCmd
+    CmdQ -->|No| Proc --> Stream
+    Stream --> Tok
+    Stream --> ParseCalls
+    ParseCalls --> PermCheck
+    PermCheck -->|"DENY"| DenyErr
+    PermCheck -->|"GRANT"| Route
+    Route --> Exec
+    Exec --> Agg
+    Agg --> ContQ
+    ContQ -->|"YES (repeat from Stream LLM Response)"| Stream
+    ContQ -->|NO| Final
 ```
 
 ## Permission Flow Diagram
 
-```
-Tool Call Generated by Agent
-    │
-    ▼
-┌───────────────────────────────────────────┐
-│ Permission Check (3-layer model)          │
-└─────────┬───────────────────┬─────────────┘
-          │                   │
-    ┌─────▼─────┐        ┌────▼──────┐
-    │ Profile   │        │ Session   │
-    │ Level     │        │ Level     │
-    │           │        │           │
-    │ manifests │        │ Runtime   │
-    │ allow/deny│        │ approvals │
-    └─────┬─────┘        └────┬──────┘
-          │                   │
-          └───────┬───────────┘
-                  ▼
-    ┌────────────────────────────────────────┐
-    │ Tool-Level Checks                      │
-    │ - SSRF validation (web tools)          │
-    │ - Shell allowlist (shell tool)         │
-    │ - Sensitive files blocklist            │
-    │ - Workspace boundary check             │
-    │ - Path traversal detection             │
-    └────────────┬───────────────────────────┘
-                 │
-          ┌──────┴────┐
-          ▼           ▼
-         PASS        FAIL
-          │           │
-          │           ▼
-          │    ┌────────────┐
-          │    │ Deny tool  │
-          │    │ call, warn │
-          │    │ user       │
-          │    └────────────┘
-          │
-          ▼
-    ┌──────────────────────┐
-    │ Need approval?       │
-    │ (e.g., write file)   │
-    └────────┬─────────────┘
-             │
-         ┌───┴────┐
-         ▼        ▼
-        Yes       No
-         │        │
-         ▼        │
-    Prompt User   │
-         │        │
-    ┌────┴────┐   │
-    ▼         ▼   │
-   Yes       No   │
-    │        │    │
-    ▼        ▼     ▼
- GRANT    DENY  EXECUTE
-    │       │       │
-    └───────┴───────┘
-            │
-            ▼
-    ┌──────────────────┐
-    │ Execute Tool     │
-    │ Get Result       │
-    └──────────────────┘
+```mermaid
+flowchart TD
+    TC(["Tool Call Generated by Agent"])
+    PC["Permission Check (3-layer model)"]
+    PL["Profile Level<br/>manifests<br/>allow/deny"]
+    SL["Session Level<br/>Runtime<br/>approvals"]
+    TLC["Tool-Level Checks<br/>- SSRF validation (web tools)<br/>- Shell allowlist (shell tool)<br/>- Sensitive files blocklist<br/>- Workspace boundary check<br/>- Path traversal detection"]
+    PassFail{"PASS or FAIL?"}
+    FailDeny["Deny tool call, warn user"]
+    Need["Need approval?<br/>(e.g., write file)"]
+    Prompt["Prompt User"]
+    Grant["GRANT"]
+    PromptDeny["DENY"]
+    ExecGate["EXECUTE"]
+    ExecTool["Execute Tool<br/>Get Result"]
+
+    TC --> PC
+    PC --> PL
+    PC --> SL
+    PL --> TLC
+    SL --> TLC
+    TLC --> PassFail
+    PassFail -->|FAIL| FailDeny
+    PassFail -->|PASS| Need
+    Need -->|Yes| Prompt
+    Need -->|No| ExecGate
+    Prompt -->|Yes| Grant
+    Prompt -->|No| PromptDeny
+    Grant --> ExecTool
+    PromptDeny --> ExecTool
+    ExecGate --> ExecTool
 ```
 
 ---
 
 ## Backend Selection Logic
 
-```
-┌─────────────────────────────────────┐
-│ Backend Selection (Priority Order)  │
-└─────────────────────────────────────┘
-
-1. Command-line flag
-   └─ python chat.py --backend openai
-
-2. Environment variable
-   └─ OLI_BACKEND=openai
-
-3. .env file
-   └─ OLI_BACKEND=ollama
-
-4. Config file (~/.config/oli/settings.json)
-   └─ "backend": "transformers"
-
-5. Session setting (if resuming)
-   └─ Load from session metadata
-
-6. Default (Ollama)
-   └─ http://localhost:11434
-
-┌──────────────────────────────────────┐
-│ Supported Backends                   │
-├──────────────────────────────────────┤
-│ ollama          - Local via HTTP     │
-│ openai          - OpenAI API         │
-│ huggingface     - HF Inference API   │
-│ transformers    - Local HF models    │
-└──────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Priority["Backend Selection (Priority Order)"]
+        P1["1. Command-line flag<br/>python chat.py --backend openai"]
+        P2["2. Environment variable<br/>OLI_BACKEND=openai"]
+        P3["3. .env file<br/>OLI_BACKEND=ollama"]
+        P4["4. Config file (~/.config/oli/settings.json)<br/>backend = transformers"]
+        P5["5. Session setting (if resuming)<br/>Load from session metadata"]
+        P6["6. Default (Ollama)<br/>http://localhost:11434"]
+        P1 -->|if unset| P2
+        P2 -->|if unset| P3
+        P3 -->|if unset| P4
+        P4 -->|if unset| P5
+        P5 -->|if unset| P6
+    end
+    subgraph Supported["Supported Backends"]
+        B1["ollama - Local via HTTP"]
+        B2["openai - OpenAI API"]
+        B3["huggingface - HF Inference API"]
+        B4["transformers - Local HF models"]
+    end
 ```
 
 ---
 
 ## Agent Pooling Architecture
 
-```
-┌────────────────────────────────────┐
-│ Root Agent                         │
-│ - Received user task               │
-│ - Decides dispatch plan            │
-│ - Aggregates results               │
-└────────┬─────────────────────┬─────┘
-         │                     │
-    Can dispatch?          ┌───▼────┐
-         │                 │ Yes    │
-         │                 └────┬───┘
-         │                      │
-         ▼                      ▼
-    ┌─────────────┐      ┌──────────────────┐
-    │ Load        │      │ builtin__dispatch│
-    │ agents.yaml │      │ (tool call)      │
-    └─────────────┘      └────────┬─────────┘
-                                  │
-                    ┌─────────────┼─────────────┐
-                    │             │             │
-                    ▼             ▼             ▼
-            ┌──────────┐  ┌──────────┐  ┌─────────┐
-            │ Analyst  │  │ Searcher │  │ Coder   │
-            │ Agent    │  │ Agent    │  │ Agent   │
-            │          │  │          │  │         │
-            │ Local    │  │ OpenAI   │  │ Remote  │
-            │ Ollama   │  │ gpt-4    │  │ HF      │
-            └────┬─────┘  └────┬─────┘  └────┬────┘
-                 │             │             │
-       ┌─────────┴─────────────┴─────────────┘
-       │
-       │ Execute in parallel
-       │
-       ▼
-    Results aggregated
-    │
-    ├─ Analyst result: {...}
-    ├─ Searcher result: {...}
-    ├─ Coder result: {...}
-    │
-    ▼
-    Root agent processes results
-    │
-    └─ Return final response to user
+```mermaid
+flowchart TD
+    Root["Root Agent<br/>- Received user task<br/>- Decides dispatch plan<br/>- Aggregates results"]
+    Load["Load agents.yaml"]
+    Dispatch["builtin__dispatch<br/>(tool call)"]
+    Analyst["Analyst Agent<br/>Local Ollama"]
+    Searcher["Searcher Agent<br/>OpenAI gpt-4"]
+    Coder["Coder Agent<br/>Remote HF"]
+    Agg["Results aggregated<br/>(execute in parallel)<br/>- Analyst result: {...}<br/>- Searcher result: {...}<br/>- Coder result: {...}"]
+    RootProc["Root agent processes results"]
+    Final["Return final response to user"]
+
+    Root -->|"Can dispatch?"| Load
+    Root -->|Yes| Dispatch
+    Dispatch --> Analyst
+    Dispatch --> Searcher
+    Dispatch --> Coder
+    Analyst -->|execute in parallel| Agg
+    Searcher -->|execute in parallel| Agg
+    Coder -->|execute in parallel| Agg
+    Agg --> RootProc --> Final
 ```
 
 ---
@@ -333,43 +165,43 @@ that runs alongside the normal `_generate_response` worker. All audio I/O is
 blocking and offloaded via `asyncio.to_thread` so the Textual event loop never
 stalls. Everything is local — no network calls.
 
-```
-/voice (typed)
-    │
-    ▼
-_handle_voice()
-    │
-    ├─ voice OFF → ON: create VoiceEngine (lazy), threading.Event, start
-    │              _run_voice_loop() as a background worker
-    │
-    └─ voice ON → OFF: set _voice_stop_event ─────────────┐
-                                                            │
-                                                            ▼
-┌───────────────────────────────────────────────────────────────────┐
-│ _run_voice_loop()  (while self._voice_active)                     │
-│                                                                     │
-│  mount "🎙 Listening…" ──▶ engine.record(stop_event)               │
-│         │                        │                                │
-│         │           stop_event.set() mid-recording ──▶ return None │
-│         │                        │ (checked every audio frame)     │
-│         ▼                        ▼                                │
-│  remove listening widget   audio_path or None                     │
-│         │                        │                                │
-│         │              None (silence) ──▶ loop back                │
-│         ▼                                                          │
-│  engine.transcribe(audio_path)  (faster-whisper)                  │
-│         │                                                          │
-│         ▼                                                          │
-│  _handle_user_message(text)  ──▶ normal chat pipeline               │
-│         │                        (_generate_response, tool loop)   │
-│         ▼                                                          │
-│  poll self.agent.generating until False                           │
-│         │                                                          │
-│         ▼                                                          │
-│  engine.speak(last_assistant_message)  (Piper TTS)                │
-│         │                                                          │
-│         └──▶ loop back to "Listening…" (if still active)          │
-└───────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    V["/voice (typed)"]
+    H["_handle_voice()"]
+    On["voice OFF → ON:<br/>create VoiceEngine (lazy)<br/>create threading.Event<br/>start _run_voice_loop() as background worker"]
+    Off["voice ON → OFF:<br/>set _voice_stop_event"]
+    Loop["_run_voice_loop()<br/>(while self._voice_active)"]
+    Mount["mount '🎙 Listening…'"]
+    Rec["engine.record(stop_event)"]
+    StopRet["return None<br/>(stop_event.set() mid-recording,<br/>checked every audio frame)"]
+    Widget["remove listening widget"]
+    Res{"audio_path or None"}
+    Trans["engine.transcribe(audio_path)<br/>(faster-whisper)"]
+    Msg["_handle_user_message(text)"]
+    Pipe["normal chat pipeline<br/>(_generate_response, tool loop)"]
+    Poll["poll self.agent.generating until False"]
+    Speak["engine.speak(last_assistant_message)<br/>(Piper TTS)"]
+
+    V --> H
+    H -->|"voice OFF → ON"| On
+    H -->|"voice ON → OFF"| Off
+    On --> Loop
+    Off -.->|"interrupts recording"| Rec
+    Loop --> Mount
+    Mount --> Widget
+    Mount --> Rec
+    Rec --> StopRet
+    Rec --> Res
+    StopRet --> Res
+    Res -->|"None (silence) → loop back"| Loop
+    Res -->|audio_path| Trans
+    Widget --> Trans
+    Trans --> Msg
+    Msg --> Pipe
+    Pipe --> Poll
+    Poll --> Speak
+    Speak -->|"loop back to Listening… if still active"| Loop
 ```
 
 Key points:
@@ -390,298 +222,195 @@ Key points:
 
 ## State Machine: Chat Session
 
-```
-                    Start
-                     │
-                     ▼
-            ┌─────────────────┐
-            │ New Session     │
-            │ (or Resume)     │
-            └────────┬────────┘
-                     │
-                     ▼
-         ┌──────────────────────┐
-         │ Wait for User Input  │
-         └────────┬─────────────┘
-                  │
-              ┌───┴────┐
-              ▼        ▼
-          Command   Message
-              │        │
-              │        └──────► Add to History
-              │                      │
-              │                      ▼
-              │           ┌──────────────────┐
-              │           │ Generate LLM     │
-              │           │ Response         │
-              └──────────►│ (streaming)      │
-                          └────┬─────────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │ Parse Tool Calls    │
-                    │ (if any)            │
-                    └────────┬────────────┘
-                             │
-                         ┌───┴────┐
-                         ▼        ▼
-                      Yes        No
-                         │        │
-                         ▼        ▼
-                    Execute   Display
-                    Tools     Response
-                         │        │
-                         ▼        ▼
-                    ┌──────────────────┐
-                    │ Save Session     │
-                    │ Update history   │
-                    └────────┬─────────┘
-                             │
-                             ▼
-                    Continue loop?
-                             │
-                         ┌───┴────┐
-                         ▼        ▼
-                       Yes       No
-                        │        │
-                    Loop ◄┘      └──► Exit
-                                     │
-                                     ▼
-                              Session Closed
+```mermaid
+flowchart TD
+    Start((Start))
+    New["New Session<br/>(or Resume)"]
+    Wait["Wait for User Input"]
+    Kind{"Input type"}
+    Cmd["Command"]
+    Msg["Message"]
+    Hist["Add to History"]
+    Gen["Generate LLM Response<br/>(streaming)"]
+    ParseT["Parse Tool Calls<br/>(if any)"]
+    HasTools{"Tool calls?"}
+    ExecT["Execute Tools"]
+    DispR["Display Response"]
+    Save["Save Session<br/>Update history"]
+    Cont{"Continue loop?"}
+    Exit((Exit))
+    Closed["Session Closed"]
+
+    Start --> New --> Wait
+    Wait --> Kind
+    Kind -->|Command| Cmd
+    Kind -->|Message| Msg --> Hist --> Gen
+    Cmd --> Gen
+    Gen --> ParseT --> HasTools
+    HasTools -->|Yes| ExecT --> Save
+    HasTools -->|No| DispR --> Save
+    Save --> Cont
+    Cont -->|"Yes (Loop)"| Wait
+    Cont -->|No| Exit --> Closed
 ```
 
 ---
 
 ## Configuration Precedence (Lowest to Highest)
 
-```
-┌─────────────────────────────────────────────┐
-│ Configuration Precedence Chain              │
-├─────────────────────────────────────────────┤
-│ 1. Declared defaults                        │
-│    └─ backend = "ollama"                    │
-│       url = "http://localhost:11434"        │
-│                                             │
-│ 2. SDK-standard environment                 │
-│    └─ $OPENAI_API_KEY / $OPENAI_BASE_URL    │
-│       $HUGGINGFACE_API_KEY / $HF_TOKEN      │
-│       (API-key fields only)                 │
-│                                             │
-│ 3. OLI_* environment + .env                 │
-│    └─ $OLI_BACKEND, $OLI_MODEL,             │
-│       $OLI_OPENAI_API_KEY, .env lines       │
-│                                             │
-│ 4. ~/.config/oli/settings.json              │
-│    (settings.json beats env; empty API-key  │
-│    strings fall through to env)             │
-│                                             │
-│ 5. Explicit constructor kwargs              │
-│    └─ AppConfig(...) / Agent(config=...)    │
-│       (HIGHEST — e.g. persisted model       │
-│        overrides from /model set-large)     │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Chain["Configuration Precedence Chain<br/>(Lowest to Highest)"]
+    D1["1. Declared defaults<br/>backend = ollama<br/>url = http://localhost:11434"]
+    D2["2. SDK-standard environment<br/>$OPENAI_API_KEY / $OPENAI_BASE_URL<br/>$HUGGINGFACE_API_KEY / $HF_TOKEN<br/>(API-key fields only)"]
+    D3["3. OLI_* environment + .env<br/>$OLI_BACKEND, $OLI_MODEL,<br/>$OLI_OPENAI_API_KEY, .env lines"]
+    D4["4. ~/.config/oli/settings.json<br/>(settings.json beats env; empty API-key<br/>strings fall through to env)"]
+    D5["5. Explicit constructor kwargs<br/>AppConfig(...) / Agent(config=...)<br/>(HIGHEST — e.g. persisted model<br/>overrides from /model set-large)"]
+
+    Chain --> D1
+    D1 -->|"overridden by"| D2
+    D2 -->|"overridden by"| D3
+    D3 -->|"overridden by"| D4
+    D4 -->|"overridden by"| D5
 ```
 
 ---
 
 ## Tool Execution Flow
 
-```
-Agent generates tool call:
-{
-  "tool": "builtin__read_file",
-  "parameters": {
-    "file_path": "/path/to/file.txt"
-  }
-}
-   │
-   ▼
-┌────────────────────────────────────┐
-│ tools/manager.py                   │
-│ Dispatch to handler                │
-└────────┬─────────────────────────┬┘
-         │                         │
-         ▼                         ▼
-    Exists?              ┌────────────────┐
-         │               │ Load handler   │
-     ┌───┴────┐          │ module         │
-     ▼        ▼          └────────────────┘
-   Yes       No
-    │        │
-    │        ▼
-    │     Return error
-    │     "Tool not found"
-    │
-    ▼
-┌────────────────────────────────────┐
-│ Permission Check                   │
-│ - Profile allows tool?             │
-│ - Session grant exists?            │
-│ - Tool-level checks pass?          │
-└────────┬───────────────────────────┘
-         │
-     ┌───┴────┐
-     ▼        ▼
-  Allowed  Denied
-    │        │
-    │        ▼
-    │    Return error
-    │    "Permission denied"
-    │
-    ▼
-┌────────────────────────────────────┐
-│ Validate Parameters                │
-│ - Schema validation                │
-│ - Type checking                    │
-│ - Required fields                  │
-└────────┬───────────────────────────┘
-         │
-     ┌───┴────┐
-     ▼        ▼
-  Valid    Invalid
-    │        │
-    │        ▼
-    │    Return error
-    │    "Invalid parameters"
-    │
-    ▼
-┌────────────────────────────────────┐
-│ Execute Tool Function              │
-│ - Run implementation               │
-│ - Capture output                   │
-│ - Handle errors                    │
-└────────┬───────────────────────────┘
-         │
-         ▼
-┌────────────────────────────────────┐
-│ Format Result                      │
-│ - Convert to string                │
-│ - Truncate if needed               │
-│ - Sanitize sensitive data          │
-└────────┬───────────────────────────┘
-         │
-         ▼
-    Return result to Agent
+```mermaid
+flowchart TD
+    GenCall["Agent generates tool call:<br/>{'tool': 'builtin__read_file',<br/>'parameters': {'file_path': '/path/to/file.txt'}}"]
+    Dispatch["tools/manager.py<br/>Dispatch to handler"]
+    LoadH["Load handler module"]
+    Exists{"Exists?"}
+    ErrNF["Return error<br/>'Tool not found'"]
+    Perm["Permission Check<br/>- Profile allows tool?<br/>- Session grant exists?<br/>- Tool-level checks pass?"]
+    ErrPerm["Return error<br/>'Permission denied'"]
+    Val["Validate Parameters<br/>- Schema validation<br/>- Type checking<br/>- Required fields"]
+    ErrVal["Return error<br/>'Invalid parameters'"]
+    Run["Execute Tool Function<br/>- Run implementation<br/>- Capture output<br/>- Handle errors"]
+    Fmt["Format Result<br/>- Convert to string<br/>- Truncate if needed<br/>- Sanitize sensitive data"]
+    Ret(["Return result to Agent"])
+
+    GenCall --> Dispatch
+    Dispatch --> Exists
+    Dispatch --> LoadH
+    Exists -->|Yes| Perm
+    Exists -->|No| ErrNF
+    Perm -->|Allowed| Val
+    Perm -->|Denied| ErrPerm
+    Val -->|Valid| Run
+    Val -->|Invalid| ErrVal
+    Run --> Fmt --> Ret
 ```
 
 ---
 
 ## Workspace Scoping
 
-```
-┌──────────────────────────────────────────┐
-│ Workspace: /home/user/project            │
-│ (Set via /workspace set /home/user/project)
-└──────────────────────────────────────────┘
-         │
-         ▼
-    All file operations checked:
+```mermaid
+flowchart TD
+    W["Workspace: /home/user/project<br/>(Set via /workspace set /home/user/project)"]
+    Check["All file operations checked"]
+    OK["Allowed Paths<br/>✅ /home/user/project/file.txt<br/>✅ /home/user/project/data/input.csv<br/>✅ /home/user/project/../project/file.txt<br/>(normalized to within workspace)"]
+    Bad["Denied Paths<br/>❌ /etc/passwd<br/>❌ /home/user/private/secret.key<br/>❌ /home/user/project/../../etc/hosts<br/>(resolves outside workspace)<br/>❌ ~/.ssh/id_rsa<br/>(sensitive file)"]
 
-┌──────────────────────────────────────────┐
-│ Allowed Paths                            │
-├──────────────────────────────────────────┤
-│ ✅ /home/user/project/file.txt           │
-│ ✅ /home/user/project/data/input.csv     │
-│ ✅ /home/user/project/../project/file.txt│
-│    (normalized to within workspace)      │
-└──────────────────────────────────────────┘
-
-┌──────────────────────────────────────────┐
-│ Denied Paths                             │
-├──────────────────────────────────────────┤
-│ ❌ /etc/passwd                           │
-│ ❌ /home/user/private/secret.key         │
-│ ❌ /home/user/project/../../etc/hosts    │
-│    (resolves outside workspace)          │
-│ ❌ ~/.ssh/id_rsa                         │
-│    (sensitive file)                      │
-└──────────────────────────────────────────┘
+    W --> Check
+    Check --> OK
+    Check --> Bad
 ```
 
 ---
 
 ## Error Handling Flow
 
-```
-┌──────────────────────────────────┐
-│ Error Occurs in Tool             │
-└────────────┬─────────────────────┘
-             │
-             ▼
-    ┌────────────────────┐
-    │ Error Type?        │
-    └────┬───────┬──────┬┘
-         │       │      │
-    ┌────▼┐  ┌───▼──┐ ┌─▼─────┐
-    │User │  │Tool  │ │System  │
-    │Error│  │Error │ │Error   │
-    └──┬─┘  └───┬──┘ └──┬──────┘
-       │        │       │
-       ▼        ▼       ▼
-    Show      Log to  Crash
-    in chat   backend  recovery
-    │        │        │
-    │        ▼        ▼
-    │     ndjson      Fatal?
-    │     logs
-    │
-    ├──────► Continue or retry?
-    │
-    └──────► Save session
-             Return error message
+```mermaid
+flowchart TD
+    Err["Error Occurs in Tool"]
+    Type{"Error Type?"}
+    UserErr["User Error"]
+    ToolErr["Tool Error"]
+    SysErr["System Error"]
+    Show["Show in chat"]
+    Log["Log to backend<br/>ndjson logs"]
+    Crash["Crash recovery"]
+    Fatal{"Fatal?"}
+    Retry["Continue or retry?"]
+    Save["Save session<br/>Return error message"]
+
+    Err --> Type
+    Type -->|User Error| UserErr --> Show
+    Type -->|Tool Error| ToolErr --> Log
+    Type -->|System Error| SysErr --> Crash --> Fatal
+    Show --> Retry
+    Show --> Save
 ```
 
 ---
 
 ## Session File Structure
 
-```
-~/.config/oli/
-├── settings.json
-│   └─ Global settings
-│
-├── hosts.json
-│   └─ Multi-server config (UpstreamManager)
-│
-├── sessions/
-│   ├─ 550e8400-e29b-41d4.json
-│   ├─ 6ba7b810-9dad-11d1.json
-│   └─ ...
-│
-└─ profiles/  (custom)
-   ├─ my-analyst/
-   │   ├─ profile.json
-   │   ├─ SKILLS.md
-   │   └─ AGENTS.md
-   └─ my-researcher/
-       ├─ profile.json
-       ├─ SKILLS.md
-       └─ AGENTS.md
+```mermaid
+flowchart LR
+    Root["~/.config/oli/"]
+    Settings["settings.json<br/>Global settings"]
+    Hosts["hosts.json<br/>Multi-server config (UpstreamManager)"]
+    Sessions["sessions/"]
+    S1["550e8400-e29b-41d4.json"]
+    S2["6ba7b810-9dad-11d1.json"]
+    S3["..."]
+    Profiles["profiles/ (custom)"]
+    A1["my-analyst/"]
+    A1J["profile.json"]
+    A1S["SKILLS.md"]
+    A1A["AGENTS.md"]
+    R1["my-researcher/"]
+    R1J["profile.json"]
+    R1S["SKILLS.md"]
+    R1A["AGENTS.md"]
+
+    Root --> Settings
+    Root --> Hosts
+    Root --> Sessions
+    Sessions --> S1
+    Sessions --> S2
+    Sessions --> S3
+    Root --> Profiles
+    Profiles --> A1
+    A1 --> A1J
+    A1 --> A1S
+    A1 --> A1A
+    Profiles --> R1
+    R1 --> R1J
+    R1 --> R1S
+    R1 --> R1A
 ```
 
 ---
 
 ## Textual TUI Component Hierarchy
 
-```
-┌─────────────────────────────────────────┐
-│ App (ChatApp)                           │
-│ - Main Textual application              │
-│ - Event loop management                 │
-│ - Screen stack                          │
-└────────────┬────────────────────────────┘
-             │
-    ┌────────┼────────┬──────────┐
-    ▼        ▼        ▼          ▼
-┌────────┐ ┌─────┐ ┌──────┐ ┌──────────┐
-│Primary │ │Mode │ │Config│ │ Command  │
-│Screen  │ │Bar  │ │Modal │ │ Palette  │
-└───┬────┘ └─────┘ └──────┘ └──────────┘
-    │
-    ├─ Chat Display (scrollable)
-    ├─ User Input (editable)
-    ├─ Status Bar (info)
-    └─ Context Display (model/profile)
+```mermaid
+flowchart TD
+    App["App (ChatApp)<br/>- Main Textual application<br/>- Event loop management<br/>- Screen stack"]
+    Primary["PrimaryScreen"]
+    ModeBar["ModeBar"]
+    ConfigModal["ConfigModal"]
+    Palette["Command Palette"]
+    ChatDisp["Chat Display (scrollable)"]
+    UserInput["User Input (editable)"]
+    StatusBar["Status Bar (info)"]
+    ContextDisp["Context Display (model/profile)"]
+
+    App --> Primary
+    App --> ModeBar
+    App --> ConfigModal
+    App --> Palette
+    Primary --> ChatDisp
+    Primary --> UserInput
+    Primary --> StatusBar
+    Primary --> ContextDisp
 ```
 
 ---
@@ -702,41 +431,28 @@ Agent generates tool call:
 
 ## Deployment Architecture
 
-```
-┌──────────────────────────────────┐
-│ Local Development                │
-├──────────────────────────────────┤
-│ User ──► Terminal ──► chat.py    │
-│          ↓                       │
-│          Ollama (local)          │
-└──────────────────────────────────┘
-
-┌──────────────────────────────────┐
-│ Team with Pool                   │
-├──────────────────────────────────┤
-│ Users ──► chat.py (root)         │
-│            ├─► Analyst (OpenAI)  │
-│            ├─► Search (TF)      │
-│            └─► Coder (Local)     │
-└──────────────────────────────────┘
-
-┌──────────────────────────────────┐
-│ Docker Container                 │
-├──────────────────────────────────┤
-│ Container ──► chat.py            │
-│                ├─► OpenAI API    │
-│                └─► HF Inference  │
-│                    API           │
-└──────────────────────────────────┘
-
-┌──────────────────────────────────┐
-│ Hybrid (Local + Cloud)           │
-├──────────────────────────────────┤
-│ User ──► chat.py (Ollama root)   │
-│           ├─► Quick tasks (GPT)  │
-│           ├─► Slow tasks (HF)    │
-│           └─► Local analysis     │
-└──────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph dev["Local Development"]
+        U1["User"] --> T1["Terminal"] --> C1["chat.py"] --> O1["Ollama (local)"]
+    end
+    subgraph team["Team with Pool"]
+        Us["Users"] --> RootT["chat.py (root)"]
+        RootT --> An["Analyst (OpenAI)"]
+        RootT --> Se["Search (TF)"]
+        RootT --> Co["Coder (Local)"]
+    end
+    subgraph docker["Docker Container"]
+        Cont["Container"] --> C3["chat.py"]
+        C3 --> OA["OpenAI API"]
+        C3 --> HFInf["HF Inference API"]
+    end
+    subgraph hybrid["Hybrid (Local + Cloud)"]
+        U4["User"] --> R4["chat.py (Ollama root)"]
+        R4 --> Quick["Quick tasks (GPT)"]
+        R4 --> Slow["Slow tasks (HF)"]
+        R4 --> Loc["Local analysis"]
+    end
 ```
 
 This comprehensive architecture reference provides a complete understanding of how oli-bot components interact, data flows through the system, and key decision points in execution paths.
