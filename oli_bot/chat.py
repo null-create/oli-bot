@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
 """
 oli — a Multi-Backend AI Chat Agent with a Textual-based TUI chat interface.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License V3
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import re
@@ -200,9 +213,7 @@ def _history_entries(
         elif msg.role == "assistant":
             content = str(msg.content or "")
             if content.strip():
-                entries.append(
-                    ("Assistant", content, Markdown(content), msg.timestamp)
-                )
+                entries.append(("Assistant", content, Markdown(content), msg.timestamp))
             for tc in msg.tool_calls or []:
                 if not isinstance(tc, dict):
                     logger.warning(
@@ -3043,7 +3054,9 @@ def main() -> None:
     if profile is None:
         _sm = SettingsManager()
         _settings = _sm.load()
-        profile = _settings.get("session", {}).get("default_profile", "default") or "default"
+        profile = (
+            _settings.get("session", {}).get("default_profile", "default") or "default"
+        )
     try:
         app = OliBot(
             model=args.model,
