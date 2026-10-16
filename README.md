@@ -291,3 +291,7 @@ vars at import time (`tests/integration/conftest.py` re-scrubs again for the
 subprocess tier) so every run is hermetic; integration cases that need the
 `sio`/`http` MCP subprocesses or a live `oli-server` are marker-gated
 (`@pytest.mark.integration`, `-m process` for tier 4).
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 or later. See the LICENSE file for details.
