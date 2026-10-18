@@ -1793,8 +1793,7 @@ class OliBot(App):
                 if model:
                     self._switch_model(model)
             elif self.config.backend == "openai":
-                response = self.backend.client.models.list()
-                names = [m.id for m in response.data if m.id]
+                names = [m.id async for m in self.backend.client.models.list()]
                 if self.config.model_filters:
                     exclude = [
                         f.strip()
