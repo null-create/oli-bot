@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from .errors import register_exception_handlers
-from .routers import chat, config, health, mcp, profiles, sessions, workspace, ws
+from .routers import agents, chat, config, health, mcp, profiles, sessions, workspace, ws
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ def create_app() -> FastAPI:
         mcp.router,
         profiles.router,
         workspace.router,
+        agents.router,
     ):
         app.include_router(router)
     return app

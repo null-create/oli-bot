@@ -58,3 +58,11 @@ def get_ws_agent(websocket: WebSocket) -> Agent:
 
 def get_ws_lock(websocket: WebSocket) -> Any:
     return websocket.app.state.lock
+
+
+def get_agent_pool(request: Request) -> Any:
+    return getattr(request.app.state, "agent_pool", None)
+
+
+def get_ws_agent_pool(websocket: WebSocket) -> Any:
+    return getattr(websocket.app.state, "agent_pool", None)
