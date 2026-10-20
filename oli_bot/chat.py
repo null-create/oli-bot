@@ -71,7 +71,6 @@ from .agent import (
 from .config import configs
 from .models import SubAgentRun, UsageEvent
 from .tools.manager import BuiltinToolManager
-from .tools.memory import _current_sub_run
 from .mcp_client import MCPClientManager
 from .backends.upstream_manager import UpstreamManager
 from .sessions import (
