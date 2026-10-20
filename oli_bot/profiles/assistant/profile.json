@@ -6,6 +6,7 @@
   "default_model_tier": "large",
   "base": "default",
   "required_tools": [
+    "builtin__*",
     "long-term-memory__memory_store",
     "long-term-memory__memory_recall",
     "long-term-memory__knowledge_check"
