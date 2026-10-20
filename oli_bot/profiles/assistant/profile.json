@@ -11,7 +11,11 @@
     "long-term-memory__knowledge_check"
   ],
   "permissions": {
-    "allow_tools": ["builtin__*", "long-term-memory__*"],
+    "allow_tools": [
+      "builtin__*",
+      "long-term-memory__*",
+      "discord-mcp__*"
+    ],
     "deny_tools": []
   }
 }
