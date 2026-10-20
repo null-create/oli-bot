@@ -71,7 +71,6 @@ from .agent import (
 from .config import configs
 from .models import SubAgentRun, UsageEvent
 from .tools.manager import BuiltinToolManager
-from .tools.memory import _current_sub_run
 from .mcp_client import MCPClientManager
 from .backends.upstream_manager import UpstreamManager
 from .sessions import (
@@ -1771,11 +1770,29 @@ class OliBot(App):
     async def _show_model_picker(self) -> None:
         try:
             # Ollama's client has a list() method to retrieve available models, but other backends may not.
-            if hasattr(self.backend.client, "list") and callable(
-                getattr(self.backend.client, "list")
-            ):
+            if self.config.backend == "ollama":
                 response = await self.backend.client.list()
                 names = [m.model for m in response.models if m.model]
+                if self.config.model_filters:
+                    exclude = [
+                        f.strip()
+                        for f in self.config.model_filters.split(",")
+                        if f.strip()
+                    ]
+                    if exclude:
+                        names = [n for n in names if not any(ex in n for ex in exclude)]
+                if not names:
+                    self._add_message(
+                        "System",
+                        "No models found for this backend.",
+                    )
+                    return
+                picker = ModelPicker(names, current=self.backend.model)
+                model = await self.push_screen_wait(picker)
+                if model:
+                    self._switch_model(model)
+            elif self.config.backend == "openai":
+                names = [m.id async for m in self.backend.client.models.list()]
                 if self.config.model_filters:
                     exclude = [
                         f.strip()
