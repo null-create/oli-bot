@@ -122,7 +122,10 @@ def _event_to_frame(event: "AgentEvent") -> Dict[str, Any]:
     if isinstance(event, Error):
         return {"type": "error", "data": {"message": event.message}}
     if isinstance(event, Done):
-        return {"type": "done", "data": {"full_text": event.full_text}}
+        return {
+            "type": "done",
+            "data": {"full_text": event.full_text, "activity": event.activity},
+        }
     if isinstance(event, SubAgentStarted):
         return {
             "type": "sub_agent_started",
@@ -151,6 +154,7 @@ def _event_to_frame(event: "AgentEvent") -> Dict[str, Any]:
                 "agent_name": event.agent_name,
                 "status": event.status,
                 "full_text": event.full_text,
+                "todos": list(event.todos),
             },
         }
     logger.warning("Unknown agent event in websocket relay: %r", event)

@@ -309,7 +309,10 @@ Management endpoints backing the browser UI's settings view. They read and write
 translating between the nested settings format and a flat key-per-`AppConfig`-
 field shape (`openai_model`, `truncation_max_chars_small`, `api_port`, ...).
 
-`GET /v1/config` returns the current flat config:
+`GET /v1/config` returns the current flat config — one key per
+`settings.json` leaf, so every setting the TUI's `/config` screen edits is
+reachable here (`session_*`, `workspace_max_workspaces`, `ollama_context_window`,
+`first_chunk_timeout`, `openai_responses_enabled`, ...):
 
 ```bash
 curl http://localhost:9734/v1/config

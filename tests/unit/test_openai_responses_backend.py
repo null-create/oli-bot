@@ -123,13 +123,13 @@ async def test_generate_uses_responses_and_parses_output():
     )
     b, dummy = _make_backend(responses=responses)
     messages = [_msg(role="user", content="hi")]
-    out = await b.generate(None, messages, tools=[], max_tokens=64)
+    out = await b.generate(None, messages, tools=[], max_tokens=64, temperature=0.3)
 
     assert dummy.calls[0]["model"] == "gpt-fake"
     assert dummy.calls[0]["input"] == [{"role": "user", "content": "hi"}]
     assert dummy.calls[0]["tool_choice"] == "none"
     assert dummy.calls[0]["max_output_tokens"] == 64
-    assert dummy.calls[0]["temperature"] == pytest.approx(0.7)
+    assert dummy.calls[0]["temperature"] == pytest.approx(0.3)
     assert out.content == "hello world"
     assert len(out.tool_calls) == 1
     assert out.tool_calls[0].id == "call_1"

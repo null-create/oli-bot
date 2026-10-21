@@ -6,10 +6,12 @@ import asyncio
 import json
 import yaml
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
+from .activity import TurnActivity
 from .backends import (
     Message,
     TextChunk,
@@ -281,6 +283,7 @@ class Agent:
                 name=first.name,
                 timestamp=first.timestamp,
                 tool_call_id=first.tool_call_id,
+                activity=first.activity,
             )
         else:
             composed.insert(0, Message(role="system", content=header))
@@ -314,6 +317,7 @@ class Agent:
         confirm_callback: Optional[Callable[[str], Any]],
     ) -> AsyncIterator[AgentEvent]:
         run_usage = Usage()
+        activity = TurnActivity()
         for _ in range(self.config.max_tool_iterations):
             stream = self.backend.stream_generate(
                 messages, tools=tools if tools else []
@@ -345,13 +349,16 @@ class Agent:
                         break
                     _first_chunk = False
                     if isinstance(event, TextChunk):
+                        activity.close_thinking_segment()
                         full_response += event.text
                         yield StreamChunk(event.text)
                     elif isinstance(event, ThinkingChunk):
+                        activity.add_thinking(event.text)
                         yield event
                     elif isinstance(event, UsageChunk):
                         run_usage = _merge_usage(run_usage, event.usage)
                     elif isinstance(event, ToolCallChunk):
+                        activity.close_thinking_segment()
                         tool_calls = event.tool_calls
                         for tc in tool_calls:
                             logger.debug(
@@ -374,7 +381,7 @@ class Agent:
                 yield Error(err_text)
                 # Emit an empty Done so the UI layer's "skip empty assistant
                 # append" branch fires and error text never poisons history.
-                yield Done(full_text="")
+                yield Done(full_text="", activity=activity.to_dict())
                 return
             except Exception as e:
                 msg = str(e)
@@ -387,7 +394,7 @@ class Agent:
                     err_text = f"Error: {msg}"
                 logger.exception("Streaming failed in tool loop: %s", e)
                 yield Error(err_text)
-                yield Done(full_text="")
+                yield Done(full_text="", activity=activity.to_dict())
                 return
             finally:
                 # Always close the backend stream so sockets/tasks held by
@@ -401,7 +408,7 @@ class Agent:
             if not tool_calls:
                 if run_usage.total_tokens:
                     yield UsageEvent(usage=run_usage)
-                yield Done(full_text=full_response)
+                yield Done(full_text=full_response, activity=activity.to_dict())
                 return
 
             if full_response:
@@ -428,6 +435,8 @@ class Agent:
 
             for tc in tool_calls:
                 yield ToolCallExecuting(name=tc.name, parameters=tc.parameters)
+                activity.start_tool_call(tc.id, tc.name, tc.parameters)
+                call_started = time.perf_counter()
                 try:
                     if tc.name == "builtin__dispatch":
                         result_holder: List[str] = [""]
@@ -437,6 +446,7 @@ class Agent:
                             confirm_callback,
                             result_holder,
                         ):
+                            activity.observe(_ev)
                             yield _ev
                         result = result_holder[0]
                     else:
@@ -449,6 +459,9 @@ class Agent:
                 except Exception as e:
                     logger.exception("Tool call '%s' failed", tc.name)
                     result = f"Error: {e}"
+                activity.finish_tool_call(
+                    tc.id, result, time.perf_counter() - call_started
+                )
                 yield ToolCallResult(name=tc.name, result=result)
                 messages.append(
                     Message(role="tool", content=result, tool_call_id=tc.id)
@@ -540,6 +553,7 @@ class Agent:
         errored = False
         usage = Usage()
         stream = None
+        activity = TurnActivity()
         try:
             # Forward tools so backends that require a matching tool schema
             # for any toolUse/toolResult blocks in history (e.g. Bedrock via
@@ -561,9 +575,11 @@ class Agent:
                     break
                 _first_chunk = False
                 if isinstance(event, TextChunk):
+                    activity.close_thinking_segment()
                     full_response += event.text
                     yield StreamChunk(event.text)
                 elif isinstance(event, ThinkingChunk):
+                    activity.add_thinking(event.text)
                     yield event
                 elif isinstance(event, UsageChunk):
                     usage = _merge_usage(usage, event.usage)
@@ -596,13 +612,13 @@ class Agent:
             if errored:
                 # Keep error text out of persisted history; the Error event
                 # already drove the red UI panel.
-                yield Done(full_text="")
+                yield Done(full_text="", activity=activity.to_dict())
             else:
                 if not full_response:
                     full_response = "The model completed all tool calls but did not produce a final summary."
                 if usage.total_tokens:
                     yield UsageEvent(usage=usage)
-                yield Done(full_text=full_response)
+                yield Done(full_text=full_response, activity=activity.to_dict())
 
 
 def _expand_env(
@@ -710,6 +726,7 @@ async def stream_sub_agent_run(
             agent_name=run.agent_name,
             status=run.status,
             full_text=run.full_text,
+            todos=list(run.todos),
         )
     )
     return full_text
@@ -770,6 +787,7 @@ async def run_agent_dispatch(
                         agent_name=run.agent_name,
                         status="error",
                         full_text="",
+                        todos=list(run.todos),
                     )
                 )
             return run.agent_name, f"Error: {e}"

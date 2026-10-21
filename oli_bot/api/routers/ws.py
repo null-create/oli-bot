@@ -10,6 +10,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from ..attachments import attachment_note, save_attachments
 from ..convert import _event_to_frame
 from ..harness import _api_confirm
+from ...activity import attach_turn_activity
 from ...models import Done, Message, UsageEvent
 from ..runner import _resolve_tools
 from ..session_service import (
@@ -46,6 +47,8 @@ async def _run_turn(
             tools = None
         total_tokens = 0
         tokens_estimated = False
+        root_todos: List[dict] = []
+        turn_start = len(messages)
         try:
             async for event in agent.process(
                 messages, tools=tools, confirm_callback=_api_confirm
@@ -53,6 +56,8 @@ async def _run_turn(
                 await websocket.send_json(_event_to_frame(event))
                 while agent.mcp_manager.pending_todos:
                     todo_data = agent.mcp_manager.pending_todos.pop(0)
+                    if "task_id" not in todo_data:
+                        root_todos = list(todo_data.get("todos") or [])
                     await websocket.send_json(
                         {"type": "todo", "data": todo_data}
                     )
@@ -64,6 +69,7 @@ async def _run_turn(
                         messages.append(
                             Message(role="assistant", content=event.full_text)
                         )
+                    attach_turn_activity(messages, turn_start, event.activity)
                     if requested_session and store is not None:
                         try:
                             new_id = _persist_session(
@@ -73,6 +79,7 @@ async def _run_turn(
                                 messages,
                                 total_tokens,
                                 tokens_estimated,
+                                root_todos,
                             )
                             if new_id != connection_session_id:
                                 connection_session_id = new_id
