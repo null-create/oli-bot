@@ -269,6 +269,8 @@ def _message_to_dict(msg: Message) -> dict:
         d["timestamp"] = msg.timestamp
     if msg.tool_call_id is not None:
         d["tool_call_id"] = msg.tool_call_id
+    if msg.activity is not None:
+        d["activity"] = msg.activity
     if msg.images:
         logger.debug(
             "Dropping %d image attachment(s) from persisted message (role=%s)",
@@ -286,6 +288,7 @@ def _message_from_dict(d: dict) -> Message:
         name=d.get("name"),
         timestamp=d.get("timestamp"),
         tool_call_id=d.get("tool_call_id"),
+        activity=d.get("activity"),
     )
 
 
@@ -355,6 +358,7 @@ class ConversationStore:
         profile: str,
         total_tokens: int = 0,
         tokens_estimated: bool = False,
+        todos: Optional[List[dict]] = None,
     ) -> str:
         """Persist a session; return the (possibly new) session id.
 
@@ -404,6 +408,8 @@ class ConversationStore:
             tokens_estimated = False
         data["total_tokens"] = int(total_tokens or 0)
         data["total_tokens_estimated"] = bool(tokens_estimated)
+        if todos is not None:
+            data["todos"] = list(todos)
         try:
             path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         except PermissionError as e:

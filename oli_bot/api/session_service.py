@@ -1,6 +1,6 @@
 """Session persistence helpers shared by the WebSocket and session routes."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ..agent import sanitize_tool_history
 from ..models import Message
@@ -37,6 +37,7 @@ def _persist_session(
     messages: List[Message],
     total_tokens: int,
     tokens_estimated: bool,
+    todos: Optional[List[dict]] = None,
 ) -> str:
     """Save a WebSocket conversation turn to the shared store.
 
@@ -51,6 +52,7 @@ def _persist_session(
         profile=agent.profile_name or "",
         total_tokens=total_tokens,
         tokens_estimated=tokens_estimated,
+        todos=todos,
     )
 
 

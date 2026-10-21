@@ -16,7 +16,7 @@ import oli_bot.api_server as api_server
 from oli_bot.agent import Agent
 from oli_bot.config import AppConfig
 from oli_bot.mcp_client import MCPClientManager
-from oli_bot.models import TextChunk
+from oli_bot.models import TextChunk, ToolCall, ToolCallChunk
 from oli_bot.sessions import ConversationStore, Session
 from oli_bot.tools.manager import BuiltinToolManager
 
@@ -27,6 +27,24 @@ class _TextStub:
     async def stream_generate(self, messages, tools=None):
         yield TextChunk("Hello ")
         yield TextChunk("from stub")
+
+
+class _ToolStub:
+    """Backend that requests one builtin tool call, then answers."""
+
+    model = "stub-tool"
+
+    def __init__(self):
+        self._calls = 0
+
+    async def stream_generate(self, messages, tools=None):
+        self._calls += 1
+        if self._calls == 1:
+            yield ToolCallChunk(
+                [ToolCall(id="c1", name="builtin__echo", parameters={"x": 1})]
+            )
+        else:
+            yield TextChunk("done after tool")
 
 
 class _HistoryProbeStub:
@@ -50,6 +68,20 @@ def _make_harness(backend) -> Agent:
         backend=backend,
         config=config,
     )
+
+    def _echo(x: int) -> str:
+        return f"echoed-{x}"
+
+    builtin.register_tool(
+        name="echo",
+        description="Echo back the input.",
+        parameters={
+            "type": "object",
+            "properties": {"x": {"type": "integer"}},
+        },
+        handler=_echo,
+    )
+
     mcp = MCPClientManager(
         builtin_tools=builtin,
         offline_mode=True,
@@ -206,3 +238,47 @@ def test_websocket_clear_wipes_persisted_session(api):
 
     stored = api.client.get(f"/v1/sessions/{sid}").json()
     assert stored["messages"] == []
+
+
+def test_websocket_persists_turn_activity(api):
+    """A tool turn stores its activity so the browser can rebuild the view."""
+    api.reset(_ToolStub())
+    sid = api.client.post("/v1/sessions").json()["id"]
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "use the tool", "session_id": sid})
+        frames = _recv_until_done(ws)
+        assert frames[-1]["type"] == "done"
+
+    stored = api.client.get(f"/v1/sessions/{sid}").json()
+    assistant = [m for m in stored["messages"] if m["role"] == "assistant"]
+    assert assistant, "expected an assistant message"
+    activity = assistant[-1].get("activity")
+    assert activity is not None
+    assert len(activity["tool_calls"]) == 1
+    call = activity["tool_calls"][0]
+    assert call["name"] == "builtin__echo"
+    assert call["parameters"] == {"x": 1}
+    assert call["result"] == "echoed-1"
+    assert call["elapsed"] >= 0
+    assert activity["elapsed"] >= 0
+
+
+def test_websocket_activity_does_not_pollute_the_model_payload(api):
+    """The stored activity must never be replayed to the model."""
+    api.reset(_ToolStub())
+    sid = api.client.post("/v1/sessions").json()["id"]
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "first", "session_id": sid})
+        _recv_until_done(ws)
+        ws.send_json({"content": "second", "session_id": sid})
+        _recv_until_done(ws)
+
+    stored = api.client.get(f"/v1/sessions/{sid}").json()
+    assert all(
+        "activity" not in m or m["role"] == "assistant" for m in stored["messages"]
+    )
+    # The second turn's replayed history must not contain the activity blob.
+    replayed = json.dumps([m for m in stored["messages"] if m["role"] == "user"])
+    assert "tool_calls" not in replayed

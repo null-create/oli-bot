@@ -806,6 +806,7 @@ def test_event_to_frame_sub_agent_lifecycle():
             "agent_name": "analyst",
             "status": "done",
             "full_text": "result",
+            "todos": [],
         },
     }
 

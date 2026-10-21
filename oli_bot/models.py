@@ -29,6 +29,11 @@ class Message:
     timestamp: Optional[str] = None
     tool_call_id: Optional[str] = None
     images: Optional[List[ImageAttachment]] = None
+    # Serialized turn activity (thinking text, tool-call results and timings).
+    # Set by the API/TUI layer on the message that closes a turn so a
+    # reopened session can rebuild the same view the live UI showed. Never
+    # sent to the model — backends build their payload field by field.
+    activity: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -126,6 +131,8 @@ class Error:
 @dataclass
 class Done:
     full_text: str
+    # Serialized activity for the turn that just finished, if any.
+    activity: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -163,6 +170,8 @@ class SubAgentCompleted:
     agent_name: str
     status: str  # "done" | "error"
     full_text: str
+    # Most recent todo list written by the sub-agent, if any.
+    todos: List[dict] = field(default_factory=list)
 
 
 @dataclass

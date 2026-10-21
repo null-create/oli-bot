@@ -52,6 +52,7 @@ from textual.widgets import (
 )
 
 from .backends import Message, create_model_backend
+from .activity import attach_turn_activity
 from .agent import (
     Agent,
     AgentPool,
@@ -474,6 +475,7 @@ class OliBot(App):
         self._sub_runs: list[SubAgentRun] = []
         self._sub_tree_nodes: dict = {}
         self._sub_todo_nodes: dict[str, list] = {}  # task_id -> list of TreeNode
+        self._root_todos: list[dict] = []  # last todo list written by the agent
         self._sub_tree_timer = None
         self._command_matches: list[str] = []
         self._suggestion_index: int = 0
@@ -494,6 +496,7 @@ class OliBot(App):
                 self.current_session_id = data["id"]
                 self.total_tokens = data.get("total_tokens", 0) or 0
                 self.tokens_estimated = bool(data.get("total_tokens_estimated", False))
+                self._root_todos = list(data.get("todos") or [])
                 if data.get("model"):
                     self.backend.model = data["model"]
                 loaded = True
@@ -512,6 +515,7 @@ class OliBot(App):
                     self.tokens_estimated = bool(
                         data.get("total_tokens_estimated", False)
                     )
+                    self._root_todos = list(data.get("todos") or [])
                     if data.get("model"):
                         self.backend.model = data["model"]
                     loaded = True
@@ -715,6 +719,7 @@ class OliBot(App):
             profile=self.agent.profile_name or "",
             total_tokens=self.total_tokens,
             tokens_estimated=self.tokens_estimated,
+            todos=self._root_todos,
         )
         if new_id != self.current_session_id:
             logger.info(
@@ -1190,6 +1195,7 @@ class OliBot(App):
         self.update_header()
         self.query_one("#chat-log").remove_children()
         self._clear_todo_widget()
+        self._restore_todos(data.get("todos"))
         self._add_message("System", f"Switched to session [bold]{data['name']}[/bold].")
         self._restore_history()
 
@@ -2486,6 +2492,7 @@ class OliBot(App):
         _had_error: bool = False
 
         await start_spinner()
+        turn_start = len(self.messages)
         try:
             async for event in self.agent.process(
                 self.messages, tools=tools, confirm_callback=self._permission_callback
@@ -2632,7 +2639,7 @@ class OliBot(App):
                         self.total_tokens += usage.total_tokens
                         self.tokens_estimated = self.tokens_estimated or usage.estimated
                         self.update_header()
-                    case AgentDone(full_text):
+                    case AgentDone(full_text, activity):
                         stop_spinner()
                         if think_widget is not None:
                             think_widget.title = "💭 Thinking"
@@ -2679,6 +2686,7 @@ class OliBot(App):
                                 "Skipping empty assistant message append "
                                 "(would poison next request under strict validators)"
                             )
+                        attach_turn_activity(self.messages, turn_start, activity)
 
             # Auto-prune oldest messages when exceeding max_messages
             if len(self.messages) > self.config.max_messages:
@@ -2763,6 +2771,7 @@ class OliBot(App):
         This runs synchronously inside Textual's event loop (the @work task),
         so direct widget mutations are safe.
         """
+        self._root_todos = list(todos)
         try:
             todo_state = self._builtin_tools.get_todos()
             todo_panel = self.query_one("#todo-panel", TodoWidget)
@@ -2780,12 +2789,28 @@ class OliBot(App):
         except Exception:
             logger.debug("Failed to update todo widget", exc_info=True)
 
+    def _restore_todos(self, todos: list[dict] | None) -> None:
+        """Restore a persisted todo list into the live widget state."""
+        restored = list(todos or [])
+        self._root_todos = restored
+        self._builtin_tools._todos = list(restored)
+        if not restored:
+            return
+        try:
+            todo_panel = self.query_one("#todo-panel", TodoWidget)
+            todo_panel.update_todos(self._builtin_tools.get_todos())
+            todo_panel.display = True
+            self.query_one("#right-panel").display = True
+        except Exception:
+            logger.debug("Failed to restore todo widget", exc_info=True)
+
     def _clear_todo_widget(self) -> None:
         """Hide the todo panel and clear internal todo state.
 
         Called on chat clear and session switch so stale todos don't persist.
         """
         self._builtin_tools._todos = []
+        self._root_todos = []
         self._sub_todo_nodes = {}
         try:
             todo_panel = self.query_one("#todo-panel", TodoWidget)
