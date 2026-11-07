@@ -459,3 +459,130 @@ def test_shell_allows_double_quoted_paren_content():
     # `python -c "print(1)"` / awk patterns. Must stay allowed.
     assert _is_command_allowed('python -c "print(1)"') is None
     assert _is_command_allowed('python3 -c "import json; d=(1,2); print(d)"') is None
+
+
+# --------------------------------------------------------------------------- #
+# PHP runtime                                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_shell_allows_php_runtime():
+    assert _is_command_allowed("php -v") is None
+    assert _is_command_allowed("php script.php") is None
+    # Once an interpreter is allowlisted the sandbox is advisory by design.
+    assert _is_command_allowed("php -r 'echo 1;'") is None
+
+
+# --------------------------------------------------------------------------- #
+# Docker read-only subcommands                                                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_docker_read_only_subcommands_are_allowed():
+    allowed = [
+        "docker ps",
+        "docker ps -a --no-trunc",
+        "docker images",
+        "docker logs web",
+        "docker inspect web",
+        "docker stats --no-stream",
+        "docker history web",
+        "docker diff web",
+        "docker top web",
+        "docker port web",
+        "docker version",
+        "docker info",
+        "docker search alpine",
+        "docker system df",
+        "docker system info",
+        "docker image ls",
+        "docker image inspect alpine",
+        "docker container inspect web",
+        "docker volume ls",
+        "docker network inspect bridge",
+        "docker context show",
+        "docker manifest inspect alpine",
+        "docker compose ps",
+        "docker compose logs",
+        "docker compose config",
+        "docker compose images",
+        "docker compose version",
+        "docker compose ls",
+        "docker compose top",
+        "docker buildx ls",
+        "docker buildx inspect",
+        "docker buildx du",
+    ]
+    for cmd in allowed:
+        assert _is_command_allowed(cmd) is None, cmd
+
+
+def test_docker_global_and_compose_flags_are_skipped():
+    assert _is_command_allowed("docker --version") is None
+    assert _is_command_allowed("docker -v") is None
+    assert _is_command_allowed("docker --context default ps") is None
+    assert _is_command_allowed("docker --context=default ps") is None
+    assert _is_command_allowed("docker -H tcp://example:2375 ps") is None
+    assert _is_command_allowed("docker -Htcp://example:2375 ps") is None
+    assert _is_command_allowed("docker compose -f docker-compose.yml ps") is None
+    assert _is_command_allowed("docker compose --profile dev logs") is None
+    assert _is_command_allowed("docker compose -p demo images") is None
+
+
+def test_docker_mutating_subcommands_are_rejected():
+    rejected = [
+        "docker run --rm alpine",
+        "docker exec -it web sh",
+        "docker build .",
+        "docker rm web",
+        "docker rmi alpine",
+        "docker kill web",
+        "docker stop web",
+        "docker create alpine",
+        "docker cp web:/etc/passwd out.txt",
+        "docker load -i out.tar",
+        "docker push alpine",
+        "docker pull alpine",
+        "docker login",
+        "docker system prune -af",
+        "docker image rm alpine",
+        "docker container run alpine",
+        "docker volume prune",
+        "docker network connect bridge web",
+        "docker context use default",
+        "docker compose up -d",
+        "docker compose down",
+        "docker compose run web sh",
+        "docker compose build",
+        "docker buildx build .",
+    ]
+    for cmd in rejected:
+        err = _is_command_allowed(cmd)
+        assert err is not None, cmd
+        assert "not read-only" in err, (cmd, err)
+
+
+def test_docker_requires_explicit_subcommand():
+    err = _is_command_allowed("docker")
+    assert err is not None and "explicit read-only subcommand" in err
+
+
+def test_docker_write_escapes_are_rejected():
+    # compose config can write via -o/--output, save writes an archive, and
+    # buildx inspect --bootstrap can create/start a builder container.
+    for cmd in (
+        "docker save -o out.tar alpine",
+        "docker compose config -o out.yml",
+        "docker compose config --output out.yml",
+        "docker compose config --output=out.yml",
+        "docker compose config -oout.yml",
+        "docker buildx inspect --bootstrap",
+    ):
+        err = _is_command_allowed(cmd)
+        assert err is not None, cmd
+        assert "escape-hatch" in err, (cmd, err)
+
+
+def test_xargs_docker_mutating_subcommand_is_rejected():
+    err = _is_command_allowed("echo alpine | xargs docker run")
+    assert err is not None and "xargs cannot invoke 'docker'" in err

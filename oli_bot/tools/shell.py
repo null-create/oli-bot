@@ -41,6 +41,10 @@ _ALLOWED_TEXT_SEARCH: frozenset[str] = frozenset(
 # Read-only VCS inspection. Mutating subcommands are blocked via DENIED_ARGS below.
 _ALLOWED_VCS: frozenset[str] = frozenset({"git"})
 
+# Container inspection. Only explicitly allowlisted read-only subcommand paths
+# may run — see _DOCKER_READ_ONLY_SUBCOMMANDS.
+_ALLOWED_CONTAINERS: frozenset[str] = frozenset({"docker"})
+
 # Text/data manipulation. In-place edit flags are blocked in DENIED_ARGS.
 _ALLOWED_TEXT_PROCESSING: frozenset[str] = frozenset(
     {
@@ -155,6 +159,7 @@ _ALLOWED_RUNTIME_COMMANDS: frozenset[str] = frozenset(
         "bun",
         "perl",
         "lua",
+        "php",
         "pip",
         "pip3",
         "uv",
@@ -169,6 +174,89 @@ _XARGS_VALUE_FLAGS: frozenset[str] = frozenset(
     {"-n", "-P", "-I", "-i", "-L", "-s", "-E", "-d", "-a", "-J", "-R", "-S"}
 )
 
+# Docker global flags that consume a value. _docker_command_path skips these
+# (and their value) so ``docker --context prod ps`` resolves to ``ps``.
+_DOCKER_GLOBAL_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "--config",
+        "-c",
+        "--context",
+        "-H",
+        "--host",
+        "-l",
+        "--log-level",
+        "--tlscacert",
+        "--tlscert",
+        "--tlskey",
+    }
+)
+
+# Compose global flags that consume a value, handled after the ``compose`` verb.
+_COMPOSE_GLOBAL_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "-f",
+        "--file",
+        "-p",
+        "--project-name",
+        "--env-file",
+        "--profile",
+        "--project-directory",
+        "--ansi",
+        "--progress",
+        "--parallel",
+    }
+)
+
+# Read-only docker subcommand paths. Nested groups (image/container/...) are
+# listed explicitly so a mutating sibling such as ``image rm`` is rejected.
+# Matching is longest-path-first, and fail-closed for anything unlisted.
+_DOCKER_READ_ONLY_SUBCOMMANDS: frozenset[str] = frozenset(
+    {
+        "ps",
+        "images",
+        "logs",
+        "inspect",
+        "version",
+        "info",
+        "stats",
+        "top",
+        "port",
+        "diff",
+        "history",
+        "search",
+        "system df",
+        "system info",
+        "image ls",
+        "image inspect",
+        "image history",
+        "container ls",
+        "container inspect",
+        "container logs",
+        "container stats",
+        "container top",
+        "container port",
+        "container diff",
+        "volume ls",
+        "volume inspect",
+        "network ls",
+        "network inspect",
+        "context ls",
+        "context inspect",
+        "context show",
+        "manifest inspect",
+        "compose ps",
+        "compose logs",
+        "compose config",
+        "compose images",
+        "compose version",
+        "compose ls",
+        "compose top",
+        "buildx ls",
+        "buildx inspect",
+        "buildx du",
+    }
+)
+
 
 ALLOWED_COMMANDS: frozenset[str] = (
     _ALLOWED_FILESYSTEM_READ
@@ -179,6 +267,7 @@ ALLOWED_COMMANDS: frozenset[str] = (
     | _ALLOWED_SYSTEM_INFO
     | _ALLOWED_RUNTIME_COMMANDS
     | _ALLOWED_VCS
+    | _ALLOWED_CONTAINERS
 )
 
 # Per-command argument denylist. Any occurrence of a denied argument in the
@@ -235,6 +324,9 @@ DENIED_ARGS: dict[str, tuple[str, ...]] = {
         "init",
         "clone",
     ),
+    # ``compose config -o`` writes a file and ``buildx inspect --bootstrap``
+    # can create/start a builder; both escape the read-only subcommand set.
+    "docker": ("-o", "--output", "--bootstrap"),
 }
 
 # Commands whose in-place edit or scripting flags have a prefix form we must
@@ -245,6 +337,8 @@ DENIED_ARG_PREFIXES: dict[str, tuple[str, ...]] = {
     "awk": ("--in-place=",),
     "gawk": ("--in-place=",),
     "nawk": ("--in-place=",),
+    # pflag accepts attached shorthand values (``-oFILE``) as well as ``-o``.
+    "docker": ("-o", "--output="),
 }
 
 # Characters that must never appear anywhere in the raw command string, quoted
@@ -288,8 +382,8 @@ def register_tools(manager: BuiltinToolManager) -> None:
         "head, tail, wc, sort, uniq, cut, tr, ps, df, du, diff, file, stat, sha*sum, "
         "base64, echo, pwd. "
         "Language runtimes: python/python3/pytest, node/npm/npx, ruby, go, cargo/rustc, "
-        "deno, bun, perl, lua, plus pip/pip3/uv/poetry/pipx — e.g. `python -m pytest tests/`, "
-        "`pytest -q`, `node script.js`. "
+        "deno, bun, perl, lua, php, plus pip/pip3/uv/poetry/pipx — e.g. `python -m pytest tests/`, "
+        "`pytest -q`, `node script.js`, `php script.php`. "
         "Pipes (|) and logical operators (&&, ||) are allowed and encouraged: "
         "e.g. `grep -rn TODO src/ | head -20`, `find . -name '*.py' | xargs grep -l TODO`, "
         "`cat data.json | jq '.items[].name'`. "
@@ -305,6 +399,12 @@ def register_tools(manager: BuiltinToolManager) -> None:
         "restore, clean, rebase, merge, cherry-pick, revert, add, rm, mv, stash, tag, "
         "branch, remote, config, submodule, apply, am, gc, reflog, worktree, init, clone) "
         "are blocked. "
+        "`docker` is allowed for read-only inspection only — ps, images, logs, inspect, "
+        "stats, history, diff, top, port, version, info, search, system df/info, "
+        "image/container/volume/network/context ls/inspect, manifest inspect, "
+        "compose ps/logs/config/images/version/ls/top, and buildx ls/inspect/du. "
+        "Mutating Docker subcommands (run, exec, build, rm, prune, cp, save, push, "
+        "pull, compose up/down/run, buildx build, etc.) are rejected. "
         "Blocked: input redirects (<), subshells `()`, and shell expansion "
         "(`$`, backticks, `$()`, `${...}`, `{}`, `!`) — including when the "
         "expansion is wrapped in double quotes — plus sed/awk in-place edit "
@@ -451,6 +551,55 @@ def _tokenize_with_redirects(segment: str) -> list[str]:
     return list(lexer)
 
 
+def _skip_flags(args: list[str], value_flags: frozenset[str]) -> int:
+    """Return the index of the first non-flag token, skipping known flags."""
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--":
+            return i + 1
+        if arg in value_flags:
+            i += 2
+            continue
+        if arg.startswith("--") and "=" in arg:
+            i += 1
+            continue
+        if arg.startswith("-") and arg != "-":
+            i += 1
+            continue
+        return i
+    return i
+
+
+def _docker_command_path(args: list[str]) -> list[str]:
+    """Extract the docker subcommand path, stripping global flags."""
+    idx = _skip_flags(args, _DOCKER_GLOBAL_VALUE_FLAGS)
+    rest = args[idx:]
+    if rest and rest[0] == "compose":
+        sub_idx = _skip_flags(rest[1:], _COMPOSE_GLOBAL_VALUE_FLAGS)
+        return ["compose", *rest[1 + sub_idx :]]
+    return rest
+
+
+def _check_docker_argv(args: list[str]) -> Optional[str]:
+    """Reject docker invocations that are not in the read-only subcommand set."""
+    path = _docker_command_path(args)
+    if not path:
+        if any(arg in ("--version", "-v") for arg in args):
+            return None
+        return "Error: Docker requires an explicit read-only subcommand."
+
+    if len(path) >= 2:
+        two = f"{path[0]} {path[1]}"
+        if two in _DOCKER_READ_ONLY_SUBCOMMANDS:
+            return None
+    if path[0] in _DOCKER_READ_ONLY_SUBCOMMANDS:
+        return None
+
+    label = " ".join(path[:2]) if len(path) >= 2 else path[0]
+    return f"Error: Docker subcommand '{label}' is not read-only."
+
+
 def _check_command_argv(tokens: list[str]) -> Optional[str]:
     """Validate the argv of a single command (no redirects) against the allowlist.
 
@@ -482,6 +631,11 @@ def _check_command_argv(tokens: list[str]) -> Optional[str]:
                         f"Error: Argument '{arg}' is not allowed for '{base}' "
                         f"(escape-hatch protection)."
                     )
+
+    if base == "docker":
+        err = _check_docker_argv(tokens[1:])
+        if err is not None:
+            return err
 
     if base == "xargs":
         inner = _extract_xargs_inner_command(tokens[1:])
