@@ -292,3 +292,109 @@ async def test_stream_generate_reraises_on_backend_failure():
 
     with pytest.raises(RuntimeError, match="upstream 500"):
         [ev async for ev in b.stream_generate([], tools=[])]
+
+
+# --------------------------------------------------------------------------- #
+# Truncated / malformed arguments                                             #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_truncated_arguments_yields_parse_error_not_exception():
+    """Regression: when generation is cut off mid-JSON (output-token limit),
+    the stream must surface a ``ToolCall.parse_error`` instead of raising an
+    unhandled ``JSONDecodeError``."""
+    chunks = [
+        _make_chunk(
+            tool_deltas=[
+                _tool_delta(
+                    tc_id="c1",
+                    name="builtin__write_file",
+                    args='{"file_path": "a.py", "content": "def f(',
+                )
+            ],
+        ),
+        _make_chunk(finish="tool_calls"),
+    ]
+    events = [ev async for ev in _make_backend(chunks).stream_generate([], tools=[])]
+
+    call = next(e for e in events if isinstance(e, ToolCallChunk)).tool_calls[0]
+    assert call.id == "c1"
+    assert call.name == "builtin__write_file"
+    assert call.parameters == {}
+    assert call.parse_error is not None
+    assert "truncated" in call.parse_error.lower()
+
+
+@pytest.mark.asyncio
+async def test_valid_arguments_have_no_parse_error():
+    chunks = [
+        _make_chunk(tool_deltas=[_tool_delta(tc_id="c1", name="do", args='{"a": 1}')]),
+        _make_chunk(finish="tool_calls"),
+    ]
+    call = next(
+        e
+        for e in [
+            ev async for ev in _make_backend(chunks).stream_generate([], tools=[])
+        ]
+        if isinstance(e, ToolCallChunk)
+    ).tool_calls[0]
+    assert call.parse_error is None
+
+
+# --------------------------------------------------------------------------- #
+# max_tokens threading                                                        #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_stream_generate_forwards_max_tokens():
+    """The caller-supplied max_tokens must reach the provider request so a
+    large write isn't truncated by a stale import-time default."""
+
+    captured: dict = {}
+
+    class _CaptureCompletions:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+
+            class _Iter:
+                def __aiter__(self_inner):
+                    return self_inner._agen()
+
+                async def _agen(self_inner):
+                    return
+                    yield  # pragma: no cover - empty stream
+
+            return _Iter()
+
+    b = OpenAIBackend(api_key="x", base_url="https://ex/", model="gpt-fake")
+    b.client = SimpleNamespace(chat=SimpleNamespace(completions=_CaptureCompletions()))
+
+    [ev async for ev in b.stream_generate([], tools=[], max_tokens=8192)]
+    assert captured.get("max_tokens") == 8192
+
+
+@pytest.mark.asyncio
+async def test_stream_generate_omits_max_tokens_when_none():
+    captured: dict = {}
+
+    class _CaptureCompletions:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+
+            class _Iter:
+                def __aiter__(self_inner):
+                    return self_inner._agen()
+
+                async def _agen(self_inner):
+                    return
+                    yield  # pragma: no cover - empty stream
+
+            return _Iter()
+
+    b = OpenAIBackend(api_key="x", base_url="https://ex/", model="gpt-fake")
+    b.client = SimpleNamespace(chat=SimpleNamespace(completions=_CaptureCompletions()))
+
+    [ev async for ev in b.stream_generate([], tools=[])]
+    assert "max_tokens" not in captured

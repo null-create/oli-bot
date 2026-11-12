@@ -27,6 +27,7 @@ from .base import (
     ModelBackend,
     StreamEvent,
     estimate_tokens,
+    tool_call_from_raw,
 )
 from .messages import (
     _format_messages,
@@ -193,10 +194,13 @@ class OpenAIBackend(ModelBackend):
         self,
         messages: List[Message],
         tools: Optional[List[Dict]] = None,
+        max_tokens: Optional[int] = None,
     ) -> AsyncIterator[StreamEvent]:
         try:
             if self.responses_enabled:
-                async for event in self._responses_stream_generate(messages, tools):
+                async for event in self._responses_stream_generate(
+                    messages, tools, max_tokens=max_tokens
+                ):
                     yield event
                 return
 
@@ -213,6 +217,7 @@ class OpenAIBackend(ModelBackend):
                     tool_choice="auto" if tools else "none",
                     stream=True,
                     stream_options={"include_usage": True},
+                    **({"max_tokens": max_tokens} if max_tokens else {}),
                 )
             except Exception as e:
                 # Some OpenAI-compatible providers (Bedrock proxies, LM Studio,
@@ -227,6 +232,7 @@ class OpenAIBackend(ModelBackend):
                     tools=_format_tools(tools) if tools else [],
                     tool_choice="auto" if tools else "none",
                     stream=True,
+                    **({"max_tokens": max_tokens} if max_tokens else {}),
                 )
             tool_calls_acc: Dict[int, dict] = {}
             flushed = False
@@ -282,12 +288,7 @@ class OpenAIBackend(ModelBackend):
                             data["arguments"],
                         )
                     tool_calls = [
-                        ToolCall(
-                            id=data["id"],
-                            name=data["name"],
-                            description="",
-                            parameters=json.loads(data["arguments"] or "{}"),
-                        )
+                        tool_call_from_raw(data["id"], data["name"], data["arguments"])
                         for data in tool_calls_acc.values()
                     ]
                     yield ToolCallChunk(tool_calls)
@@ -307,12 +308,7 @@ class OpenAIBackend(ModelBackend):
                         data["arguments"],
                     )
                 tool_calls = [
-                    ToolCall(
-                        id=data["id"],
-                        name=data["name"],
-                        description="",
-                        parameters=json.loads(data["arguments"] or "{}"),
-                    )
+                    tool_call_from_raw(data["id"], data["name"], data["arguments"])
                     for data in tool_calls_acc.values()
                 ]
                 yield ToolCallChunk(tool_calls)
@@ -353,11 +349,10 @@ class OpenAIBackend(ModelBackend):
                         parts.append(text)
             elif getattr(item, "type", "") == "function_call":
                 tool_calls.append(
-                    ToolCall(
-                        id=getattr(item, "call_id", "") or "",
-                        name=getattr(item, "name", ""),
-                        description="",
-                        parameters=json.loads(getattr(item, "arguments", None) or "{}"),
+                    tool_call_from_raw(
+                        getattr(item, "call_id", "") or "",
+                        getattr(item, "name", ""),
+                        getattr(item, "arguments", None),
                     )
                 )
         return "".join(parts), tool_calls
@@ -366,6 +361,7 @@ class OpenAIBackend(ModelBackend):
         self,
         messages: List[Message],
         tools: Optional[List[Dict]] = None,
+        max_tokens: Optional[int] = None,
     ) -> AsyncIterator[StreamEvent]:
         """Responses API streaming variant of ``stream_generate``.
 
@@ -389,6 +385,7 @@ class OpenAIBackend(ModelBackend):
                 tool_choice="auto" if tools else "none",
                 stream=True,
                 stream_options={"include_usage": True},
+                **({"max_output_tokens": max_tokens} if max_tokens else {}),
             )
         except Exception as e:
             logger.debug(
@@ -401,6 +398,7 @@ class OpenAIBackend(ModelBackend):
                 tools=responses_tools,
                 tool_choice="auto" if tools else "none",
                 stream=True,
+                **({"max_output_tokens": max_tokens} if max_tokens else {}),
             )
 
         tool_calls_acc: Dict[str, dict] = {}
@@ -459,12 +457,7 @@ class OpenAIBackend(ModelBackend):
 
         if tool_calls_acc:
             tool_calls = [
-                ToolCall(
-                    id=data["call_id"],
-                    name=data["name"],
-                    description="",
-                    parameters=json.loads(data["arguments"] or "{}"),
-                )
+                tool_call_from_raw(data["call_id"], data["name"], data["arguments"])
                 for data in tool_calls_acc.values()
             ]
             logger.debug(

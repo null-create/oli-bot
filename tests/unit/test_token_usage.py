@@ -192,7 +192,7 @@ class _UsageToolStub:
     def __init__(self):
         self._calls = 0
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self._calls += 1
         if self._calls == 1:
             yield ToolCallChunk(
@@ -212,7 +212,7 @@ class _StubMCP:
 class _NoUsageStub:
     model = "stub"
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         yield TextChunk("plain text")
 
 

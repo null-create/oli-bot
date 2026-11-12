@@ -25,7 +25,7 @@ _PROFILE_BODIES = {
 class _TextStub:
     model = "stub-text"
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         yield TextChunk("Hello from stub")
 
 

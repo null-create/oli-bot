@@ -42,6 +42,11 @@ class ToolCall:
     name: str = ""
     description: str = ""
     parameters: Dict[str, Any] = field(default_factory=dict)
+    # Set when the model's streamed ``arguments`` JSON could not be parsed
+    # (typically because generation hit the output-token limit mid-call). The
+    # agent surfaces this as a tool result instead of executing the call, so
+    # the model can retry with a smaller payload.
+    parse_error: Optional[str] = None
 
 
 @dataclass

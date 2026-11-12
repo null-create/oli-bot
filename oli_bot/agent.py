@@ -320,7 +320,9 @@ class Agent:
         activity = TurnActivity()
         for _ in range(self.config.max_tool_iterations):
             stream = self.backend.stream_generate(
-                messages, tools=tools if tools else []
+                messages,
+                tools=tools if tools else [],
+                max_tokens=self.config.max_tokens,
             )
 
             full_response = ""
@@ -438,7 +440,13 @@ class Agent:
                 activity.start_tool_call(tc.id, tc.name, tc.parameters)
                 call_started = time.perf_counter()
                 try:
-                    if tc.name == "builtin__dispatch":
+                    if tc.parse_error:
+                        # The model's streamed arguments JSON was truncated or
+                        # malformed; surface it as a tool result so the model
+                        # can retry (e.g. with a smaller write) instead of the
+                        # whole run aborting.
+                        result = tc.parse_error
+                    elif tc.name == "builtin__dispatch":
                         result_holder: List[str] = [""]
                         async for _ev in self._run_dispatch_with_events(
                             tc.name,
@@ -559,7 +567,9 @@ class Agent:
             # for any toolUse/toolResult blocks in history (e.g. Bedrock via
             # OpenAI-compatible proxies) don't 400. ToolCallChunks from this
             # pass are ignored below — only text/thinking is consumed.
-            stream = self.backend.stream_generate(messages, tools=tools)
+            stream = self.backend.stream_generate(
+                messages, tools=tools, max_tokens=self.config.max_tokens
+            )
             _first_chunk = True
             while True:
                 timeout = (

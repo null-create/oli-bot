@@ -52,6 +52,7 @@ _FLAT_TO_NESTED = {
     "model_filters": ("model_params", "model_filters"),
     "truncation_max_chars_small": ("model_params", "truncation_max_chars_small"),
     "truncation_max_chars_large": ("model_params", "truncation_max_chars_large"),
+    "max_write_chars": ("model_params", "max_write_chars"),
     "dry_run": ("model_params", "dry_run"),
     "offline_mode": ("model_params", "offline_mode"),
     "use_oauth": ("model_params", "use_oauth"),

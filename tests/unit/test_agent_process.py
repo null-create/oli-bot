@@ -35,7 +35,7 @@ class _TextStub:
 
     model = "stub"
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         yield TextChunk("hello ")
         yield TextChunk("world")
 
@@ -48,7 +48,7 @@ class _ToolThenTextStub:
         self._calls = 0
         self._text_before_tool = text_before_tool
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self._calls += 1
         if self._calls == 1:
             if self._text_before_tool:
@@ -67,7 +67,7 @@ class _MultiToolStub:
         self.model = "stub"
         self._calls = 0
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self._calls += 1
         if self._calls == 1:
             yield ToolCallChunk(
@@ -85,7 +85,7 @@ class _HangingStub:
 
     model = "stub"
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         await asyncio.sleep(10)
         yield TextChunk("never")
 
@@ -98,7 +98,7 @@ class _RaisingStub:
     def __init__(self, exc):
         self._exc = exc
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         raise self._exc
         yield  # pragma: no cover — makes this an async generator
 
@@ -368,7 +368,7 @@ class _AlwaysToolThenFinalStub:
     def __init__(self):
         self.tools_seen: list = []
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self.tools_seen.append(tools)
         if len(self.tools_seen) <= 2:
             yield ToolCallChunk(
@@ -401,6 +401,56 @@ async def test_max_iterations_exhausted_falls_back_to_final_stream():
     dones = [e for e in events if isinstance(e, Done)]
     assert len(dones) == 1
     assert dones[0].full_text == "final answer after exhausting iterations"
+
+
+# --------------------------------------------------------------------------- #
+# Truncated tool-call arguments                                               #
+# --------------------------------------------------------------------------- #
+
+
+class _ParseErrorStub:
+    """First call yields a tool call whose arguments failed to parse, second
+    call yields a final answer."""
+
+    def __init__(self):
+        self.model = "stub"
+        self._calls = 0
+
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
+        self._calls += 1
+        if self._calls == 1:
+            yield ToolCallChunk(
+                [
+                    ToolCall(
+                        id="c1",
+                        name="builtin__write_file",
+                        parameters={},
+                        parse_error="Error: truncated JSON",
+                    )
+                ]
+            )
+        else:
+            yield TextChunk("retried")
+
+
+@pytest.mark.asyncio
+async def test_parse_error_surfaces_as_tool_result_without_executing():
+    mcp = _StubMCP()
+    a = _agent(_ParseErrorStub(), mcp_manager=mcp)
+    msgs = [Message(role="user", content="hi")]
+    events = await _run(a, msgs)
+
+    # The malformed call must NOT be dispatched to the tool manager.
+    assert mcp.calls == []
+
+    results = [e for e in events if isinstance(e, ToolCallResult)]
+    assert len(results) == 1
+    assert results[0].name == "builtin__write_file"
+    assert "truncated" in results[0].result
+
+    # The loop continues, so the model gets a chance to retry.
+    dones = [e for e in events if isinstance(e, Done)]
+    assert dones and dones[-1].full_text == "retried"
 
 
 # --------------------------------------------------------------------------- #
@@ -438,7 +488,7 @@ async def test_chat_mode_ignores_tool_call_chunks_from_backend():
     class _RogueBackend:
         model = "stub"
 
-        async def stream_generate(self, messages, tools=None):
+        async def stream_generate(self, messages, tools=None, max_tokens=None):
             yield TextChunk("part ")
             yield ToolCallChunk([ToolCall(id="x", name="builtin__nope", parameters={})])
             yield TextChunk("done")

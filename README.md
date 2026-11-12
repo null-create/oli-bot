@@ -29,7 +29,7 @@ A lightweight, terminal-based AI agent harness for local-first, vendor-agnostic 
 
 - **Declarative sub-agent pooling (optional)** — with `--use-pool`, the root agent can fan tasks out concurrently to vendor-agnostic sub-agents defined in an optional [agents.yaml](agents.yaml) file via a `dispatch` tool. Each pool entry binds a model _and_ a backend, so dispatch decisions are also compute-location decisions — a frontier model can plan while sensitive work stays on a local model, or a local root can fan out to faster remote SLMs for latency-sensitive tool calls.
 - **Agent profiles** — drop-in system prompts with permission manifests, base-profile inheritance, and auto-generated profiles via `/profile create`. Bundled profiles: `default`, `coder`, `reviewer`, `editor`, `writer`, `planner`, `researcher`, `analyst`.
-- **Rich built-in tool set** — file ops, shell access (including PHP and read-only Docker inspection), web search/fetch, Wikipedia/GitHub/arXiv search, task tracking, reasoning scratchpad, notebook, interactive user-question modals, and more. Sandbox-locked with shell allowlists, SSRF protection, and sensitive-file gating.
+- **Rich built-in tool set** — file ops, shell access, web search/fetch, Wikipedia/GitHub/arXiv search, task tracking, reasoning scratchpad, notebook, interactive user-question modals, and more. Sandbox-locked with shell allowlists, SSRF protection, and sensitive-file gating.
 - **Permission system** — write operations and sensitive reads require user approval. Session grants, workspace scoping, and profile-level allow/deny lists.
 - **OpenAI-compatible API server** — run the same agent harness behind `/v1/models` and `/v1/chat/completions` (streaming + non-streaming) so any workflow that speaks the OpenAI wire protocol (the `openai` Python SDK, curl, or plain REST) can drive the agent.
 - **Voice mode (optional, experimental)** — `/voice` toggles a hands-free mic → STT → LLM → TTS loop (faster-whisper, Piper TTS, WebRTC VAD) for the TUI. Fully local; requires the `voice` extras and a downloaded Piper model.
@@ -153,16 +153,16 @@ Type `/voice` again (or `Ctrl+Q` to quit the app) to exit voice mode — the mic
 
 ## Documentation
 
-| Document                                       | Contents                                                                        |
-| ---------------------------------------------- | ------------------------------------------------------------------------------- |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)   | Architectural overview of the application, permission, configurations, and more |
-| [docs/API_SERVER.md](docs/API_SERVER.md)       | Running the `oli-server` REST/WebSocket API, endpoints, config, and examples    |
-| [docs/CONFIGURE.md](docs/CONFIGURE.md)         | Full configuration reference, settings precedence, sessions, workspace          |
-| [docs/TOOLS.md](docs/TOOLS.md)                 | Built-in tools, permission system, security, dry-run/offline modes, truncation  |
-| [docs/BACKENDS.md](docs/BACKENDS.md)           | Backend setup (Ollama, OpenAI, HuggingFace, Transformers), model tier switching |
-| [docs/PROFILES.md](docs/PROFILES.md)           | Profile structure, manifests, built-in profiles, creating and loading profiles  |
-| [docs/AGENT_POOLING.md](docs/AGENT_POOLING.md) | Agent pooling configuration, parsing, and usage                                 |
-| [docs/SECURITY.md](docs/SECURITY.md)           | Security precedence and settings                                                |
+| Document                                       | Contents                                                                                  |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)   | Architectural overview of the application, permission, configurations, and more           |
+| [docs/API_SERVER.md](docs/API_SERVER.md)       | Running the `oli-server` REST/WebSocket API, endpoints, config, and examples              |
+| [docs/CONFIGURE.md](docs/CONFIGURE.md)         | Full configuration reference, settings precedence, sessions, workspace                    |
+| [docs/TOOLS.md](docs/TOOLS.md)                 | Built-in tools, permission system, security, dry-run/offline modes, truncation, write cap |
+| [docs/BACKENDS.md](docs/BACKENDS.md)           | Backend setup (Ollama, OpenAI, HuggingFace, Transformers), model tier switching           |
+| [docs/PROFILES.md](docs/PROFILES.md)           | Profile structure, manifests, built-in profiles, creating and loading profiles            |
+| [docs/AGENT_POOLING.md](docs/AGENT_POOLING.md) | Agent pooling configuration, parsing, and usage                                           |
+| [docs/SECURITY.md](docs/SECURITY.md)           | Security precedence and settings                                                          |
 
 ## Docker
 

@@ -716,7 +716,7 @@ def test_run_agent_dispatch_aggregates_and_streams_events():
     class _StreamingBackend:
         model = "stub"
 
-        async def stream_generate(self, messages, tools=None):
+        async def stream_generate(self, messages, tools=None, max_tokens=None):
             yield TextChunk(f"answer for {messages[-1].content}")
             yield Done(full_text=(f"final-{messages[-1].content}"))
 

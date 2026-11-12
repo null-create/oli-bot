@@ -29,7 +29,7 @@ from oli_bot.tools.manager import BuiltinToolManager
 class _TextStub:
     model = "stub-text"
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         yield TextChunk("Hello ")
         yield TextChunk("from stub")
 
@@ -40,7 +40,7 @@ class _ToolThenTextStub:
     def __init__(self):
         self._calls = 0
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self._calls += 1
         if self._calls == 1:
             yield ToolCallChunk(
@@ -53,7 +53,7 @@ class _ToolThenTextStub:
 class _RaisingStub:
     model = "stub-raise"
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         raise RuntimeError("boom")
         yield  # pragma: no cover
 
@@ -72,7 +72,7 @@ class _ConcurrencyProbeStub:
         self.max_active = 0
         self._mutex = threading.Lock()
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         with self._mutex:
             self.active += 1
             self.max_active = max(self.max_active, self.active)
@@ -90,7 +90,7 @@ class _TodoThenTextStub:
     def __init__(self):
         self._calls = 0
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self._calls += 1
         if self._calls == 1:
             yield ToolCallChunk(
@@ -120,7 +120,7 @@ class _HistoryProbeStub:
     def __init__(self):
         self.seen = []
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self.seen.append(len(messages))
         yield TextChunk(f"n={len(messages)}")
 
@@ -133,7 +133,7 @@ class _MessageProbeStub:
     def __init__(self):
         self.messages = []
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self.messages = list(messages)
         yield TextChunk("ok")
 
