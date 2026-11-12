@@ -148,6 +148,23 @@ class UsageEvent:
 
 
 @dataclass
+class TokenCount:
+    """Live snapshot of the tokens the next/current request will send.
+
+    ``phase`` identifies the checkpoint that produced the snapshot:
+    ``prompt`` (user submitted), ``thinking`` (a thinking block finished),
+    ``round`` (provider usage for a completed model call), ``tool_result``
+    (a tool result was appended), or ``final`` (turn complete).
+    """
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    estimated: bool
+    phase: str
+
+
+@dataclass
 class SubAgentStarted:
     """Emitted when a sub-agent run begins."""
 
