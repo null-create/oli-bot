@@ -129,6 +129,15 @@ class AppConfig(BaseSettings):
             "OLI_TRUNCATION_MAX_CHARS_LARGE",
         ),
     )
+    # Maximum characters accepted by the write_file built-in tool. Bounds a
+    # single write so a runaway model can't emit an unbounded payload.
+    max_write_chars: int = Field(
+        default=100000,
+        validation_alias=AliasChoices(
+            "max_write_chars",
+            "OLI_MAX_WRITE_CHARS",
+        ),
+    )
 
     # Dry-run mode: preview destructive actions without executing
     dry_run: bool = Field(default=False)

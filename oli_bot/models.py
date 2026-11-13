@@ -42,6 +42,11 @@ class ToolCall:
     name: str = ""
     description: str = ""
     parameters: Dict[str, Any] = field(default_factory=dict)
+    # Set when the model's streamed ``arguments`` JSON could not be parsed
+    # (typically because generation hit the output-token limit mid-call). The
+    # agent surfaces this as a tool result instead of executing the call, so
+    # the model can retry with a smaller payload.
+    parse_error: Optional[str] = None
 
 
 @dataclass
@@ -140,6 +145,23 @@ class UsageEvent:
     """Cumulative token usage for a single agent run (one user turn)."""
 
     usage: Usage
+
+
+@dataclass
+class TokenCount:
+    """Live snapshot of the tokens the next/current request will send.
+
+    ``phase`` identifies the checkpoint that produced the snapshot:
+    ``prompt`` (user submitted), ``thinking`` (a thinking block finished),
+    ``round`` (provider usage for a completed model call), ``tool_result``
+    (a tool result was appended), or ``final`` (turn complete).
+    """
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    estimated: bool
+    phase: str
 
 
 @dataclass

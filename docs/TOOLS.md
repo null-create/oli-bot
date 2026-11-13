@@ -126,3 +126,9 @@ Tool results are automatically truncated to conserve context window:
 - **Large tier** -- 100,000 characters (configurable via `OLI_TRUNCATION_LARGE`)
 
 Truncation preserves sentence and paragraph boundaries when possible, appending a `[... truncated: N characters remaining]` notice.
+
+## Write cap
+
+`write_file` rejects a single write larger than `max_write_chars` (default 100,000 characters; configurable via `OLI_MAX_WRITE_CHARS` or `/config`). The limit is also advertised in the tool's description so the model can self-limit.
+
+Note this is a *post-generation* guardrail: it fires only after the model has emitted the full `content` argument. The limit that actually truncates large writes is the per-round output-token budget (`max_tokens`). When generation hits that ceiling mid-call, the tool-call JSON is unterminated; the backend parses it leniently and the agent feeds back a retryable `parse_error` result ("...truncated JSON... split large content across multiple writes...") instead of aborting the run.

@@ -125,12 +125,16 @@ class OllamaBackend(ModelBackend):
         self,
         messages: List[Message],
         tools: Optional[List[Dict]] = None,
+        max_tokens: Optional[int] = None,
     ) -> AsyncIterator[StreamEvent]:
         try:
             kwargs: Dict[str, Any] = {
                 "model": self.model,
                 "messages": _format_messages(messages, image_style="ollama"),
-                "options": {"num_predict": MAX_TOKENS, "temperature": TEMPERATURE},
+                "options": {
+                    "num_predict": max_tokens or MAX_TOKENS,
+                    "temperature": TEMPERATURE,
+                },
                 "stream": True,
             }
             if tools:

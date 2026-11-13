@@ -19,6 +19,7 @@ from oli_bot.models import (
     Message,
     StreamChunk,
     TextChunk,
+    TokenCount,
     ToolCall,
     ToolCallChunk,
     ToolCallExecuting,
@@ -35,7 +36,7 @@ class _TextStub:
 
     model = "stub"
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         yield TextChunk("hello ")
         yield TextChunk("world")
 
@@ -48,7 +49,7 @@ class _ToolThenTextStub:
         self._calls = 0
         self._text_before_tool = text_before_tool
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self._calls += 1
         if self._calls == 1:
             if self._text_before_tool:
@@ -67,7 +68,7 @@ class _MultiToolStub:
         self.model = "stub"
         self._calls = 0
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self._calls += 1
         if self._calls == 1:
             yield ToolCallChunk(
@@ -85,7 +86,7 @@ class _HangingStub:
 
     model = "stub"
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         await asyncio.sleep(10)
         yield TextChunk("never")
 
@@ -98,7 +99,7 @@ class _RaisingStub:
     def __init__(self, exc):
         self._exc = exc
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         raise self._exc
         yield  # pragma: no cover — makes this an async generator
 
@@ -152,11 +153,9 @@ async def test_text_only_response_yields_stream_then_done_with_full_text():
     dones = [e for e in events if isinstance(e, Done)]
 
     # Every StreamChunk fires before the terminal Done, no duplicates.
-    assert [type(e).__name__ for e in events] == [
-        "StreamChunk",
-        "StreamChunk",
-        "Done",
-    ]
+    # (TokenCount snapshots are interleaved by design and filtered here.)
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
+    assert kinds == ["StreamChunk", "StreamChunk", "Done"]
     assert "".join(e.text for e in stream_events) == "hello world"
     assert len(dones) == 1
     assert dones[0].full_text == "hello world"
@@ -227,7 +226,8 @@ async def test_tool_loop_event_ordering_and_synced_messages():
     events = await _run(a, msgs)
 
     # Exact ordering: tool executes → tool result → final text stream → done.
-    kinds = [type(e).__name__ for e in events]
+    # (TokenCount snapshots are interleaved by design and filtered here.)
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
     assert kinds == ["ToolCallExecuting", "ToolCallResult", "StreamChunk", "Done"]
 
     executing = next(e for e in events if isinstance(e, ToolCallExecuting))
@@ -368,7 +368,7 @@ class _AlwaysToolThenFinalStub:
     def __init__(self):
         self.tools_seen: list = []
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self.tools_seen.append(tools)
         if len(self.tools_seen) <= 2:
             yield ToolCallChunk(
@@ -404,6 +404,56 @@ async def test_max_iterations_exhausted_falls_back_to_final_stream():
 
 
 # --------------------------------------------------------------------------- #
+# Truncated tool-call arguments                                               #
+# --------------------------------------------------------------------------- #
+
+
+class _ParseErrorStub:
+    """First call yields a tool call whose arguments failed to parse, second
+    call yields a final answer."""
+
+    def __init__(self):
+        self.model = "stub"
+        self._calls = 0
+
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
+        self._calls += 1
+        if self._calls == 1:
+            yield ToolCallChunk(
+                [
+                    ToolCall(
+                        id="c1",
+                        name="builtin__write_file",
+                        parameters={},
+                        parse_error="Error: truncated JSON",
+                    )
+                ]
+            )
+        else:
+            yield TextChunk("retried")
+
+
+@pytest.mark.asyncio
+async def test_parse_error_surfaces_as_tool_result_without_executing():
+    mcp = _StubMCP()
+    a = _agent(_ParseErrorStub(), mcp_manager=mcp)
+    msgs = [Message(role="user", content="hi")]
+    events = await _run(a, msgs)
+
+    # The malformed call must NOT be dispatched to the tool manager.
+    assert mcp.calls == []
+
+    results = [e for e in events if isinstance(e, ToolCallResult)]
+    assert len(results) == 1
+    assert results[0].name == "builtin__write_file"
+    assert "truncated" in results[0].result
+
+    # The loop continues, so the model gets a chance to retry.
+    dones = [e for e in events if isinstance(e, Done)]
+    assert dones and dones[-1].full_text == "retried"
+
+
+# --------------------------------------------------------------------------- #
 # Chat mode                                                                   #
 # --------------------------------------------------------------------------- #
 
@@ -416,11 +466,9 @@ async def test_chat_mode_skips_tool_loop_entirely():
     events = await _run(a, msgs)
 
     # Ordered, no duplicates: two stream chunks then exactly one Done.
-    assert [type(e).__name__ for e in events] == [
-        "StreamChunk",
-        "StreamChunk",
-        "Done",
-    ]
+    # (TokenCount snapshots are interleaved by design and filtered here.)
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
+    assert kinds == ["StreamChunk", "StreamChunk", "Done"]
     # Chat mode must NOT invoke MCP at all — the whole point of the mode.
     assert mcp.calls == []
     # Done carries the streamed text.
@@ -438,7 +486,7 @@ async def test_chat_mode_ignores_tool_call_chunks_from_backend():
     class _RogueBackend:
         model = "stub"
 
-        async def stream_generate(self, messages, tools=None):
+        async def stream_generate(self, messages, tools=None, max_tokens=None):
             yield TextChunk("part ")
             yield ToolCallChunk([ToolCall(id="x", name="builtin__nope", parameters={})])
             yield TextChunk("done")
@@ -506,12 +554,11 @@ async def test_backend_exception_yields_error_then_done():
     a = _agent(_RaisingStub(RuntimeError("upstream 500")))
     events = await _run(a, [Message(role="user", content="hi")])
 
-    kinds = [type(e).__name__ for e in events]
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
     assert kinds == ["Error", "Done"]
 
-    err, done = events
-    assert isinstance(err, Error)
-    assert isinstance(done, Done)
+    err = next(e for e in events if isinstance(e, Error))
+    done = next(e for e in events if isinstance(e, Done))
     assert "upstream 500" in err.message
     # Done.full_text must be empty on error so the UI layer's "skip empty
     # assistant append" branch fires and the error text never poisons history.
@@ -558,10 +605,9 @@ async def test_tool_loop_timeout_yields_error_then_done_and_flips_generating_fla
     )
     events = await _run(a, [Message(role="user", content="hi")])
 
-    kinds = [type(e).__name__ for e in events]
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
     assert kinds == ["Error", "Done"]
-    err = events[0]
-    assert isinstance(err, Error)
+    err = next(e for e in events if isinstance(e, Error))
     assert "timed out" in err.message
 
     # Regression: the `finally` in process() must reset _generating even on

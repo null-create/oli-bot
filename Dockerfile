@@ -9,7 +9,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Tell HuggingFace where to cache models inside the image
 ENV TRANSFORMERS_CACHE=/app/.cache/huggingface \
-    HF_HOME=/app/.cache/huggingface
+    HF_HOME=/app/.cache/huggingface \
+    TIKTOKEN_CACHE_DIR=/app/.cache/tiktoken
 
 # Install system dependencies (single RUN layer to keep image smaller)
 RUN apt-get update && apt-get install -y \
@@ -42,6 +43,9 @@ RUN pip install --no-cache-dir transformers>=4.40 accelerate>=0.2
 # image and makes the `oli` / `oli-server` console scripts available on PATH.
 COPY . .
 RUN pip install --no-cache-dir .
+
+# Pre-cache tiktoken BPE files so token counting works without runtime network.
+RUN python -c "import tiktoken; [tiktoken.get_encoding(n) for n in ('cl100k_base', 'o200k_base')]"
 
 EXPOSE 9734
 

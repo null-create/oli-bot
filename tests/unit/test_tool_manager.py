@@ -344,6 +344,39 @@ def test_notebook_set_auto_increments_plan_pages(tmp_path, monkeypatch):
     assert (notes_dir / "plan-foo-3.md").read_text() == "v3"
 
 
+# ---------- configurable write cap -------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_write_file_cap_is_configurable(tmp_path):
+    session = Session(workspace=tmp_path)
+    session.grant(SCOPE_WRITE, session=True)
+    cfg = AppConfig(_env_file=None, offline_mode=False, max_write_chars=5)
+    m = BuiltinToolManager(session=session, config=cfg)
+
+    too_big = await m.call_tool(
+        "write_file",
+        {"file_path": str(tmp_path / "a.txt"), "content": "123456"},
+    )
+    assert "exceeds maximum length" in too_big
+    assert "5" in too_big
+
+    ok = await m.call_tool(
+        "write_file",
+        {"file_path": str(tmp_path / "b.txt"), "content": "12345"},
+    )
+    assert ok.startswith("Successfully wrote")
+
+
+def test_write_file_description_reflects_configured_cap():
+    cfg = AppConfig(_env_file=None, offline_mode=False, max_write_chars=42)
+    m = BuiltinToolManager(config=cfg)
+    defn = next(
+        d for d in m.get_tool_definitions() if d["name"] == "builtin__write_file"
+    )
+    assert "42" in defn["description"]
+
+
 def test_notebook_set_overwrites_non_plan_pages(tmp_path, monkeypatch):
     from pathlib import Path
 

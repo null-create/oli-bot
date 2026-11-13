@@ -177,6 +177,16 @@ def test_transformers_small_model_roundtrip(tmp_path):
     assert back["transformers"]["is_multi_model"] is True
 
 
+def test_max_write_chars_roundtrip(tmp_path):
+    mgr = SettingsManager(config_dir=tmp_path)
+    settings = mgr.get_defaults()
+    settings["model_params"]["max_write_chars"] = 12345
+    cfg = mgr.to_appconfig(settings)
+    assert cfg.max_write_chars == 12345
+    back = mgr.from_appconfig(cfg)
+    assert back["model_params"]["max_write_chars"] == 12345
+
+
 def test_to_appconfig_defaults_match_default_settings(tmp_path):
     mgr = SettingsManager(config_dir=tmp_path)
     defaults = mgr.get_defaults()

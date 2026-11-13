@@ -9,6 +9,12 @@ oli supports four model backends, selected via the `backend` setting (`OLI_BACKE
 | `huggingface`  | HuggingFace Inference API (remote) or TGI/vLLM (local) |
 | `transformers` | Local model inference via HuggingFace `transformers`   |
 
+## Output-token cap
+
+Every backend's `generate()` and `stream_generate()` accept a `max_tokens` cap. `Agent` passes the live `config.max_tokens` (set via `OLI_MAX_TOKENS`, `settings.json`, or `/config`) on each streaming round, so the value actually bounds a single generation — important for large tool calls like `write_file`, whose `content` argument is generated as output tokens. When `max_tokens` is omitted (`None`), Ollama/Transformers fall back to the import-time `MAX_TOKENS` default and OpenAI-compatible APIs use the provider default.
+
+If generation is cut off mid-tool-call, the `arguments` JSON is truncated. Backends parse it leniently (`tool_call_from_raw`) and set `ToolCall.parse_error`; the agent returns that error as the tool result so the model can retry with a smaller payload instead of the run failing.
+
 ## Ollama
 
 Connects to a local Ollama server. Default URL: `http://localhost:11434`.

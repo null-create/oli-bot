@@ -7,13 +7,15 @@ import time
 import uuid
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from ..agent import Agent
+from ..agent import Agent, _merge_usage
 from ..models import (
     AssistantResponse,
     ChatCompletionRequest,
     Done,
     Error,
     StreamChunk,
+    Usage,
+    UsageEvent,
 )
 from .convert import _to_message
 from .errors import AgentError
@@ -37,9 +39,15 @@ def _completion_id() -> str:
     return f"chatcmpl-{uuid.uuid4().hex}"
 
 
-def _usage(completion_text: str) -> Dict[str, int]:
-    # Rustic token estimate; real prompt usage depends on the backend. Kept
-    # approximate since the agent loop does not surface exact counts.
+def _usage(completion_text: str, usage: Optional[Usage] = None) -> Dict[str, int]:
+    # Prefer the agent's summed per-call usage; fall back to a rustic
+    # completion-only estimate for backends that report nothing.
+    if usage is not None and usage.total_tokens:
+        return {
+            "prompt_tokens": usage.prompt_tokens,
+            "completion_tokens": usage.completion_tokens,
+            "total_tokens": usage.total_tokens,
+        }
     completion = max(1, (len(completion_text) + 3) // 4)
     return {
         "prompt_tokens": 0,
@@ -50,10 +58,10 @@ def _usage(completion_text: str) -> Dict[str, int]:
 
 async def _collect_response(
     request: ChatCompletionRequest, agent: Agent, lock: Any
-) -> str:
+) -> tuple[str, Usage]:
     """Run the agent tool loop for a request and return the final assistant
-    text. Raises ``AgentError`` (formatted as an OpenAI error body) when the
-    run fails or produces no text."""
+    text plus its summed usage. Raises ``AgentError`` (formatted as an OpenAI
+    error body) when the run fails or produces no text."""
     async with lock:
         messages = [_to_message(m) for m in request.messages]
         try:
@@ -64,6 +72,7 @@ async def _collect_response(
 
         full_text = ""
         error_text: Optional[str] = None
+        usage = Usage()
         try:
             async for event in agent.process(
                 messages, tools=tools, confirm_callback=_api_confirm
@@ -72,6 +81,8 @@ async def _collect_response(
                     full_text += event.text
                 elif isinstance(event, AssistantResponse):
                     full_text += event.content
+                elif isinstance(event, UsageEvent):
+                    usage = _merge_usage(usage, event.usage)
                 elif isinstance(event, Error):
                     error_text = event.message
                 elif isinstance(event, Done):
@@ -86,7 +97,7 @@ async def _collect_response(
     if not full_text:
         logger.warning("Agent produced empty response for request")
         raise AgentError("The agent produced no response.", code="empty_response")
-    return full_text
+    return full_text, usage
 
 
 async def _stream_response(

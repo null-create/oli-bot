@@ -54,6 +54,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "model_filters": "",
         "truncation_max_chars_small": 4000,
         "truncation_max_chars_large": 100000,
+        "max_write_chars": 100000,
         "dry_run": False,
         "offline_mode": True,
         "use_oauth": False,
@@ -130,6 +131,7 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_MODEL_FILTERS": "model_params.model_filters",
     "OLI_TRUNCATION_SMALL": "model_params.truncation_max_chars_small",
     "OLI_TRUNCATION_LARGE": "model_params.truncation_max_chars_large",
+    "OLI_MAX_WRITE_CHARS": "model_params.max_write_chars",
     "OLI_DRY_RUN": "model_params.dry_run",
     "OLI_OFFLINE_MODE": "model_params.offline_mode",
     "OLI_USE_OAUTH": "model_params.use_oauth",
@@ -352,6 +354,7 @@ class SettingsManager:
             model_filters=mp.get("model_filters", ""),
             truncation_max_chars_small=mp.get("truncation_max_chars_small", 4000),
             truncation_max_chars_large=mp.get("truncation_max_chars_large", 100000),
+            max_write_chars=mp.get("max_write_chars", 100000),
             dry_run=mp.get("dry_run", False),
             offline_mode=mp.get("offline_mode", True),
             use_oauth=mp.get("use_oauth", False),
@@ -420,6 +423,7 @@ class SettingsManager:
         settings["model_params"][
             "truncation_max_chars_large"
         ] = config.truncation_max_chars_large
+        settings["model_params"]["max_write_chars"] = config.max_write_chars
         settings["model_params"]["dry_run"] = config.dry_run
         settings["model_params"]["offline_mode"] = config.offline_mode
         settings["model_params"]["use_oauth"] = config.use_oauth

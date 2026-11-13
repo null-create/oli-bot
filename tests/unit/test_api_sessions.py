@@ -24,7 +24,7 @@ from oli_bot.tools.manager import BuiltinToolManager
 class _TextStub:
     model = "stub-text"
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         yield TextChunk("Hello ")
         yield TextChunk("from stub")
 
@@ -37,7 +37,7 @@ class _ToolStub:
     def __init__(self):
         self._calls = 0
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self._calls += 1
         if self._calls == 1:
             yield ToolCallChunk(
@@ -55,7 +55,7 @@ class _HistoryProbeStub:
     def __init__(self):
         self.seen = []
 
-    async def stream_generate(self, messages, tools=None):
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
         self.seen.append([m.role for m in messages])
         yield TextChunk(f"n={len(messages)}")
 

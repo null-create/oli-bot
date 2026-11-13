@@ -70,7 +70,7 @@ from .agent import (
 )
 
 from .config import configs
-from .models import SubAgentRun, UsageEvent
+from .models import SubAgentRun, TokenCount, UsageEvent
 from .tools.manager import BuiltinToolManager
 from .mcp_client import MCPClientManager
 from .backends.upstream_manager import UpstreamManager
@@ -420,6 +420,8 @@ class OliBot(App):
         self.messages: list[Message] = []
         self.total_tokens = 0
         self.tokens_estimated = False
+        self.context_tokens = 0
+        self.context_estimated = False
         cwd = Path.cwd()
         if is_sensitive_path(cwd):
             self.session = Session(workspace=None)
@@ -656,6 +658,7 @@ class OliBot(App):
         await self.mcp_manager.disconnect_all()
 
     def on_mount(self) -> None:
+        self._refresh_context_tokens(render=False)
         self.update_header()
         if self.agent_pool is not None:
             self.query_one("#sub-agent-tree", Tree).border_title = "Active Sub-Agents"
@@ -729,6 +732,18 @@ class OliBot(App):
             )
             self.current_session_id = new_id
 
+    def _refresh_context_tokens(self, render: bool = True) -> None:
+        """Recompute the live context count for the current message history."""
+        try:
+            total, estimated = self.agent.count_context_tokens(self.messages)
+        except Exception:
+            logger.warning("Failed to count context tokens", exc_info=True)
+            return
+        self.context_tokens = total
+        self.context_estimated = estimated
+        if render:
+            self.update_header()
+
     def update_header(self) -> None:
         active = self.upstream_manager.get_active()
         server_part = f" {active.name}" if active else ""
@@ -745,9 +760,9 @@ class OliBot(App):
             f"{self._status_badges()}  {model_part} "
             f"[dim]:: {self.agent.profile_name}{server_part}[/dim]"
         )
-        if self.total_tokens > 0:
-            est = "~" if self.tokens_estimated else ""
-            info += f"  [dim]·[/dim] {est}{self.total_tokens:,} tok"
+        if self.context_tokens > 0:
+            est = "~" if self.context_estimated else ""
+            info += f"  [dim]·[/dim] ctx {est}{self.context_tokens:,} tok"
         status.add_row(hints, info)
         self.query_one("#status-bar", Static).update(status)
 
@@ -1083,7 +1098,7 @@ class OliBot(App):
             )
         self.total_tokens = 0
         self.tokens_estimated = False
-        self.update_header()
+        self._refresh_context_tokens()
         self.query_one("#chat-log").remove_children()
         self._add_message("System", "New session created.")
 
@@ -1192,7 +1207,7 @@ class OliBot(App):
         self.current_session_id = session_id
         self.total_tokens = data.get("total_tokens", 0) or 0
         self.tokens_estimated = bool(data.get("total_tokens_estimated", False))
-        self.update_header()
+        self._refresh_context_tokens()
         self.query_one("#chat-log").remove_children()
         self._clear_todo_widget()
         self._restore_todos(data.get("todos"))
@@ -1224,7 +1239,7 @@ class OliBot(App):
                     )
                 self.total_tokens = 0
                 self.tokens_estimated = False
-                self.update_header()
+                self._refresh_context_tokens()
                 self.query_one("#chat-log").remove_children()
                 self._add_message(
                     "System", "Current session was deleted. New session created."
@@ -1282,7 +1297,7 @@ class OliBot(App):
         )
         self.total_tokens = 0
         self.tokens_estimated = False
-        self.update_header()
+        self._refresh_context_tokens()
         self.query_one("#chat-log").remove_children()
         self._add_message(
             "System",
@@ -1453,7 +1468,7 @@ class OliBot(App):
                 timeout=4,
             )
         self.agent.set_mode(mode)
-        self.update_header()
+        self._refresh_context_tokens()
         self._add_message("System", f"Switched to [bold]{mode}[/bold] mode.")
 
     def _handle_profile(self, text: str) -> None:
@@ -1493,7 +1508,7 @@ class OliBot(App):
         self.messages.clear()
         self.query_one("#chat-log").remove_children()
         self.messages.append(Message(role="system", content=self.agent.system_prompt))
-        self.update_header()
+        self._refresh_context_tokens()
         self._save_session()
         self._add_message("System", f"Loaded profile: [bold]{name}[/bold]")
 
@@ -1765,7 +1780,7 @@ class OliBot(App):
                 self.messages.append(
                     Message(role="system", content=self.agent.system_prompt)
                 )
-            self.update_header()
+            self._refresh_context_tokens()
             self._add_message(
                 "System", f"Switched to server: [bold]{name}[/bold] ({config.url})"
             )
@@ -1828,7 +1843,7 @@ class OliBot(App):
 
     def _switch_model(self, name: str) -> None:
         self.backend.model = name
-        self.update_header()
+        self._refresh_context_tokens()
         self._add_message("System", f"Switched to model: [bold]{name}[/bold]")
 
     def _get_large_model(self) -> str:
@@ -2186,7 +2201,7 @@ class OliBot(App):
             )
         self.total_tokens = 0
         self.tokens_estimated = False
-        self.update_header()
+        self._refresh_context_tokens()
         self.query_one("#chat-log").remove_children()
         self._clear_todo_widget()
         self._add_message("System", "Conversation cleared.")
@@ -2199,7 +2214,7 @@ class OliBot(App):
         self.messages.clear()
         self.total_tokens = 0
         self.tokens_estimated = False
-        self.update_header()
+        self._refresh_context_tokens()
         chat_log = self.query_one("#chat-log")
         try:
             welcome = chat_log.query_one("#welcome")
@@ -2391,6 +2406,7 @@ class OliBot(App):
     def _handle_user_message(self, text: str) -> None:
         ts = datetime.now(timezone.utc).isoformat()
         self.messages.append(Message(role="user", content=text, timestamp=ts))
+        self._refresh_context_tokens()
         chat_log = self.query_one("#chat-log")
         color = self._role_color("You")
         icon = self._role_icon("You")
@@ -2639,6 +2655,10 @@ class OliBot(App):
                         self.total_tokens += usage.total_tokens
                         self.tokens_estimated = self.tokens_estimated or usage.estimated
                         self.update_header()
+                    case TokenCount(total_tokens=total, estimated=estimated):
+                        self.context_tokens = total
+                        self.context_estimated = estimated
+                        self.update_header()
                     case AgentDone(full_text, activity):
                         stop_spinner()
                         if think_widget is not None:
@@ -2681,6 +2701,7 @@ class OliBot(App):
                                     timestamp=assistant_ts,
                                 )
                             )
+                            self._refresh_context_tokens()
                         else:
                             logger.debug(
                                 "Skipping empty assistant message append "
@@ -2700,6 +2721,7 @@ class OliBot(App):
                     start -= 1
                 pruned = system + rest[start:]
                 self.messages = sanitize_tool_history(pruned)
+                self._refresh_context_tokens()
         finally:
             self._save_session()
             stop_spinner()

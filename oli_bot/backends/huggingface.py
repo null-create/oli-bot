@@ -23,6 +23,7 @@ from .base import (
     ModelBackend,
     StreamEvent,
     estimate_tokens,
+    tool_call_from_raw,
 )
 from .messages import _format_messages, _format_tools
 from .streaming import _StreamingThinkParser
@@ -128,6 +129,7 @@ class HuggingFaceBackend(ModelBackend):
         self,
         messages: List[Message],
         tools: Optional[List[Dict]] = None,
+        max_tokens: Optional[int] = None,
     ) -> AsyncIterator[StreamEvent]:
         try:
             stream = await self.client.chat.completions.create(
@@ -136,6 +138,7 @@ class HuggingFaceBackend(ModelBackend):
                 tools=_format_tools(tools or []),
                 tool_choice="auto" if tools else "none",
                 stream=True,
+                **({"max_tokens": max_tokens} if max_tokens else {}),
             )
             tool_calls_acc: Dict[int, dict] = {}
             flushed = False
@@ -190,12 +193,7 @@ class HuggingFaceBackend(ModelBackend):
                             data["arguments"],
                         )
                     tool_calls = [
-                        ToolCall(
-                            id=data["id"],
-                            name=data["name"],
-                            description="",
-                            parameters=json.loads(data["arguments"] or "{}"),
-                        )
+                        tool_call_from_raw(data["id"], data["name"], data["arguments"])
                         for data in tool_calls_acc.values()
                     ]
                     yield ToolCallChunk(tool_calls)
@@ -214,12 +212,7 @@ class HuggingFaceBackend(ModelBackend):
                         data["arguments"],
                     )
                 tool_calls = [
-                    ToolCall(
-                        id=data["id"],
-                        name=data["name"],
-                        description="",
-                        parameters=json.loads(data["arguments"] or "{}"),
-                    )
+                    tool_call_from_raw(data["id"], data["name"], data["arguments"])
                     for data in tool_calls_acc.values()
                 ]
                 yield ToolCallChunk(tool_calls)

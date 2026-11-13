@@ -58,13 +58,14 @@ def register_tools(manager: BuiltinToolManager) -> None:
         handler=_read_file_handler,
     )
 
+    write_limit = manager._config.max_write_chars
     manager.register_tool(
         name="write_file",
         description="Write content to a file. "
         "Creates parent directories if they don't exist. "
         "Use this to generate code, create configuration files, "
         "save notes, or modify project files. "
-        "Maximum content length is 100,000 characters.",
+        f"Maximum content length is {write_limit:,} characters.",
         parameters={
             "type": "object",
             "properties": {
@@ -79,7 +80,12 @@ def register_tools(manager: BuiltinToolManager) -> None:
             },
             "required": ["file_path", "content"],
         },
-        handler=_write_file_handler,
+        # Read the cap live from the manager's config so a `/config` change
+        # takes effect without rebuilding the tool set (the description above
+        # reflects the value at registration time).
+        handler=lambda file_path, content: _write_file_handler(
+            file_path, content, max_chars=manager._config.max_write_chars
+        ),
     )
 
     manager.register_tool(
@@ -187,11 +193,11 @@ def _read_file_handler(file_path: str, offset: int = None, length: int = None) -
         return f"Error reading file: {e}"
 
 
-def _write_file_handler(file_path: str, content: str) -> str:
+def _write_file_handler(file_path: str, content: str, max_chars: int = 100_000) -> str:
     path = Path(file_path).expanduser().resolve()
-    if len(content) > 100_000:
+    if len(content) > max_chars:
         return (
-            f"Error: Content exceeds maximum length of 100,000 characters "
+            f"Error: Content exceeds maximum length of {max_chars:,} characters "
             f"({len(content)} given)."
         )
     try:

@@ -166,15 +166,16 @@ Non-streaming response:
     }
   ],
   "usage": {
-    "prompt_tokens": 0,
+    "prompt_tokens": 18,
     "completion_tokens": 42,
-    "total_tokens": 42
+    "total_tokens": 60
   }
 }
 ```
 
-`usage` is an approximation (the agent tool loop does not surface exact prompt
-counts); `completion_tokens` is a `~chars/4` estimate.
+`usage` is the summed per-call usage reported by the backend for the whole
+agent run (prompt + completion across every tool-loop round). When the backend
+reports no counts, it falls back to a completion-only `~chars/4` estimate.
 
 **Errors** are returned in OpenAI format with HTTP 500:
 
@@ -261,6 +262,7 @@ inbound message:
 | `tool_call_executing` | `{"name": "...", "parameters": {...}}`                         |
 | `tool_call_result`    | `{"name": "...", "result": "..."}`                             |
 | `assistant_response`  | `{"content": "..."}` — final assembled assistant text          |
+| `token_count`         | `{"prompt_tokens", "completion_tokens", "total_tokens", "estimated", "phase"}` — live context snapshot (`phase` is `prompt`/`thinking`/`round`/`tool_result`/`final`) |
 | `usage`               | `{"prompt_tokens": ..., "completion_tokens": ..., ...}`        |
 | `error`               | `{"message": "..."}`                                           |
 | `done`                | `{"full_text": "..."}` — run finished                          |

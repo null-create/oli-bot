@@ -347,6 +347,12 @@ class ConfigScreen(ModalScreen[dict | None]):
                     classes="config-input",
                     value=str(mp.get("truncation_max_chars_large", 100000)),
                 )
+                yield Input(
+                    placeholder=f"Max write_file chars ({mp.get('max_write_chars', 100000)})",
+                    id="cfg-max-write-chars",
+                    classes="config-input",
+                    value=str(mp.get("max_write_chars", 100000)),
+                )
 
                 yield Label("Offline Mode", classes="section-title")
                 yield Checkbox(
@@ -618,6 +624,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "truncation_max_chars_large": self._int(
                     "#cfg-truncation-large", 100000
                 ),
+                "max_write_chars": self._int("#cfg-max-write-chars", 100000),
                 "offline_mode": self._bool("#cfg-offline-mode"),
                 "dry_run": self._bool("#cfg-dry-run"),
                 "use_oauth": self._bool("#cfg-use-oauth"),

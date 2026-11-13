@@ -34,6 +34,7 @@ dependencies = [
     "openai>=2.0,<3",
     "huggingface_hub>=1.0,<2",
     "transformers>=4.40",
+    "tiktoken>=0.7",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "mcp>=2.0,<3",

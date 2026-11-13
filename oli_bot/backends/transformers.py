@@ -17,7 +17,14 @@ from ..models import (
     UsageChunk,
 )
 
-from .base import MAX_TOKENS, TEMPERATURE, ModelBackend, StreamEvent, estimate_tokens
+from .base import (
+    MAX_TOKENS,
+    TEMPERATURE,
+    TOOL_CALL_PARSE_ERROR,
+    ModelBackend,
+    StreamEvent,
+    estimate_tokens,
+)
 from .messages import _append_image_placeholder_text
 from .streaming import _StreamingThinkParser
 
@@ -202,6 +209,20 @@ class TransformersBackend(ModelBackend):
                 data, _ = decoder.raw_decode(text, start)
             except json.JSONDecodeError:
                 logger.warning("Failed to parse tool call JSON at pos %d", start)
+                # Recover the tool name so the truncated call can still be
+                # surfaced to the model as a retryable error result rather than
+                # silently dropped.
+                name_match = re.search(r'"name"\s*:\s*"([^"]*)"', text[start:])
+                if name_match:
+                    tool_calls.append(
+                        ToolCall(
+                            id=f"call_{len(tool_calls)}",
+                            name=name_match.group(1),
+                            description="",
+                            parameters={},
+                            parse_error=TOOL_CALL_PARSE_ERROR,
+                        )
+                    )
                 continue
             tool_calls.append(
                 ToolCall(
@@ -281,6 +302,7 @@ class TransformersBackend(ModelBackend):
         self,
         messages: List[Message],
         tools: Optional[List[Dict]] = None,
+        max_tokens: Optional[int] = None,
     ) -> AsyncIterator[StreamEvent]:
         self._ensure_loaded()
         try:
@@ -303,7 +325,7 @@ class TransformersBackend(ModelBackend):
             gen_kwargs = {
                 "input_ids": encoded["input_ids"],
                 "attention_mask": encoded["attention_mask"],
-                "max_new_tokens": MAX_TOKENS,
+                "max_new_tokens": max_tokens or MAX_TOKENS,
                 "temperature": TEMPERATURE if TEMPERATURE > 0 else None,
                 "do_sample": TEMPERATURE > 0,
                 "top_p": 1.0 if TEMPERATURE <= 0 else None,

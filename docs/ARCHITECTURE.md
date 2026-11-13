@@ -158,6 +158,45 @@ flowchart TD
 
 ---
 
+## Live Token Accounting
+
+The agent emits a `TokenCount` snapshot (not a delta) at every point where the
+request context changes, so a UI can show the current context size without
+waiting for the run to finish. `oli_bot/tokens.py` uses `tiktoken` when it can
+resolve an encoding for the active model, falls back to a generic BPE encoding
+for unknown/local model names, and finally to the `~chars/4` heuristic; the
+`estimated` flag drives the `~` prefix in the TUI.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant T as TUI
+    participant A as Agent
+    participant B as Backend
+    U->>T: submit message
+    T->>A: process(messages)
+    A-->>T: TokenCount(phase="prompt")
+    A->>B: stream_generate()
+    B-->>A: ThinkingChunk*
+    B-->>A: TextChunk*
+    A-->>T: TokenCount(phase="thinking")
+    B-->>A: ToolCallChunk*
+    A-->>T: ToolCallExecuting / ToolCallResult
+    A-->>T: TokenCount(phase="tool_result")
+    B-->>A: UsageChunk (exact round usage)
+    A-->>T: TokenCount(phase="round")
+    A->>B: next round / final stream
+    A-->>T: TokenCount(phase="final")
+    A-->>T: UsageEvent (cumulative run) + Done
+```
+
+`UsageEvent` remains the cumulative billed total for the run (persisted in
+session JSON and returned by the REST API); `TokenCount` is the live context
+size (rendered in the TUI status bar and relayed as `token_count` WebSocket
+frames).
+
+---
+
 ## Voice Mode Loop
 
 `/voice` toggles a background `@work(exclusive=False)` worker (`_run_voice_loop`)
