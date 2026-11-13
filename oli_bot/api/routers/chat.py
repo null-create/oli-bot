@@ -42,7 +42,7 @@ async def chat_completions(
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
-    completion_text = await _collect_response(request, agent, lock)
+    completion_text, usage = await _collect_response(request, agent, lock)
     return {
         "id": _completion_id(),
         "object": "chat.completion",
@@ -55,5 +55,5 @@ async def chat_completions(
                 "finish_reason": "stop",
             }
         ],
-        "usage": _usage(completion_text),
+        "usage": _usage(completion_text, usage),
     }

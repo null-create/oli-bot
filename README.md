@@ -33,6 +33,7 @@ A lightweight, terminal-based AI agent harness for local-first, vendor-agnostic 
 - **Permission system** — write operations and sensitive reads require user approval. Session grants, workspace scoping, and profile-level allow/deny lists.
 - **OpenAI-compatible API server** — run the same agent harness behind `/v1/models` and `/v1/chat/completions` (streaming + non-streaming) so any workflow that speaks the OpenAI wire protocol (the `openai` Python SDK, curl, or plain REST) can drive the agent.
 - **Voice mode (optional, experimental)** — `/voice` toggles a hands-free mic → STT → LLM → TTS loop (faster-whisper, Piper TTS, WebRTC VAD) for the TUI. Fully local; requires the `voice` extras and a downloaded Piper model.
+- **Live context counter** — the TUI status bar shows a tiktoken-backed context-size snapshot (`ctx N tok`) that updates on submit, after thinking blocks, after each tool result, and at the end of every turn, so you can see how close the conversation is to the model's window before the next request.
 - **Multi-backend support** — Ollama, OpenAI, HuggingFace (remote or local), and Transformers (local GPU/CPU). Switch at runtime.
 - **MCP integration** — add stdio or HTTP MCP servers at runtime for custom tools. HTTP servers can authenticate with a static API token or OAuth 2.1 (set `OLI_USE_OAUTH=true`, or toggle it under `/config`).
 

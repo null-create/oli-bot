@@ -10,6 +10,8 @@ from oli_bot.models import (
     Done,
     Message,
     TextChunk,
+    ThinkingChunk,
+    TokenCount,
     ToolCall,
     ToolCallChunk,
     Usage,
@@ -17,7 +19,81 @@ from oli_bot.models import (
     UsageEvent,
 )
 from oli_bot.sessions import ConversationStore
+from oli_bot.tokens import (
+    ContextTokenTracker,
+    count_message_tokens,
+    count_text_tokens,
+    estimate_tokens,
+)
 from oli_bot.backends import OllamaBackend, OpenAIBackend
+
+# --------------------------------------------------------------------------- #
+# Local token counting                                                         #
+# --------------------------------------------------------------------------- #
+
+
+class _FakeEncoding:
+    def encode(self, text, disallowed_special=()):
+        return list(range(len(text.split())))
+
+
+def test_count_text_tokens_uses_tokenizer(monkeypatch):
+    monkeypatch.setattr(
+        "oli_bot.tokens._resolve_encoding", lambda model: _FakeEncoding()
+    )
+    count, estimated = count_text_tokens("hello world", "gpt-fake")
+    assert count == 2
+    assert estimated is False
+
+
+def test_count_text_tokens_falls_back_to_heuristic(monkeypatch):
+    monkeypatch.setattr("oli_bot.tokens._resolve_encoding", lambda model: None)
+    count, estimated = count_text_tokens("hello world", "unknown-model")
+    assert count == estimate_tokens("hello world")
+    assert estimated is True
+
+
+def test_count_message_tokens_includes_framing(monkeypatch):
+    monkeypatch.setattr("oli_bot.tokens._resolve_encoding", lambda model: None)
+    messages = [Message(role="user", content="hello")]
+    count, estimated = count_message_tokens(messages, "unknown-model")
+    assert count == estimate_tokens("user\nhello") + 4
+    assert estimated is True
+
+
+def test_context_tracker_tracks_history_and_inflight(monkeypatch):
+    monkeypatch.setattr("oli_bot.tokens._resolve_encoding", lambda model: None)
+    tracker = ContextTokenTracker([Message(role="user", content="hi")], "unknown-model")
+    prompt, completion, total, estimated = tracker.snapshot()
+    assert prompt > 0
+    assert completion == 0
+    assert total == prompt
+    assert estimated is True
+
+    tracker.add_message(Message(role="assistant", content="hello"))
+    assert tracker.snapshot()[0] > prompt
+
+    tracker.add_inflight("thinking about it")
+    prompt2, completion2, total2, _ = tracker.snapshot()
+    assert completion2 > 0
+    assert total2 == prompt2 + completion2
+
+    tracker.set_exact(100, 20, False)
+    assert tracker.snapshot() == (100, 20, 120, False)
+
+    tracker.clear_inflight()
+    assert tracker.snapshot() == (100, 0, 100, False)
+
+
+def test_context_tracker_keeps_local_prompt_when_provider_reports_zero(monkeypatch):
+    monkeypatch.setattr("oli_bot.tokens._resolve_encoding", lambda model: None)
+    tracker = ContextTokenTracker([Message(role="user", content="hi")], "unknown-model")
+    prompt, _, _, _ = tracker.snapshot()
+
+    tracker.set_exact(0, 5, False)
+
+    assert tracker.snapshot() == (prompt, 5, prompt + 5, True)
+
 
 # --------------------------------------------------------------------------- #
 # OpenAI streaming                                                             #
@@ -216,6 +292,15 @@ class _NoUsageStub:
         yield TextChunk("plain text")
 
 
+class _ThinkingStub:
+    model = "stub"
+
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
+        yield ThinkingChunk("hmm")
+        yield TextChunk("done")
+        yield UsageChunk(Usage(prompt_tokens=4, completion_tokens=2))
+
+
 def _agent(backend) -> Agent:
     return Agent(
         role="default",
@@ -244,6 +329,13 @@ async def test_agent_emits_single_usage_event_summed_across_tool_iterations():
     assert not any(isinstance(e, UsageChunk) for e in events)
     assert any(isinstance(e, Done) for e in events)
 
+    token_events = [e for e in events if isinstance(e, TokenCount)]
+    phases = [e.phase for e in token_events]
+    assert phases[0] == "prompt"
+    assert "round" in phases
+    assert "tool_result" in phases
+    assert phases[-1] == "final"
+
 
 @pytest.mark.asyncio
 async def test_agent_emits_no_usage_event_when_backend_reports_none():
@@ -253,6 +345,24 @@ async def test_agent_emits_no_usage_event_when_backend_reports_none():
 
     assert not any(isinstance(e, UsageEvent) for e in events)
     assert any(isinstance(e, Done) for e in events)
+
+    token_events = [e for e in events if isinstance(e, TokenCount)]
+    assert token_events[0].phase == "prompt"
+    assert token_events[-1].phase == "final"
+
+
+@pytest.mark.asyncio
+async def test_agent_emits_token_count_when_thinking_finishes():
+    a = _agent(_ThinkingStub())
+    msgs = [Message(role="system", content="sys"), Message(role="user", content="hi")]
+    events = [ev async for ev in a.process(msgs)]
+
+    token_events = [e for e in events if isinstance(e, TokenCount)]
+    phases = [e.phase for e in token_events]
+    assert phases[0] == "prompt"
+    assert "thinking" in phases
+    assert "round" in phases
+    assert phases[-1] == "final"
 
 
 # --------------------------------------------------------------------------- #

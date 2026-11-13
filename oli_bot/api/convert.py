@@ -17,6 +17,7 @@ from ..models import (
     SubAgentProgress,
     SubAgentStarted,
     ThinkingChunk,
+    TokenCount,
     ToolCallExecuting,
     ToolCallResult,
     UsageEvent,
@@ -117,6 +118,17 @@ def _event_to_frame(event: "AgentEvent") -> Dict[str, Any]:
         }
     if isinstance(event, AssistantResponse):
         return {"type": "assistant_response", "data": {"content": event.content}}
+    if isinstance(event, TokenCount):
+        return {
+            "type": "token_count",
+            "data": {
+                "prompt_tokens": event.prompt_tokens,
+                "completion_tokens": event.completion_tokens,
+                "total_tokens": event.total_tokens,
+                "estimated": event.estimated,
+                "phase": event.phase,
+            },
+        }
     if isinstance(event, UsageEvent):
         return {"type": "usage", "data": dataclasses.asdict(event.usage)}
     if isinstance(event, Error):

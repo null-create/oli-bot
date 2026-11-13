@@ -21,7 +21,13 @@ import oli_bot.api_server as api_server
 from oli_bot.agent import Agent
 from oli_bot.config import AppConfig
 from oli_bot.mcp_client import MCPClientManager
-from oli_bot.models import TextChunk, ToolCall, ToolCallChunk
+from oli_bot.models import (
+    TextChunk,
+    ToolCall,
+    ToolCallChunk,
+    Usage,
+    UsageChunk,
+)
 from oli_bot.sessions import Session
 from oli_bot.tools.manager import BuiltinToolManager
 
@@ -32,6 +38,14 @@ class _TextStub:
     async def stream_generate(self, messages, tools=None, max_tokens=None):
         yield TextChunk("Hello ")
         yield TextChunk("from stub")
+
+
+class _UsageStub:
+    model = "stub-usage"
+
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
+        yield TextChunk("counted")
+        yield UsageChunk(Usage(prompt_tokens=7, completion_tokens=3))
 
 
 class _ToolThenTextStub:
@@ -267,6 +281,20 @@ def test_chat_completion_non_stream(api):
     assert body["usage"]["completion_tokens"] >= 1
 
 
+def test_chat_completion_reports_exact_usage(api):
+    api.reset(_UsageStub())
+    resp = api.client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["usage"] == {
+        "prompt_tokens": 7,
+        "completion_tokens": 3,
+        "total_tokens": 10,
+    }
+
+
 def test_chat_completion_tool_loop(api):
     api.reset(_ToolThenTextStub())
     # The first stream_generate yields a tool call, so the harness executes
@@ -398,6 +426,10 @@ def test_websocket_chat(api):
         frames = _recv_until_done(ws)
         types = [f["type"] for f in frames]
         assert "text_chunk" in types
+        assert "token_count" in types
+        token_frame = next(f for f in frames if f["type"] == "token_count")
+        assert token_frame["data"]["total_tokens"] > 0
+        assert token_frame["data"]["phase"] == "prompt"
         assert (
             "".join(f["data"]["text"] for f in frames if f["type"] == "text_chunk")
             == "Hello from stub"
@@ -433,11 +465,13 @@ def test_websocket_stateful_history(api):
         ws.send_json({"content": "first"})
         frames = _recv_until_done(ws)
         # stream_generate sees [system header, user1] on the first turn
-        assert frames[0]["data"]["text"] == "n=2"
+        text_frames = [f for f in frames if f["type"] == "text_chunk"]
+        assert text_frames[0]["data"]["text"] == "n=2"
         ws.send_json({"content": "second"})
         frames = _recv_until_done(ws)
         # system + user1 + assistant1 + user2 = 4 messages on the second turn
-        assert frames[0]["data"]["text"] == "n=4"
+        text_frames = [f for f in frames if f["type"] == "text_chunk"]
+        assert text_frames[0]["data"]["text"] == "n=4"
         assert probe.seen == [2, 4]
 
 
@@ -453,7 +487,8 @@ def test_websocket_clear(api):
         ws.send_json({"content": "after clear"})
         frames = _recv_until_done(ws)
         # history was reset: back down to system + user = 2 messages
-        assert frames[0]["data"]["text"] == "n=2"
+        text_frames = [f for f in frames if f["type"] == "text_chunk"]
+        assert text_frames[0]["data"]["text"] == "n=2"
         assert probe.seen == [2, 2]
 
 

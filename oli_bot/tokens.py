@@ -143,10 +143,19 @@ class ContextTokenTracker:
     def set_exact(
         self, prompt_tokens: int, completion_tokens: int, estimated: bool
     ) -> None:
-        """Adopt provider-reported counts for the completed model call."""
-        self._prompt_tokens = prompt_tokens
+        """Adopt provider-reported counts for the completed model call.
+
+        A provider that omits ``prompt_tokens`` (some OpenAI-compatible
+        servers report ``0`` while still reporting completions) must not wipe
+        out the locally counted context; keep the local count and flag the
+        snapshot as estimated in that case.
+        """
+        if prompt_tokens > 0:
+            self._prompt_tokens = prompt_tokens
+            self._estimated = estimated
+        else:
+            self._estimated = True
         self._exact_completion = completion_tokens
-        self._estimated = estimated
 
     def snapshot(self) -> Tuple[int, int, int, bool]:
         """Return ``(prompt, completion, total, estimated)`` for the current context."""

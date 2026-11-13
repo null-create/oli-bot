@@ -19,6 +19,7 @@ from oli_bot.models import (
     Message,
     StreamChunk,
     TextChunk,
+    TokenCount,
     ToolCall,
     ToolCallChunk,
     ToolCallExecuting,
@@ -152,11 +153,9 @@ async def test_text_only_response_yields_stream_then_done_with_full_text():
     dones = [e for e in events if isinstance(e, Done)]
 
     # Every StreamChunk fires before the terminal Done, no duplicates.
-    assert [type(e).__name__ for e in events] == [
-        "StreamChunk",
-        "StreamChunk",
-        "Done",
-    ]
+    # (TokenCount snapshots are interleaved by design and filtered here.)
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
+    assert kinds == ["StreamChunk", "StreamChunk", "Done"]
     assert "".join(e.text for e in stream_events) == "hello world"
     assert len(dones) == 1
     assert dones[0].full_text == "hello world"
@@ -227,7 +226,8 @@ async def test_tool_loop_event_ordering_and_synced_messages():
     events = await _run(a, msgs)
 
     # Exact ordering: tool executes → tool result → final text stream → done.
-    kinds = [type(e).__name__ for e in events]
+    # (TokenCount snapshots are interleaved by design and filtered here.)
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
     assert kinds == ["ToolCallExecuting", "ToolCallResult", "StreamChunk", "Done"]
 
     executing = next(e for e in events if isinstance(e, ToolCallExecuting))
@@ -466,11 +466,9 @@ async def test_chat_mode_skips_tool_loop_entirely():
     events = await _run(a, msgs)
 
     # Ordered, no duplicates: two stream chunks then exactly one Done.
-    assert [type(e).__name__ for e in events] == [
-        "StreamChunk",
-        "StreamChunk",
-        "Done",
-    ]
+    # (TokenCount snapshots are interleaved by design and filtered here.)
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
+    assert kinds == ["StreamChunk", "StreamChunk", "Done"]
     # Chat mode must NOT invoke MCP at all — the whole point of the mode.
     assert mcp.calls == []
     # Done carries the streamed text.
@@ -556,12 +554,11 @@ async def test_backend_exception_yields_error_then_done():
     a = _agent(_RaisingStub(RuntimeError("upstream 500")))
     events = await _run(a, [Message(role="user", content="hi")])
 
-    kinds = [type(e).__name__ for e in events]
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
     assert kinds == ["Error", "Done"]
 
-    err, done = events
-    assert isinstance(err, Error)
-    assert isinstance(done, Done)
+    err = next(e for e in events if isinstance(e, Error))
+    done = next(e for e in events if isinstance(e, Done))
     assert "upstream 500" in err.message
     # Done.full_text must be empty on error so the UI layer's "skip empty
     # assistant append" branch fires and the error text never poisons history.
@@ -608,10 +605,9 @@ async def test_tool_loop_timeout_yields_error_then_done_and_flips_generating_fla
     )
     events = await _run(a, [Message(role="user", content="hi")])
 
-    kinds = [type(e).__name__ for e in events]
+    kinds = [type(e).__name__ for e in events if not isinstance(e, TokenCount)]
     assert kinds == ["Error", "Done"]
-    err = events[0]
-    assert isinstance(err, Error)
+    err = next(e for e in events if isinstance(e, Error))
     assert "timed out" in err.message
 
     # Regression: the `finally` in process() must reset _generating even on

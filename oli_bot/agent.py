@@ -542,6 +542,8 @@ class Agent:
                 messages.append(
                     Message(role="tool", content=result, tool_call_id=tc.id)
                 )
+                tracker.add_message(messages[-1])
+                yield _token_count_event(tracker, "tool_result")
                 # Buffer image attachments until after all tool results land so
                 # the assistant->tool block stays contiguous for sanitize_tool_history.
                 drain = getattr(self.mcp_manager, "drain_builtin_attachments", None)
@@ -561,6 +563,8 @@ class Agent:
                         images=pending_images,
                     )
                 )
+                tracker.add_message(messages[-1])
+                yield _token_count_event(tracker, "tool_result")
 
     async def _run_dispatch_with_events(
         self,
@@ -624,12 +628,16 @@ class Agent:
         self,
         messages: List[Message],
         tools: Optional[List[Dict[str, Any]]] = None,
+        tracker: Optional[ContextTokenTracker] = None,
     ) -> AsyncIterator[AgentEvent]:
         full_response = ""
         errored = False
         usage = Usage()
         stream = None
         activity = TurnActivity()
+        if tracker is None:
+            tracker = ContextTokenTracker(messages, self.backend.model)
+        thinking_open = False
         try:
             # Forward tools so backends that require a matching tool schema
             # for any toolUse/toolResult blocks in history (e.g. Bedrock via
@@ -653,12 +661,24 @@ class Agent:
                 if isinstance(event, TextChunk):
                     activity.close_thinking_segment()
                     full_response += event.text
+                    tracker.add_inflight(event.text)
+                    if thinking_open:
+                        thinking_open = False
+                        yield _token_count_event(tracker, "thinking")
                     yield StreamChunk(event.text)
                 elif isinstance(event, ThinkingChunk):
+                    thinking_open = True
+                    tracker.add_inflight(event.text)
                     activity.add_thinking(event.text)
                     yield event
                 elif isinstance(event, UsageChunk):
                     usage = _merge_usage(usage, event.usage)
+                    tracker.set_exact(
+                        event.usage.prompt_tokens,
+                        event.usage.completion_tokens,
+                        event.usage.estimated,
+                    )
+                    yield _token_count_event(tracker, "round")
         except asyncio.TimeoutError:
             which = "first chunk" if _first_chunk else "inter-chunk gap"
             deadline = (
@@ -694,6 +714,7 @@ class Agent:
                     full_response = "The model completed all tool calls but did not produce a final summary."
                 if usage.total_tokens:
                     yield UsageEvent(usage=usage)
+                yield _token_count_event(tracker, "final")
                 yield Done(full_text=full_response, activity=activity.to_dict())
 
 
