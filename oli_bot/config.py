@@ -154,6 +154,11 @@ class AppConfig(BaseSettings):
     api_port: int = Field(default=9734)
     api_profile: str = Field(default="default")
     api_mode: str = Field(default="agent")
+    # WebSocket permission policy: "prompt" asks connected UIs, "auto" keeps
+    # the legacy auto-approve behaviour. REST endpoints always auto-approve.
+    api_permission_mode: str = Field(default="prompt")
+    # Seconds to wait for a WebSocket permission reply before denying.
+    api_permission_timeout: float = Field(default=120.0)
 
     # Default profile loaded on TUI startup (overridden by --profile CLI flag)
     default_profile: str = Field(default="default")

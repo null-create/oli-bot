@@ -474,6 +474,13 @@ class OliBot(App):
         self.workspace_manager = WorkspaceManager()
         self.current_session_id: str = ""
         self._last_tool_widget: Static | None = None
+        # Turn interruption (Ctrl+I): the active worker, the turn it belongs
+        # to, and the user message that must be restored to the input box.
+        self._response_worker: object | None = None
+        self._turn_id: int = 0
+        self._turn_user_index: int | None = None
+        self._turn_user_text: str = ""
+        self._interrupt_requested: int | None = None
         self._sub_runs: list[SubAgentRun] = []
         self._sub_tree_nodes: dict = {}
         self._sub_todo_nodes: dict[str, list] = {}  # task_id -> list of TreeNode
@@ -816,6 +823,19 @@ class OliBot(App):
             self._accept_command_suggestion(self._command_matches[idx])
 
     def on_key(self, event: events.Key) -> None:
+        # Ctrl+I is delivered as "tab" by terminals that cannot distinguish
+        # the two (and Textual aliases it), so accept both while generating.
+        # Escape is the universal fallback. Autocomplete owns Tab/Escape when
+        # its suggestion list is visible.
+        if (
+            not self._command_matches
+            and self._response_active()
+            and event.key in ("ctrl+i", "tab", "escape")
+        ):
+            self.action_interrupt()
+            event.stop()
+            event.prevent_default()
+            return
         if not self._command_matches:
             return
         suggestions = self.query_one("#command-suggestions", ListView)
@@ -919,6 +939,7 @@ class OliBot(App):
                 "  [bold]/home[/bold]                  — go to home screen\n"
                 "  [bold]/help[/bold]                  — show this message\n"
                 "  [bold]Ctrl+Q[/bold]                 — quit\n"
+                "  [bold]Ctrl+I[/bold]                 — interrupt the current response\n"
                 "  [bold]Ctrl+L[/bold]                 — clear",
             )
         elif cmd == "/clear":
@@ -2236,6 +2257,56 @@ class OliBot(App):
                 return
         self.notify("No message to copy", severity="warning", timeout=2)
 
+    def _response_active(self) -> bool:
+        worker = self._response_worker
+        if worker is not None and not getattr(worker, "is_finished", True):
+            return True
+        return bool(getattr(self.agent, "_generating", False))
+
+    def action_interrupt(self) -> None:
+        """Stop the in-flight response and put the prompt back in the input."""
+        if not self._response_active():
+            self.notify("No response to interrupt", severity="warning", timeout=2)
+            return
+
+        turn_id = self._turn_id
+        user_index = self._turn_user_index
+        user_text = self._turn_user_text
+        self._interrupt_requested = turn_id
+
+        # Dismiss any modal the turn is blocked on so the permission/question
+        # tool can unwind instead of keeping the worker alive.
+        screen = self.screen
+        if isinstance(screen, PermissionScreen):
+            screen.dismiss("deny")
+        elif isinstance(screen, QuestionScreen):
+            screen.dismiss(None)
+
+        worker = self._response_worker
+        if worker is not None:
+            try:
+                worker.cancel()
+            except Exception:
+                logger.warning("Failed to cancel response worker", exc_info=True)
+
+        if (
+            user_index is not None
+            and 0 <= user_index < len(self.messages)
+            and self.messages[user_index].role == "user"
+            and self.messages[user_index].content == user_text
+        ):
+            del self.messages[user_index:]
+            self._refresh_context_tokens()
+            self._save_session()
+
+        if user_text:
+            chat_input = self.query_one("#chat-input", Input)
+            chat_input.value = user_text
+            chat_input.disabled = False
+            chat_input.focus()
+
+        self.notify("Interrupted — prompt restored", timeout=2)
+
     # --- Message handling ---
 
     def _role_color(self, role: str) -> str:
@@ -2405,6 +2476,10 @@ class OliBot(App):
 
     def _handle_user_message(self, text: str) -> None:
         ts = datetime.now(timezone.utc).isoformat()
+        self._turn_id += 1
+        self._turn_user_index = len(self.messages)
+        self._turn_user_text = text
+        self._interrupt_requested = None
         self.messages.append(Message(role="user", content=text, timestamp=ts))
         self._refresh_context_tokens()
         chat_log = self.query_one("#chat-log")
@@ -2418,10 +2493,11 @@ class OliBot(App):
         static.plain_text = text
         chat_log.mount(static)
         chat_log.scroll_end(animate=False)
-        self._generate_response()
+        self._response_worker = self._generate_response()
 
     @work(exclusive=True)
     async def _generate_response(self) -> None:
+        turn_id = self._turn_id
         input_widget = self.query_one("#chat-input")
         input_widget.disabled = True
 
@@ -2509,10 +2585,13 @@ class OliBot(App):
 
         await start_spinner()
         turn_start = len(self.messages)
+        agen = self.agent.process(
+            self.messages, tools=tools, confirm_callback=self._permission_callback
+        )
         try:
-            async for event in self.agent.process(
-                self.messages, tools=tools, confirm_callback=self._permission_callback
-            ):
+            async for event in agen:
+                if self._interrupt_requested == turn_id:
+                    break
                 match event:
                     case ToolCallExecuting(name, parameters):
                         stop_spinner()
@@ -2559,7 +2638,10 @@ class OliBot(App):
                                 updated += f"\n  [dim]{result_text}[/dim]"
                             widget.update(updated)
                             widget.plain_text = updated
+                        self._last_tool_widget = None
                     case AssistantResponse(content):
+                        if self._interrupt_requested == turn_id:
+                            break
                         stop_spinner()
                         if think_widget is not None:
                             think_widget.title = "💭 Thinking"
@@ -2660,6 +2742,8 @@ class OliBot(App):
                         self.context_estimated = estimated
                         self.update_header()
                     case AgentDone(full_text, activity):
+                        if self._interrupt_requested == turn_id:
+                            break
                         stop_spinner()
                         if think_widget is not None:
                             think_widget.title = "💭 Thinking"
@@ -2668,6 +2752,8 @@ class OliBot(App):
                             msg_widget = Static(classes="message")
                             await chat_log.mount(msg_widget)
                             chat_log.scroll_end(animate=False)
+                        if self._interrupt_requested == turn_id:
+                            break
                         full_response = full_text
                         if not full_response and not _had_error:
                             # Only show the generic fallback when no more
@@ -2723,6 +2809,45 @@ class OliBot(App):
                 self.messages = sanitize_tool_history(pruned)
                 self._refresh_context_tokens()
         finally:
+            try:
+                await agen.aclose()
+            except (RuntimeError, asyncio.CancelledError):
+                logger.debug("Async generator close after interrupt failed")
+            if self._interrupt_requested == turn_id:
+                stop_spinner()
+                if think_widget is not None:
+                    think_widget.title = "💭 Thinking (interrupted)"
+                    think_widget.collapsed = True
+                if msg_widget is not None:
+                    try:
+                        assistant_color = self._role_color("Assistant")
+                        title = (
+                            f"[{assistant_color}]"
+                            f"{self._role_icon('Assistant')} Assistant "
+                            f"{ICON_SUCCESS} (interrupted)[/{assistant_color}]"
+                        )
+                        body = Markdown(
+                            (full_response + "\n\n*— interrupted —*")
+                            if full_response
+                            else "*— interrupted —*"
+                        )
+                        msg_widget.update(self._flat(body, title))
+                        msg_widget.plain_text = full_response
+                    except Exception:
+                        logger.warning("Failed to mark response as interrupted")
+                if self._last_tool_widget is not None:
+                    try:
+                        base = getattr(
+                            self._last_tool_widget, "_tool_base", "tool call"
+                        )
+                        self._last_tool_widget.update(
+                            f"[yellow]◐[/yellow] {base}  "
+                            "[dim]· interrupted[/dim]"
+                        )
+                    except Exception:
+                        logger.warning("Failed to mark tool call as interrupted")
+                    self._last_tool_widget = None
+                self._interrupt_requested = None
             self._save_session()
             stop_spinner()
             input_widget.disabled = False

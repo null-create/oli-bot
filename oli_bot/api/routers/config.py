@@ -4,74 +4,14 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 
-from ...settings import SettingsManager
+from ...settings import SETTINGS_FLAT_MAP, SettingsManager
 
 router = APIRouter(prefix="/v1/config", tags=["config"])
 
 # Mapping between the browser UI's flat ``OliConfig`` keys and the nested
-# settings.json format the ``SettingsManager`` persists.
-_FLAT_TO_NESTED = {
-    "backend": ("", "backend"),
-    "openai_api_key": ("openai", "api_key"),
-    "openai_base_url": ("openai", "base_url"),
-    "openai_model": ("openai", "large_model"),
-    "openai_small_model": ("openai", "small_model"),
-    "openai_vision_style": ("openai", "vision_style"),
-    "openai_optional_headers": ("openai", "optional_headers"),
-    "openai_responses_enabled": ("openai", "responses_enabled"),
-    "ollama_base_url": ("ollama", "base_url"),
-    "ollama_model": ("ollama", "large_model"),
-    "ollama_small_model": ("ollama", "small_model"),
-    "ollama_context_window": ("ollama", "context_window"),
-    "huggingface_base_url": ("huggingface", "base_url"),
-    "huggingface_api_key": ("huggingface", "api_key"),
-    "huggingface_model": ("huggingface", "large_model"),
-    "huggingface_small_model": ("huggingface", "small_model"),
-    "huggingface_remote": ("huggingface", "remote"),
-    "transformers_model": ("transformers", "model"),
-    "transformers_small_model": ("transformers", "small_model"),
-    "transformers_device": ("transformers", "device"),
-    "transformers_dtype": ("transformers", "dtype"),
-    "transformers_is_multi_model": ("transformers", "is_multi_model"),
-    "voice_whisper_model": ("voice", "whisper_model"),
-    "voice_piper_model": ("voice", "piper_model"),
-    "voice_sample_rate": ("voice", "sample_rate"),
-    "voice_frame_duration_ms": ("voice", "frame_duration_ms"),
-    "voice_vad_aggressiveness": ("voice", "vad_aggressiveness"),
-    "voice_silence_timeout_ms": ("voice", "silence_timeout_ms"),
-    "voice_max_record_seconds": ("voice", "max_record_seconds"),
-    "max_tokens": ("model_params", "max_tokens"),
-    "temperature": ("model_params", "temperature"),
-    "max_retries": ("model_params", "max_retries"),
-    "retry_delay": ("model_params", "retry_delay"),
-    "request_timeout": ("model_params", "request_timeout"),
-    "max_messages": ("model_params", "max_messages"),
-    "max_tool_iterations": ("model_params", "max_tool_iterations"),
-    "stream_timeout": ("model_params", "stream_timeout"),
-    "first_chunk_timeout": ("model_params", "first_chunk_timeout"),
-    "model_filters": ("model_params", "model_filters"),
-    "truncation_max_chars_small": ("model_params", "truncation_max_chars_small"),
-    "truncation_max_chars_large": ("model_params", "truncation_max_chars_large"),
-    "max_write_chars": ("model_params", "max_write_chars"),
-    "dry_run": ("model_params", "dry_run"),
-    "offline_mode": ("model_params", "offline_mode"),
-    "use_oauth": ("model_params", "use_oauth"),
-    "use_agent_pool": ("model_params", "use_agent_pool"),
-    "agent_pool_size": ("model_params", "agent_pool_size"),
-    "agents_yaml": ("model_params", "agents_yaml"),
-    "log_level": ("logging", "log_level"),
-    "log_file": ("logging", "log_file"),
-    "profiles_dir": ("paths", "profiles_dir"),
-    "logs_dir": ("paths", "logs_dir"),
-    "default_profile": ("session", "default_profile"),
-    "session_auto_save": ("session", "auto_save"),
-    "session_resume_prompt": ("session", "resume_prompt"),
-    "workspace_max_workspaces": ("workspace", "max_workspaces"),
-    "api_host": ("api_server", "host"),
-    "api_port": ("api_server", "port"),
-    "api_profile": ("api_server", "profile"),
-    "api_mode": ("api_server", "mode"),
-}
+# settings.json format the ``SettingsManager`` persists. Kept as a module
+# alias so existing imports/tests continue to work.
+_FLAT_TO_NESTED = SETTINGS_FLAT_MAP
 
 
 def _flat_to_nested(flat: Dict[str, Any], settings: Dict[str, Any]) -> Dict[str, Any]:

@@ -125,6 +125,13 @@ can pick up where you left off.
 | `/clear`                                                 | Clear the conversation                                                                   |
 | `/home`                                                  | Return to the home screen                                                                |
 | `Ctrl+Q` / `Ctrl+L` / `Ctrl+Y`                           | Quit / Clear / Copy last message                                                         |
+| `Ctrl+I` (or `Esc` while generating)                      | Interrupt the current response; the prompt is restored to the input box                  |
+
+## Interrupting a response
+
+Press `Ctrl+I` (or `Esc`) while the assistant is streaming or running tools to stop the turn. The partial response stays on screen marked `(interrupted)`, the originating user message is removed from history, and its text is restored to the input box so you can edit and resubmit. Shell commands started by the turn are killed, and a delegated `dispatch` fan-out is cancelled rather than left running in the background.
+
+> The Transformers backend cannot currently be interrupted mid-generation: its synchronous `TextIteratorStreamer` loop only observes cancellation once the current generation finishes. Local Transformers runs therefore stop at the next checkpoint, not instantly. Ollama, OpenAI, and HuggingFace backends cancel promptly.
 
 ## Voice mode (experimental)
 
@@ -207,9 +214,9 @@ It listens on `0.0.0.0:9734` by default (override with `OLI_API_HOST`/`OLI_API_P
 | `WS /v1/chat`                                     | Stateful WebSocket — per-connection history, relays every agent event as a typed JSON frame |
 | `GET /health`                                     | Liveness probe                                                                              |
 
-REST conversations are **stateless** (like real OpenAI): each `/v1/chat/completions` request carries its full message history. The server holds a single process-private `Agent` instance (backend, tool registrations, MCP wiring) shared across requests, and serializes concurrent in-flight requests in-process. Because there is no human to prompt at permission time, the API auto-allows permission scopes for the current request; offline and dry-run gating from `AppConfig` still apply.
+REST conversations are **stateless** (like real OpenAI): each `/v1/chat/completions` request carries its full message history. The server holds a single process-private `Agent` instance (backend, tool registrations, MCP wiring) shared across requests, and serializes concurrent in-flight requests in-process. Because a stateless REST request has no interactive channel to prompt at permission time, REST auto-allows permission scopes for the current request; offline and dry-run gating from `AppConfig` still apply.
 
-The `WS /v1/chat` WebSocket is the stateful counterpart for real-time browser UIs: the server keeps a per-connection `messages` history, so a client sends each next turn as `{"content": "..."}` and receives every `AgentEvent` back as a typed JSON frame (`text_chunk`/`thinking`/`tool_call_executing`/`tool_call_result`/`assistant_response`/`usage`/`error`/`done`), plus `sub_agent_started`/`sub_agent_progress`/`sub_agent_completed` and `todo` frames for delegated runs and live task lists; `{"action": "clear"}` resets the history. See [docs/API_SERVER.md](docs/API_SERVER.md) for the full frame reference.
+The `WS /v1/chat` WebSocket is the stateful counterpart for real-time browser UIs: the server keeps a per-connection `messages` history, so a client sends each next turn as `{"content": "..."}` and receives every `AgentEvent` back as a typed JSON frame (`text_chunk`/`thinking`/`tool_call_executing`/`tool_call_result`/`assistant_response`/`usage`/`error`/`done`), plus `sub_agent_started`/`sub_agent_progress`/`sub_agent_completed` and `todo` frames for delegated runs and live task lists. Unlike REST, the WebSocket **prompts for permission** by default: the server sends a `permission_request` frame and waits for `{"action": "permission_response", "id": ..., "decision": "once"|"session"|"deny"}` (120 s timeout → deny). Set `OLI_API_PERMISSION_MODE=auto` to restore the legacy auto-approve behaviour. `{"action": "clear"}` resets the history; `{"action": "interrupt"}` cancels the in-flight turn (the server emits `interrupted` then `done`, and rolls the partial user turn back out of history). See [docs/API_SERVER.md](docs/API_SERVER.md) for the full frame reference.
 
 ### curl
 
@@ -256,12 +263,14 @@ The `openai` SDK needs an `api_key`; pass a placeholder — the server does not 
 
 ### API configuration
 
-| Env var           | Default   | Description                                 |
-| ----------------- | --------- | ------------------------------------------- |
-| `OLI_API_HOST`    | `0.0.0.0` | Bind address                                |
-| `OLI_API_PORT`    | `9734`    | Listen port                                 |
-| `OLI_API_PROFILE` | `default` | Agent profile to load                       |
-| `OLI_API_MODE`    | `agent`   | Agent mode (`agent`, `ask`, `plan`, `chat`) |
+| Env var                     | Default   | Description                                                       |
+| --------------------------- | --------- | ----------------------------------------------------------------- |
+| `OLI_API_HOST`              | `0.0.0.0` | Bind address                                                      |
+| `OLI_API_PORT`              | `9734`    | Listen port                                                       |
+| `OLI_API_PROFILE`           | `default` | Agent profile to load                                             |
+| `OLI_API_MODE`              | `agent`   | Agent mode (`agent`, `ask`, `plan`, `chat`)                       |
+| `OLI_API_PERMISSION_MODE`   | `prompt`  | WebSocket permission policy: `prompt` (ask the client) or `auto`  |
+| `OLI_API_PERMISSION_TIMEOUT`| `120`     | Seconds to wait for a WebSocket permission reply before denying   |
 
 `max_tokens` / `temperature` request fields are accepted but best-effort: the agent tool loop reads them from `AppConfig` (configured via `OLI_*` env or `settings.json`).
 

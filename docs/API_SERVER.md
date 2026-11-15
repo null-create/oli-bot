@@ -72,10 +72,13 @@ with the same `OLI_*` env vars / `settings.json` the TUI uses.
   across `await` points. Concurrent requests queue. (A threading lock would not
   work: it is per-thread reentrant, and all coroutines sharing the event loop
   run on the same thread.)
-- **No human in the loop** — the permission confirm-callback auto-defaults to
-  `"session"` for every scope (the REST equivalent of the TUI's "Allow for
-  session"). Offline mode and dry-run gating from `AppConfig` still apply
-  unchanged.
+- **Permission handling** — REST has no interactive channel, so its confirm
+  callback auto-defaults to `"session"` for every scope (the REST equivalent of
+  the TUI's "Allow for session"). The stateful WebSocket does have a channel, so
+  it prompts the client by default (`permission_request` → `permission_response`)
+  and denies on timeout. Offline mode and dry-run gating from `AppConfig` still
+  apply unchanged on both surfaces. Set `OLI_API_PERMISSION_MODE=auto` to restore
+  auto-approval for WebSocket clients too.
 
 ## Endpoints
 
@@ -251,6 +254,9 @@ A stateful WebSocket for real-time browser UIs. The server maintains a
 per-connection `messages` history, so a client sends each next user turn as
 `{"content": "..."}` and receives every `AgentEvent` back as a typed JSON frame.
 `{"action": "clear"}` resets the per-connection history.
+`{"action": "interrupt"}` cancels the in-flight turn: the server emits an
+`interrupted` frame followed by `done`, and rolls the partial user turn back out
+of the history so the client can resubmit it.
 
 The server sends a `{"type": "connected"}` frame on accept, then one frame per
 inbound message:
@@ -265,12 +271,46 @@ inbound message:
 | `token_count`         | `{"prompt_tokens", "completion_tokens", "total_tokens", "estimated", "phase"}` — live context snapshot (`phase` is `prompt`/`thinking`/`round`/`tool_result`/`final`) |
 | `usage`               | `{"prompt_tokens": ..., "completion_tokens": ..., ...}`        |
 | `error`               | `{"message": "..."}`                                           |
-| `done`                | `{"full_text": "..."}` — run finished                          |
+| `interrupted`         | `{"full_text": "..."}` — partial text when a turn is interrupted |
+| `done`                | `{"full_text": "...", "interrupted": true?}` — run finished     |
 | `cleared`             | `{}` — history reset (reply to `action: clear`)                |
+| `permission_request`  | `{"id", "description", "options", "default", "timeout"}` — reply required |
+| `permission_timeout`  | `{"id"}` — the prompt timed out and resolved to deny           |
 | `sub_agent_started`   | `{"task_id", "agent_name", "pool_name", "task"}`               |
 | `sub_agent_progress`  | `{"task_id", "agent_name", "activity", "status"}`              |
 | `sub_agent_completed` | `{"task_id", "agent_name", "status", "full_text"}`             |
 | `todo`                | `{"todos": [...]}` (root) or with `task_id`/`agent_name` (sub) |
+
+#### Permissions
+
+By default (`api_server.permission_mode = "prompt"`), a permission-gated tool
+sends:
+
+```json
+{
+  "type": "permission_request",
+  "data": {
+    "id": "perm-…",
+    "description": "Write to /path/file.txt",
+    "options": ["once", "session", "deny"],
+    "default": "deny",
+    "timeout": 120.0
+  }
+}
+```
+
+The client replies with:
+
+```json
+{"action": "permission_response", "id": "perm-…", "decision": "once"}
+```
+
+`once` allows just this call, `session` grants the scope for the rest of the
+server process, and `deny` (the timeout default) returns a permission error to
+the model. An unknown/expired `id` or an invalid decision produces an `error`
+frame. Set `OLI_API_PERMISSION_MODE=auto` to skip prompts entirely. The pending
+prompt holds the process-wide agent lock, so all other turns queue until the
+client answers or the timeout elapses.
 
 Sub-agent activity is relayed live while a `dispatch` tool call is in flight:
 frames carry the same shape as above (`text_chunk`, `tool_call_executing`,
@@ -294,9 +334,18 @@ async def main():
                 break
             if frame["type"] == "text_chunk":
                 print(frame["data"]["text"], end="")
+            elif frame["type"] == "permission_request":
+                prompt = frame["data"]
+                print("\nPERMISSION:", prompt["description"])
+                await ws.send(json.dumps({
+                    "action": "permission_response",
+                    "id": prompt["id"],
+                    "decision": "deny",  # or "once" / "session"
+                }))
             elif frame["type"] == "error":
                 print("ERROR:", frame["data"]["message"])
     # clear with: await ws.send(json.dumps({"action": "clear"}))
+    # interrupt with: await ws.send(json.dumps({"action": "interrupt"}))
 
 asyncio.run(main())
 ```
@@ -314,7 +363,8 @@ field shape (`openai_model`, `truncation_max_chars_small`, `api_port`, ...).
 `GET /v1/config` returns the current flat config — one key per
 `settings.json` leaf, so every setting the TUI's `/config` screen edits is
 reachable here (`session_*`, `workspace_max_workspaces`, `ollama_context_window`,
-`first_chunk_timeout`, `openai_responses_enabled`, ...):
+`first_chunk_timeout`, `openai_responses_enabled`, `api_permission_mode`,
+`api_permission_timeout`, ...):
 
 ```bash
 curl http://localhost:9734/v1/config
@@ -325,7 +375,9 @@ curl http://localhost:9734/v1/config
   "backend": "ollama",
   "ollama_model": "llama3.1",
   "temperature": 0.7,
-  "api_port": 9734
+  "api_port": 9734,
+  "api_permission_mode": "prompt",
+  "api_permission_timeout": 120.0
 }
 ```
 
@@ -448,9 +500,10 @@ is what the TUI's `/profile load` does.
 
 - **Workspace** — the agent's workspace defaults to the process CWD unless the
   CWD is a sensitive path (see `is_sensitive_path` in
-  [`sessions.py`](../oli_bot/sessions.py)). File and shell tools that touch paths
-  outside the workspace are auto-approved in API mode but still respect
-  offline/dry-run gating.
+  [`sessions.py`](../oli_bot/sessions.py)). REST requests auto-approve file and
+  shell tools that touch paths outside the workspace; WebSocket clients receive
+  a `permission_request` instead (unless `api_permission_mode = "auto"`). Both
+  surfaces still respect offline/dry-run gating.
 - **Modes** — in `ask` / `plan` modes only read-only tools are exposed (plus
   MCP limits per mode); in `chat` mode no tools are offered at all. The mode also
   shapes the system prompt, exactly as in the TUI.
@@ -461,5 +514,10 @@ is what the TUI's `/profile load` does.
 - **Concurrency** — requests are serialized on a process-wide lock; there is no
   horizontal multiplexing. For concurrent consumers, run multiple `oli-server`
   processes.
+- **Interrupts** — `{"action": "interrupt"}` cancels the in-flight turn, kills
+  shell subprocesses started by it, and cancels a delegated `dispatch` fan-out.
+  The partial user turn is rolled back and the client receives `interrupted`
+  followed by `done` (`interrupted: true`). The local Transformers backend only
+  observes cancellation after its current generation pass finishes.
 - **Logging** — the server writes NDJSON to `AppConfig.log_file` via the shared
   logger in [`logger.py`](../oli_bot/logger.py).

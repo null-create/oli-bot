@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
 import re
 import shlex
+import signal
 from pathlib import Path
 from typing import Optional
 
 from .manager import BuiltinToolManager
+
+logger = logging.getLogger(__name__)
 
 # Filesystem read + navigation (no writers here — see DENIED_ARGS for `find -delete` etc.).
 _ALLOWED_FILESYSTEM_READ: frozenset[str] = frozenset(
@@ -780,20 +785,41 @@ async def _run_command_handler(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(cwd) if cwd else None,
+            # Run in its own process group so cancellation can reap the whole
+            # pipeline, not just the shell that spawned it.
+            start_new_session=(os.name == "posix"),
         )
     except FileNotFoundError as e:
         return f"Error: Command not found: {e}"
     except OSError as e:
         return f"Error: Failed to execute command: {e}"
 
+    async def _kill_and_reap() -> None:
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except (ProcessLookupError, PermissionError):
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+        try:
+            await proc.wait()
+        except Exception:
+            logger.debug("Failed to reap cancelled subprocess", exc_info=True)
+
     try:
         stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
-        try:
-            proc.kill()
-        except ProcessLookupError:
-            pass
+        await _kill_and_reap()
         return f"Error: Command timed out after {timeout} seconds."
+    except asyncio.CancelledError:
+        # Ctrl+I / WebSocket interrupt: never leave the child running once
+        # the tool call is abandoned.
+        await _kill_and_reap()
+        raise
 
     stdout = stdout_b.decode("utf-8", errors="replace") if stdout_b else ""
     stderr = stderr_b.decode("utf-8", errors="replace") if stderr_b else ""

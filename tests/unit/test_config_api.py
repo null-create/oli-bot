@@ -66,6 +66,8 @@ def test_get_returns_session_workspace_and_backend_extras(client):
     assert data["workspace_max_workspaces"] == 20
     assert data["use_oauth"] is False
     assert data["agents_yaml"] == ""
+    assert data["api_permission_mode"] == "prompt"
+    assert data["api_permission_timeout"] == 120.0
 
 
 def test_put_persists_new_keys(tmp_path, client):
@@ -77,6 +79,8 @@ def test_put_persists_new_keys(tmp_path, client):
         "session_auto_save": False,
         "session_resume_prompt": False,
         "workspace_max_workspaces": 5,
+        "api_permission_mode": "auto",
+        "api_permission_timeout": 30.0,
     }
     res = client.put("/v1/config", json=payload)
     assert res.status_code == 200
@@ -94,6 +98,8 @@ def test_put_persists_new_keys(tmp_path, client):
         "default_profile": "researcher",
     }
     assert saved["workspace"] == {"max_workspaces": 5}
+    assert saved["api_server"]["permission_mode"] == "auto"
+    assert saved["api_server"]["permission_timeout"] == 30.0
 
     fetched = client.get("/v1/config").json()
     for key, value in payload.items():

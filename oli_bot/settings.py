@@ -71,6 +71,10 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "port": 9734,
         "profile": "default",
         "mode": "agent",
+        # WebSocket permission policy: "prompt" asks the UI, "auto" keeps the
+        # legacy auto-approve behaviour. REST endpoints always auto-approve.
+        "permission_mode": "prompt",
+        "permission_timeout": 120.0,
     },
     "paths": {
         "profiles_dir": "profiles",
@@ -93,6 +97,74 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "silence_timeout_ms": 800,
         "max_record_seconds": 15,
     },
+}
+
+# Single source of truth for the flat -> nested settings.json mapping shared by
+# the browser UI's ``/v1/config`` routes and the TUI ``/config`` screen.
+# ``(group, key)`` with an empty group denotes a top-level setting.
+SETTINGS_FLAT_MAP: dict[str, tuple[str, str]] = {
+    "backend": ("", "backend"),
+    "openai_api_key": ("openai", "api_key"),
+    "openai_base_url": ("openai", "base_url"),
+    "openai_model": ("openai", "large_model"),
+    "openai_small_model": ("openai", "small_model"),
+    "openai_vision_style": ("openai", "vision_style"),
+    "openai_optional_headers": ("openai", "optional_headers"),
+    "openai_responses_enabled": ("openai", "responses_enabled"),
+    "ollama_base_url": ("ollama", "base_url"),
+    "ollama_model": ("ollama", "large_model"),
+    "ollama_small_model": ("ollama", "small_model"),
+    "ollama_context_window": ("ollama", "context_window"),
+    "huggingface_base_url": ("huggingface", "base_url"),
+    "huggingface_api_key": ("huggingface", "api_key"),
+    "huggingface_model": ("huggingface", "large_model"),
+    "huggingface_small_model": ("huggingface", "small_model"),
+    "huggingface_remote": ("huggingface", "remote"),
+    "transformers_model": ("transformers", "model"),
+    "transformers_small_model": ("transformers", "small_model"),
+    "transformers_device": ("transformers", "device"),
+    "transformers_dtype": ("transformers", "dtype"),
+    "transformers_is_multi_model": ("transformers", "is_multi_model"),
+    "voice_whisper_model": ("voice", "whisper_model"),
+    "voice_piper_model": ("voice", "piper_model"),
+    "voice_sample_rate": ("voice", "sample_rate"),
+    "voice_frame_duration_ms": ("voice", "frame_duration_ms"),
+    "voice_vad_aggressiveness": ("voice", "vad_aggressiveness"),
+    "voice_silence_timeout_ms": ("voice", "silence_timeout_ms"),
+    "voice_max_record_seconds": ("voice", "max_record_seconds"),
+    "max_tokens": ("model_params", "max_tokens"),
+    "temperature": ("model_params", "temperature"),
+    "max_retries": ("model_params", "max_retries"),
+    "retry_delay": ("model_params", "retry_delay"),
+    "request_timeout": ("model_params", "request_timeout"),
+    "max_messages": ("model_params", "max_messages"),
+    "max_tool_iterations": ("model_params", "max_tool_iterations"),
+    "stream_timeout": ("model_params", "stream_timeout"),
+    "first_chunk_timeout": ("model_params", "first_chunk_timeout"),
+    "model_filters": ("model_params", "model_filters"),
+    "truncation_max_chars_small": ("model_params", "truncation_max_chars_small"),
+    "truncation_max_chars_large": ("model_params", "truncation_max_chars_large"),
+    "max_write_chars": ("model_params", "max_write_chars"),
+    "dry_run": ("model_params", "dry_run"),
+    "offline_mode": ("model_params", "offline_mode"),
+    "use_oauth": ("model_params", "use_oauth"),
+    "use_agent_pool": ("model_params", "use_agent_pool"),
+    "agent_pool_size": ("model_params", "agent_pool_size"),
+    "agents_yaml": ("model_params", "agents_yaml"),
+    "log_level": ("logging", "log_level"),
+    "log_file": ("logging", "log_file"),
+    "profiles_dir": ("paths", "profiles_dir"),
+    "logs_dir": ("paths", "logs_dir"),
+    "default_profile": ("session", "default_profile"),
+    "session_auto_save": ("session", "auto_save"),
+    "session_resume_prompt": ("session", "resume_prompt"),
+    "workspace_max_workspaces": ("workspace", "max_workspaces"),
+    "api_host": ("api_server", "host"),
+    "api_port": ("api_server", "port"),
+    "api_profile": ("api_server", "profile"),
+    "api_mode": ("api_server", "mode"),
+    "api_permission_mode": ("api_server", "permission_mode"),
+    "api_permission_timeout": ("api_server", "permission_timeout"),
 }
 
 # Mapping: env var -> dot-separated path into settings dict
@@ -144,6 +216,8 @@ ENV_TO_SETTINGS: dict[str, str] = {
     "OLI_API_PORT": "api_server.port",
     "OLI_API_PROFILE": "api_server.profile",
     "OLI_API_MODE": "api_server.mode",
+    "OLI_API_PERMISSION_MODE": "api_server.permission_mode",
+    "OLI_API_PERMISSION_TIMEOUT": "api_server.permission_timeout",
     "OLI_DEFAULT_PROFILE": "session.default_profile",
     "OLI_PROFILES_DIR": "paths.profiles_dir",
     "OLI_LOGS_DIR": "paths.logs_dir",
@@ -367,6 +441,8 @@ class SettingsManager:
             api_port=api.get("port", 9734),
             api_profile=api.get("profile", "default"),
             api_mode=api.get("mode", "agent"),
+            api_permission_mode=api.get("permission_mode", "prompt"),
+            api_permission_timeout=api.get("permission_timeout", 120.0),
             default_profile=ss.get("default_profile", "default"),
             profiles_dir=paths.get("profiles_dir", "profiles"),
             logs_dir=paths.get("logs_dir", "logs"),
@@ -433,6 +509,8 @@ class SettingsManager:
         settings["api_server"]["port"] = config.api_port
         settings["api_server"]["profile"] = config.api_profile
         settings["api_server"]["mode"] = config.api_mode
+        settings["api_server"]["permission_mode"] = config.api_permission_mode
+        settings["api_server"]["permission_timeout"] = config.api_permission_timeout
         settings["session"]["default_profile"] = config.default_profile
         settings["paths"]["profiles_dir"] = config.profiles_dir
         settings["paths"]["logs_dir"] = config.logs_dir
