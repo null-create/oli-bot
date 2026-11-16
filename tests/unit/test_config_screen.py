@@ -3,6 +3,13 @@
 from textual.app import App
 
 from oli_bot.screens import ConfigScreen
+from oli_bot.screens.config_screen import CONFIG_FIELDS
+from oli_bot.settings import SETTINGS_FLAT_MAP
+
+
+def test_config_fields_cover_every_setting():
+    """Every flat setting must have a control in the /config screen."""
+    assert set(CONFIG_FIELDS) == set(SETTINGS_FLAT_MAP)
 
 
 def _settings() -> dict:
@@ -199,3 +206,56 @@ async def test_config_screen_save_round_trips_new_sections():
         assert result["paths"]["logs_dir"] == "L"
         assert result["session"]["auto_save"] is False
         assert result["session"]["resume_prompt"] is False
+
+
+async def test_config_screen_round_trips_openai_responses_and_timeouts():
+    settings = _settings()
+    settings["openai"]["responses_enabled"] = True
+    settings["model_params"] = {
+        "stream_timeout": 111.0,
+        "first_chunk_timeout": 222.0,
+    }
+    app = _HostApp(settings)
+    async with app.run_test() as pilot:
+        screen = app.screen
+        assert screen.query_one("#cfg-openai-responses").value is True
+        assert screen.query_one("#cfg-stream-timeout").value == "111.0"
+        assert screen.query_one("#cfg-first-chunk-timeout").value == "222.0"
+        screen._save()
+        await pilot.pause()
+        result = app.result
+        assert result["openai"]["responses_enabled"] is True
+        assert result["model_params"]["stream_timeout"] == 111.0
+        assert result["model_params"]["first_chunk_timeout"] == 222.0
+
+
+async def test_config_screen_round_trips_api_permission_settings():
+    settings = _settings()
+    settings["api_server"] = {
+        "permission_mode": "auto",
+        "permission_timeout": 15.0,
+    }
+    app = _HostApp(settings)
+    async with app.run_test() as pilot:
+        screen = app.screen
+        assert screen.query_one("#cfg-api-permission-mode").value == "auto"
+        assert screen.query_one("#cfg-api-permission-timeout").value == "15.0"
+        screen._save()
+        await pilot.pause()
+        api = app.result["api_server"]
+        assert api["permission_mode"] == "auto"
+        assert api["permission_timeout"] == 15.0
+
+
+async def test_config_screen_preserves_unknown_settings():
+    settings = _settings()
+    settings["future_section"] = {"enabled": True}
+    settings["model_params"]["future_param"] = 42
+    app = _HostApp(settings)
+    async with app.run_test() as pilot:
+        screen = app.screen
+        screen._save()
+        await pilot.pause()
+        result = app.result
+        assert result["future_section"] == {"enabled": True}
+        assert result["model_params"]["future_param"] == 42

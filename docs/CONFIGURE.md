@@ -48,7 +48,8 @@ If `~/.config/oli/settings.json` does not exist, it is auto-created on first loa
 | `request_timeout`            | `30.0`                                 | `OLI_REQUEST_TIMEOUT`          | HTTP request timeout (seconds)                                                                                                                    |
 | `max_messages`               | `100`                                  | `OLI_MAX_MESSAGES`             | Auto-prune chat history when message count exceeds this                                                                                           |
 | `max_tool_iterations`        | `25`                                   | `OLI_MAX_TOOL_ITERATIONS`      | Max tool-calling rounds per response                                                                                                              |
-| `stream_timeout`             | `240.0`                                | `OLI_STREAM_TIMEOUT`           | Seconds before streaming response times out                                                                                                       |
+| `stream_timeout`             | `300.0`                                | `OLI_STREAM_TIMEOUT`           | Seconds of inactivity before a streaming response times out                                                                                       |
+| `first_chunk_timeout`        | `600.0`                                | `OLI_FIRST_CHUNK_TIMEOUT`      | Seconds to wait for the first streamed chunk (large local models can cold-start slowly)                                                           |
 | `model_filters`              | `""`                                   | `OLI_MODEL_FILTERS`            | Comma-separated model name exclusion filters                                                                                                      |
 | `truncation_max_chars_small` | `4000`                                 | `OLI_TRUNCATION_SMALL`         | Max chars for tool results under the small model tier                                                                                             |
 | `truncation_max_chars_large` | `100000`                               | `OLI_TRUNCATION_LARGE`         | Max chars for tool results under the large model tier                                                                                             |
@@ -66,6 +67,15 @@ If `~/.config/oli/settings.json` does not exist, it is auto-created on first loa
 | `voice_vad_aggressiveness`   | `2`                                    | `OLI_VOICE_VAD_AGGRESSIVENESS` | WebRTC VAD aggressiveness `0`–`3`; higher rejects more noise                                                                                      |
 | `voice_silence_timeout_ms`   | `800`                                  | `OLI_VOICE_SILENCE_TIMEOUT_MS` | Stop recording after this much consecutive silence                                                                                                |
 | `voice_max_record_seconds`   | `15`                                   | `OLI_VOICE_MAX_RECORD_SECONDS` | Hard cap on a single recording                                                                                                                    |
+| `api_host`                   | `0.0.0.0`                              | `OLI_API_HOST`                 | `oli-server` bind address                                                                                                                         |
+| `api_port`                   | `9734`                                 | `OLI_API_PORT`                 | `oli-server` listen port                                                                                                                          |
+| `api_profile`                | `default`                              | `OLI_API_PROFILE`              | Profile loaded by `oli-server`                                                                                                                    |
+| `api_mode`                   | `agent`                                | `OLI_API_MODE`                 | Agent mode for `oli-server` (`agent`, `ask`, `plan`, `chat`)                                                                                      |
+| `api_permission_mode`        | `prompt`                               | `OLI_API_PERMISSION_MODE`      | WebSocket permission policy: `prompt` asks the client; `auto` keeps the legacy auto-approve behaviour. REST always auto-approves.                 |
+| `api_permission_timeout`     | `120.0`                                | `OLI_API_PERMISSION_TIMEOUT`   | Seconds to wait for a WebSocket `permission_response` before denying                                                                              |
+
+> The `/config` screen renders every setting above, and `GET/PUT /v1/config`
+> exposes the same flat field names for browser clients.
 
 ## Quick examples
 

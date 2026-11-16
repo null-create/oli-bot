@@ -113,9 +113,14 @@ Agent pooling introduces a second execution context, and it inherits the permiss
 
 ## API server trust model
 
-The OpenAI-compatible API server (`oli-server`) removes the human from the permission loop by necessity — there's no terminal to prompt. Consequently, **the API server auto-allows permission scopes for the current request.** Offline mode and dry-run gating from `AppConfig` still apply and are not bypassed, but the interactive allow/deny/session-grant system described above does not run in this mode.
+The OpenAI-compatible API server (`oli-server`) exposes two surfaces with different permission behaviour:
 
-This has a direct implication for any surface you place in front of the API server: **the API server's security boundary is "whoever can reach this port," not "whoever clicks allow."** If you expose `oli-server` to anything beyond localhost — a container network, a reverse proxy, a chat platform integration — the profile loaded via `OLI_API_PROFILE` is the only thing standing between an inbound request and full tool access at that profile's permission ceiling. Treat the profile bound to the API server the way you'd treat a service account: give it the minimum tool surface the intended use case requires, not the default profile's full access.
+- **REST (`/v1/chat/completions`)** is stateless and has no interactive channel, so it **auto-allows permission scopes for the current request.** Offline mode and dry-run gating from `AppConfig` still apply and are not bypassed.
+- **WebSocket (`/v1/chat`)** has a live client, so it **prompts for permission by default** using the same `once` / `session` / `deny` choices as the TUI. The server sends a `permission_request` frame and waits for a `permission_response`; an absent or old client cannot silently auto-approve because the prompt times out (default 120 s) to **deny**. `api_server.permission_mode = "auto"` (`OLI_API_PERMISSION_MODE=auto`) restores the legacy auto-approve behaviour when a trusted UI/front-end has no permission handling.
+
+This still has a direct implication for any surface you place in front of the API server: **the API server's security boundary is "whoever can reach this port," not "whoever clicks allow."** If you expose `oli-server` to anything beyond localhost — a container network, a reverse proxy, a chat platform integration — the profile loaded via `OLI_API_PROFILE` is the only thing standing between an inbound REST request and full tool access at that profile's permission ceiling. Treat the profile bound to the API server the way you'd treat a service account: give it the minimum tool surface the intended use case requires, not the default profile's full access. For WebSocket clients, also keep `permission_mode = "prompt"` unless the front-end is fully trusted and deliberately opts into auto-approval.
+
+Because the server shares one process-private `Agent`, a pending WebSocket permission prompt holds the process-wide agent lock until the client answers or the timeout denies it. Concurrent REST/WebSocket turns queue behind that lock. Keep the permission timeout short for untrusted clients.
 
 ## Known limitations
 
@@ -126,6 +131,8 @@ Stated plainly, so nobody discovers these the hard way:
 - **No egress/data-sensitivity control yet.** `agents.yaml` currently has no field governing what data is allowed to leave a given backend or agent.
 - **No audit log of cross-boundary data flow.** There is currently no way to retroactively answer "what did a remote backend ever see," beyond reading session history manually.
 - **Session permission grants are process-lifetime only.** They are not persisted, but they are also not scoped more narrowly than "the rest of this process" — a session-granted tool stays granted for every subsequent call in that TUI process, not just the current task.
+- **Transformers backend cancellation is not instant.** Ctrl+I / WebSocket interrupt cancels the surrounding task, but the local Transformers backend's synchronous `TextIteratorStreamer` loop only observes cancellation after the current generation finishes. Ollama, OpenAI, and HuggingFace backends cancel promptly; shell subprocesses and dispatch fan-outs are killed/cancelled immediately.
+- **API auto-approval can still be turned back on.** `api_server.permission_mode = "auto"` restores the pre-prompt behaviour for all WebSocket clients. Treat that setting as equivalent to exposing the port with no human gate.
 
 ## Verifying this yourself
 
@@ -135,3 +142,4 @@ Because a permission system is only as trustworthy as its weakest untested path,
 2. **Sensitive-file check:** point `read_file` at a `.env` file inside an approved workspace and confirm it still prompts, rather than silently succeeding because the path is "trusted."
 3. **SSRF check:** attempt a `fetch` against `http://169.254.169.254` and confirm it's rejected, rather than assuming the guard covers it.
 4. **API server exposure check:** confirm whatever profile `OLI_API_PROFILE` points to has a permission manifest appropriate for "anyone who can reach this port," not the default profile, before exposing the server beyond localhost.
+5. **WebSocket permission check:** connect a client, ask it to write a file, and confirm a `permission_request` arrives and a missing/ignored reply resolves to `deny` after the configured timeout. Repeat with `OLI_API_PERMISSION_MODE=auto` only if you deliberately want auto-approval.

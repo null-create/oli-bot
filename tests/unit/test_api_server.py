@@ -152,6 +152,75 @@ class _MessageProbeStub:
         yield TextChunk("ok")
 
 
+class _PermissionWriteStub:
+    """First round asks to write a file (always permission-gated)."""
+
+    model = "stub-permission"
+
+    def __init__(self, path):
+        self.path = str(path)
+        self.calls = 0
+
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
+        self.calls += 1
+        if self.calls == 1:
+            yield ToolCallChunk(
+                [
+                    ToolCall(
+                        id="p1",
+                        name="builtin__write_file",
+                        parameters={"file_path": self.path, "content": "x"},
+                    )
+                ]
+            )
+        else:
+            yield TextChunk("write handled")
+
+
+class _AutoReadStub:
+    """First round reads a file; auto permission mode must allow it."""
+
+    model = "stub-auto-read"
+
+    def __init__(self, path, contents):
+        self.path = str(path)
+        self.contents = contents
+        self.calls = 0
+
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
+        self.calls += 1
+        if self.calls == 1:
+            yield ToolCallChunk(
+                [
+                    ToolCall(
+                        id="r1",
+                        name="builtin__read_file",
+                        parameters={"file_path": self.path},
+                    )
+                ]
+            )
+        else:
+            yield TextChunk("read handled")
+
+
+class _SlowStub:
+    """Streams one chunk, stalls, then streams another unless interrupted."""
+
+    model = "stub-slow"
+
+    def __init__(self):
+        self.calls = 0
+
+    async def stream_generate(self, messages, tools=None, max_tokens=None):
+        self.calls += 1
+        if self.calls == 1:
+            yield TextChunk("part1")
+            await asyncio.sleep(5)
+            yield TextChunk("part2")
+        else:
+            yield TextChunk("after interrupt")
+
+
 class _StubMCP:
     async def call_tool(self, name, params, confirm_callback=None, **kwargs):
         return "result-of-echo"
@@ -635,6 +704,122 @@ def test_websocket_bad_attachment_keeps_connection(api, tmp_path):
         assert frame["type"] == "error"
         ws.send_json({"content": "hi"})
         assert _recv_until_done(ws)[-1]["type"] == "done"
+
+
+# --------------------------------------------------------------------------- #
+# /v1/chat (WebSocket) — permissions and interruption                          #
+# --------------------------------------------------------------------------- #
+
+
+def _set_permission_config(api, mode="prompt", timeout=5.0):
+    api.application.state.config = AppConfig(
+        _env_file=None,
+        backend="ollama",
+        api_permission_mode=mode,
+        api_permission_timeout=timeout,
+    )
+
+
+def _recv_until(ws, frame_type):
+    frames = []
+    while True:
+        frame = ws.receive_json()
+        frames.append(frame)
+        if frame.get("type") == frame_type:
+            return frames
+
+
+def test_websocket_permission_prompt_and_deny(api, tmp_path):
+    api.reset(_PermissionWriteStub(tmp_path / "written.txt"))
+    _set_permission_config(api)
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "write it"})
+        frames = _recv_until(ws, "permission_request")
+        request = frames[-1]["data"]
+        assert "Write to" in request["description"]
+        assert request["options"] == ["once", "session", "deny"]
+        assert request["default"] == "deny"
+
+        # Invalid decisions are rejected without resolving the prompt.
+        ws.send_json(
+            {
+                "action": "permission_response",
+                "id": request["id"],
+                "decision": "maybe",
+            }
+        )
+        error = ws.receive_json()
+        assert error["type"] == "error"
+        assert "Invalid permission decision" in error["data"]["message"]
+
+        ws.send_json(
+            {
+                "action": "permission_response",
+                "id": request["id"],
+                "decision": "deny",
+            }
+        )
+        frames = _recv_until_done(ws)
+    types = [f["type"] for f in frames]
+    assert "tool_call_result" in types
+    result = next(f for f in frames if f["type"] == "tool_call_result")
+    assert "Permission denied" in result["data"]["result"]
+    assert frames[-1]["data"]["full_text"] == "write handled"
+    assert not (tmp_path / "written.txt").exists()
+
+
+def test_websocket_permission_timeout_denies(api, tmp_path):
+    api.reset(_PermissionWriteStub(tmp_path / "written.txt"))
+    _set_permission_config(api, timeout=0.05)
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "write it"})
+        frames = _recv_until_done(ws)
+    types = [f["type"] for f in frames]
+    assert "permission_request" in types
+    assert "permission_timeout" in types
+    result = next(f for f in frames if f["type"] == "tool_call_result")
+    assert "Permission denied" in result["data"]["result"]
+
+
+def test_websocket_permission_auto_mode(api, tmp_path):
+    path = tmp_path / "readme.txt"
+    path.write_text("auto-allowed contents", encoding="utf-8")
+    api.reset(_AutoReadStub(path, "auto-allowed contents"))
+    _set_permission_config(api, mode="auto")
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "read it"})
+        frames = _recv_until_done(ws)
+    types = [f["type"] for f in frames]
+    assert "permission_request" not in types
+    result = next(f for f in frames if f["type"] == "tool_call_result")
+    assert "auto-allowed contents" in result["data"]["result"]
+    assert frames[-1]["data"]["full_text"] == "read handled"
+
+
+def test_websocket_interrupt_rolls_back_turn(api):
+    api.reset(_SlowStub())
+    _set_permission_config(api)
+    with api.client.websocket_connect("/v1/chat") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json({"content": "slow please"})
+        frames = _recv_until(ws, "text_chunk")
+        assert frames[-1]["data"]["text"] == "part1"
+
+        ws.send_json({"action": "interrupt"})
+        frames = _recv_until_done(ws)
+        types = [f["type"] for f in frames]
+        assert "interrupted" in types
+        done = frames[-1]
+        assert done["type"] == "done"
+        assert done["data"]["interrupted"] is True
+        assert done["data"]["full_text"] == "part1"
+
+        # The connection remains usable after an interrupt.
+        ws.send_json({"content": "again"})
+        assert _recv_until_done(ws)[-1]["data"]["full_text"] == "after interrupt"
 
 
 # --------------------------------------------------------------------------- #

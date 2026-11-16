@@ -594,6 +594,7 @@ class Agent:
                 permission_enforcer=self.permission_enforcer,
             )
         )
+        getter: Optional[asyncio.Task] = None
         try:
             while not task.done() or not queue.empty():
                 getter = asyncio.create_task(queue.get())
@@ -602,6 +603,7 @@ class Agent:
                 )
                 if getter in done:
                     event = getter.result()
+                    getter = None
                     if isinstance(
                         event,
                         (
@@ -620,8 +622,23 @@ class Agent:
                         await getter
                     except (asyncio.CancelledError, Exception):
                         pass
+                    getter = None
         finally:
             self.mcp_manager.sub_agent_queue = None
+            # Cancellation (Ctrl+I / WebSocket interrupt) or an early
+            # ``aclose()`` must not leave the dispatch fan-out running.
+            if getter is not None and not getter.done():
+                getter.cancel()
+                try:
+                    await getter
+                except (asyncio.CancelledError, Exception):
+                    pass
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
         result_holder[0] = task.result()
 
     async def _final_stream(

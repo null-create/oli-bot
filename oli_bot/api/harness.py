@@ -6,9 +6,10 @@ for agent pooling.
 """
 
 import logging
+from contextvars import ContextVar, Token
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Optional
 
 from ..agent import Agent, AgentPool, run_agent_dispatch
 from ..backends import ModelBackend, create_model_backend
@@ -69,8 +70,29 @@ def _build_agent(config: AppConfig, mode: str, profile: str) -> Agent:
 
 
 async def _api_confirm(description: str) -> str:
-    """Auto-allow every permission scope (API mode has no interactive prompt)."""
+    """Auto-allow every permission scope (REST mode has no interactive prompt)."""
     return "session"
+
+
+# The active turn's confirm callback. The WebSocket endpoint sets this to its
+# permission broker before running the agent; the dispatch handler resolves it
+# lazily so sub-agents inherit the same prompt channel. REST leaves it unset
+# and falls back to ``_api_confirm``.
+_ACTIVE_CONFIRM: ContextVar[Optional[Callable[[str], Any]]] = ContextVar(
+    "oli_api_active_confirm", default=None
+)
+
+
+def set_active_confirm(callback: Optional[Callable[[str], Any]]) -> Token:
+    return _ACTIVE_CONFIRM.set(callback)
+
+
+def reset_active_confirm(token: Token) -> None:
+    _ACTIVE_CONFIRM.reset(token)
+
+
+def get_active_confirm() -> Callable[[str], Any]:
+    return _ACTIVE_CONFIRM.get() or _api_confirm
 
 
 # Note: the ``builtin__question`` tool needs an interactive human. The API
@@ -138,7 +160,7 @@ def make_dispatch_handler(agent: Agent, pool: AgentPool) -> Callable[[List[dict]
             pool=pool,
             runs=runs,
             tools=sub_tools,
-            confirm_callback=_api_confirm,
+            confirm_callback=get_active_confirm(),
             event_sink=agent.mcp_manager.sub_agent_queue,
         )
 

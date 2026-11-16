@@ -7,6 +7,74 @@ from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, RadioButton, RadioSet
 
+# Flat setting key -> widget selector. Kept in lockstep with
+# ``oli_bot.settings.SETTINGS_FLAT_MAP`` by a unit test so a new setting
+# cannot ship without a control.
+CONFIG_FIELDS: dict[str, str] = {
+    "backend": "#config-backend",
+    "openai_api_key": "#cfg-openai-api-key",
+    "openai_base_url": "#cfg-openai-base-url",
+    "openai_model": "#cfg-openai-large-model",
+    "openai_small_model": "#cfg-openai-small-model",
+    "openai_vision_style": "#cfg-openai-vision-style",
+    "openai_optional_headers": "#cfg-openai-optional-headers",
+    "openai_responses_enabled": "#cfg-openai-responses",
+    "ollama_base_url": "#cfg-ollama-base-url",
+    "ollama_model": "#cfg-ollama-large-model",
+    "ollama_small_model": "#cfg-ollama-small-model",
+    "ollama_context_window": "#cfg-ollama-ctx-size",
+    "huggingface_base_url": "#cfg-hf-base-url",
+    "huggingface_api_key": "#cfg-hf-api-key",
+    "huggingface_model": "#cfg-hf-large-model",
+    "huggingface_small_model": "#cfg-hf-small-model",
+    "huggingface_remote": "#cfg-hf-remote",
+    "transformers_model": "#cfg-tr-model",
+    "transformers_small_model": "#cfg-tr-small-model",
+    "transformers_device": "#cfg-tr-device",
+    "transformers_dtype": "#cfg-tr-dtype",
+    "transformers_is_multi_model": "#cfg-tr-is-multi-model",
+    "voice_whisper_model": "#cfg-voice-whisper-model",
+    "voice_piper_model": "#cfg-voice-piper-model",
+    "voice_sample_rate": "#cfg-voice-sample-rate",
+    "voice_frame_duration_ms": "#cfg-voice-frame-duration-ms",
+    "voice_vad_aggressiveness": "#cfg-voice-vad-aggressiveness",
+    "voice_silence_timeout_ms": "#cfg-voice-silence-timeout-ms",
+    "voice_max_record_seconds": "#cfg-voice-max-record-seconds",
+    "max_tokens": "#cfg-max-tokens",
+    "temperature": "#cfg-temperature",
+    "max_retries": "#cfg-max-retries",
+    "retry_delay": "#cfg-retry-delay",
+    "request_timeout": "#cfg-request-timeout",
+    "max_messages": "#cfg-max-messages",
+    "max_tool_iterations": "#cfg-max-tool-iterations",
+    "stream_timeout": "#cfg-stream-timeout",
+    "first_chunk_timeout": "#cfg-first-chunk-timeout",
+    "model_filters": "#cfg-model-filters",
+    "truncation_max_chars_small": "#cfg-truncation-small",
+    "truncation_max_chars_large": "#cfg-truncation-large",
+    "max_write_chars": "#cfg-max-write-chars",
+    "dry_run": "#cfg-dry-run",
+    "offline_mode": "#cfg-offline-mode",
+    "use_oauth": "#cfg-use-oauth",
+    "use_agent_pool": "#cfg-use-agent-pool",
+    "agent_pool_size": "#cfg-agent-pool-size",
+    "agents_yaml": "#cfg-agents-yaml",
+    "log_level": "#cfg-log-level",
+    "log_file": "#cfg-log-file",
+    "profiles_dir": "#cfg-profiles-dir",
+    "logs_dir": "#cfg-logs-dir",
+    "default_profile": "#cfg-default-profile",
+    "session_auto_save": "#cfg-auto-save",
+    "session_resume_prompt": "#cfg-resume-prompt",
+    "workspace_max_workspaces": "#cfg-max-workspaces",
+    "api_host": "#cfg-api-host",
+    "api_port": "#cfg-api-port",
+    "api_profile": "#cfg-api-profile",
+    "api_mode": "#cfg-api-mode",
+    "api_permission_mode": "#cfg-api-permission-mode",
+    "api_permission_timeout": "#cfg-api-permission-timeout",
+}
+
 
 class ConfigScreen(ModalScreen[dict | None]):
     """Configure model params, backend, models, workspace, and session settings."""
@@ -173,6 +241,11 @@ class ConfigScreen(ModalScreen[dict | None]):
                         classes="config-input",
                         value=json.dumps(op.get("optional_headers", {})),
                     )
+                    yield Checkbox(
+                        "Use the OpenAI Responses API (/v1/responses)",
+                        id="cfg-openai-responses",
+                        value=bool(op.get("responses_enabled", False)),
+                    )
 
                 yield Label(
                     "Ollama", id="ollama-section-title", classes="section-title"
@@ -322,10 +395,16 @@ class ConfigScreen(ModalScreen[dict | None]):
                     value=str(mp.get("max_tool_iterations", 25)),
                 )
                 yield Input(
-                    placeholder=f"Stream timeout ({mp.get('stream_timeout', 240.0)})",
+                    placeholder=f"Stream timeout ({mp.get('stream_timeout', 300.0)})",
                     id="cfg-stream-timeout",
                     classes="config-input",
-                    value=str(mp.get("stream_timeout", 240.0)),
+                    value=str(mp.get("stream_timeout", 300.0)),
+                )
+                yield Input(
+                    placeholder=f"First chunk timeout ({mp.get('first_chunk_timeout', 600.0)})",
+                    id="cfg-first-chunk-timeout",
+                    classes="config-input",
+                    value=str(mp.get("first_chunk_timeout", 600.0)),
                 )
                 yield Input(
                     placeholder="Model filters (comma-sep, e.g. :cloud,-cloud)",
@@ -482,6 +561,21 @@ class ConfigScreen(ModalScreen[dict | None]):
                     classes="config-input",
                     value=api.get("mode", "agent"),
                 )
+                yield Label(
+                    "Permission prompt mode (prompt or auto)", classes="config-label"
+                )
+                yield Input(
+                    placeholder=f"Permission mode ({api.get('permission_mode', 'prompt')})",
+                    id="cfg-api-permission-mode",
+                    classes="config-input",
+                    value=api.get("permission_mode", "prompt"),
+                )
+                yield Input(
+                    placeholder=f"Permission timeout seconds ({api.get('permission_timeout', 120.0)})",
+                    id="cfg-api-permission-timeout",
+                    classes="config-input",
+                    value=str(api.get("permission_timeout", 120.0)),
+                )
 
                 paths = s.get("paths", {})
                 yield Label("Paths", classes="section-title")
@@ -589,6 +683,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "small_model": self._val("#cfg-openai-small-model"),
                 "vision_style": vision_style,
                 "optional_headers": self._json("#cfg-openai-optional-headers"),
+                "responses_enabled": self._bool("#cfg-openai-responses"),
             },
             "ollama": {
                 "base_url": self._val("#cfg-ollama-base-url"),
@@ -618,7 +713,8 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "request_timeout": self._float("#cfg-request-timeout", 30.0),
                 "max_messages": self._int("#cfg-max-messages", 100),
                 "max_tool_iterations": self._int("#cfg-max-tool-iterations", 25),
-                "stream_timeout": self._float("#cfg-stream-timeout", 240.0),
+                "stream_timeout": self._float("#cfg-stream-timeout", 300.0),
+                "first_chunk_timeout": self._float("#cfg-first-chunk-timeout", 600.0),
                 "model_filters": self._val("#cfg-model-filters"),
                 "truncation_max_chars_small": self._int("#cfg-truncation-small", 4000),
                 "truncation_max_chars_large": self._int(
@@ -641,6 +737,8 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "port": self._int("#cfg-api-port", 9734),
                 "profile": self._val("#cfg-api-profile"),
                 "mode": self._val("#cfg-api-mode"),
+                "permission_mode": self._val("#cfg-api-permission-mode"),
+                "permission_timeout": self._float("#cfg-api-permission-timeout", 120.0),
             },
             "paths": {
                 "profiles_dir": self._val("#cfg-profiles-dir"),
@@ -664,6 +762,17 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "default_profile": self._val("#cfg-default-profile"),
             },
         }
+        # Preserve settings this form does not know about (e.g. a newer
+        # settings.json written by another client) instead of silently
+        # dropping them when the user clicks Save.
+        for section, values in self._settings.items():
+            if isinstance(values, dict):
+                target = settings.setdefault(section, {})
+                if isinstance(target, dict):
+                    for key, value in values.items():
+                        target.setdefault(key, value)
+            else:
+                settings.setdefault(section, values)
         self.dismiss(settings)
 
     def _val(self, selector: str) -> str:
