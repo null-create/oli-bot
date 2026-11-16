@@ -762,7 +762,10 @@ class OliBot(App):
         status = Table.grid(expand=True)
         status.add_column(ratio=1)
         status.add_column(justify="right")
-        hints = "[dim]^Q[/dim] quit   [dim]^L[/dim] clear   [dim]^Y[/dim] copy"
+        hints = (
+            "[dim]^Q[/dim] quit   [dim]^I[/dim] interrupt   "
+            "[dim]^L[/dim] clear   [dim]^Y[/dim] copy"
+        )
         info = (
             f"{self._status_badges()}  {model_part} "
             f"[dim]:: {self.agent.profile_name}{server_part}[/dim]"
