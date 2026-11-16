@@ -2263,6 +2263,28 @@ class OliBot(App):
             return True
         return bool(getattr(self.agent, "_generating", False))
 
+    def _rollback_interrupted_turn(self, turn_id: int) -> bool:
+        """Drop the interrupted turn's user message and persist the rollback.
+
+        Guarded by the turn id so a superseding turn — which may have taken
+        the same message index — is never clobbered. Returns whether anything
+        was removed.
+        """
+        if self._turn_id != turn_id:
+            return False
+        user_index = self._turn_user_index
+        if (
+            user_index is None
+            or not (0 <= user_index < len(self.messages))
+            or self.messages[user_index].role != "user"
+            or self.messages[user_index].content != self._turn_user_text
+        ):
+            return False
+        del self.messages[user_index:]
+        self._refresh_context_tokens()
+        self._save_session()
+        return True
+
     def action_interrupt(self) -> None:
         """Stop the in-flight response and put the prompt back in the input."""
         if not self._response_active():
@@ -2270,7 +2292,6 @@ class OliBot(App):
             return
 
         turn_id = self._turn_id
-        user_index = self._turn_user_index
         user_text = self._turn_user_text
         self._interrupt_requested = turn_id
 
@@ -2289,15 +2310,7 @@ class OliBot(App):
             except Exception:
                 logger.warning("Failed to cancel response worker", exc_info=True)
 
-        if (
-            user_index is not None
-            and 0 <= user_index < len(self.messages)
-            and self.messages[user_index].role == "user"
-            and self.messages[user_index].content == user_text
-        ):
-            del self.messages[user_index:]
-            self._refresh_context_tokens()
-            self._save_session()
+        self._rollback_interrupted_turn(turn_id)
 
         if user_text:
             chat_input = self.query_one("#chat-input", Input)
@@ -2841,8 +2854,7 @@ class OliBot(App):
                             self._last_tool_widget, "_tool_base", "tool call"
                         )
                         self._last_tool_widget.update(
-                            f"[yellow]◐[/yellow] {base}  "
-                            "[dim]· interrupted[/dim]"
+                            f"[yellow]◐[/yellow] {base}  [dim]· interrupted[/dim]"
                         )
                     except Exception:
                         logger.warning("Failed to mark tool call as interrupted")

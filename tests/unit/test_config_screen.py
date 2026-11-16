@@ -259,4 +259,3 @@ async def test_config_screen_preserves_unknown_settings():
         result = app.result
         assert result["future_section"] == {"enabled": True}
         assert result["model_params"]["future_param"] == 42
-

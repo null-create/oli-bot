@@ -71,9 +71,7 @@ async def _run_turn(
                         await send({"type": "todo", "data": todo_data})
                     if isinstance(event, UsageEvent):
                         total_tokens += event.usage.total_tokens
-                        tokens_estimated = (
-                            tokens_estimated or event.usage.estimated
-                        )
+                        tokens_estimated = tokens_estimated or event.usage.estimated
                     elif isinstance(event, StreamChunk):
                         partial_text += event.text
                     elif isinstance(event, AssistantResponse):
@@ -99,9 +97,7 @@ async def _run_turn(
                                 )
                                 if new_id != connection_session_id:
                                     connection_session_id = new_id
-                                    await send(
-                                        _session_created_frame(store, new_id)
-                                    )
+                                    await send(_session_created_frame(store, new_id))
                             except Exception as e:
                                 logger.warning(
                                     "Failed to persist session %s: %s",
@@ -193,9 +189,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 logger.debug("WebSocket send failed: %s", exc)
 
     broker = PermissionBroker(send, timeout=permission_timeout)
-    confirm_callback = (
-        _api_confirm if permission_mode == "auto" else broker.request
-    )
+    confirm_callback = _api_confirm if permission_mode == "auto" else broker.request
 
     messages: List[Message] = []
     connection_session_id = ""
@@ -223,9 +217,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
                         store, agent, str(requested_session)
                     )
                     if connection_session_id != str(requested_session):
-                        await send(
-                            _session_created_frame(store, connection_session_id)
-                        )
+                        await send(_session_created_frame(store, connection_session_id))
                 except Exception as e:
                     logger.exception("Failed to load session %s", requested_session)
                     await send({"type": "error", "data": {"message": str(e)}})
@@ -253,9 +245,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 return
 
             user_index = len(messages)
-            messages.append(
-                Message(role="user", content=text, images=user_images)
-            )
+            messages.append(Message(role="user", content=text, images=user_images))
             connection_session_id = await _run_turn(
                 agent,
                 lock,
@@ -302,9 +292,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
             if action == "permission_response":
                 request_id = data.get("id")
                 decision = data.get("decision")
-                if not isinstance(request_id, str) or not isinstance(
-                    decision, str
-                ):
+                if not isinstance(request_id, str) or not isinstance(decision, str):
                     await send(
                         {
                             "type": "error",
@@ -327,9 +315,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
                         {
                             "type": "error",
                             "data": {
-                                "message": (
-                                    "Unknown or expired permission request id"
-                                )
+                                "message": ("Unknown or expired permission request id")
                             },
                         }
                     )
@@ -355,9 +341,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
                     await send(
                         {
                             "type": "error",
-                            "data": {
-                                "message": "Cannot clear while a turn is running"
-                            },
+                            "data": {"message": "Cannot clear while a turn is running"},
                         }
                     )
                     continue
@@ -371,9 +355,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
                                 store, agent, connection_session_id, [], 0, False
                             )
                         except Exception as e:
-                            logger.warning(
-                                "Failed to clear persisted session: %s", e
-                            )
+                            logger.warning("Failed to clear persisted session: %s", e)
                             new_id = connection_session_id
                         if new_id != connection_session_id:
                             connection_session_id = new_id

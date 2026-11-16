@@ -7,7 +7,6 @@ from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, RadioButton, RadioSet
 
-
 # Flat setting key -> widget selector. Kept in lockstep with
 # ``oli_bot.settings.SETTINGS_FLAT_MAP`` by a unit test so a new setting
 # cannot ship without a control.
@@ -562,7 +561,9 @@ class ConfigScreen(ModalScreen[dict | None]):
                     classes="config-input",
                     value=api.get("mode", "agent"),
                 )
-                yield Label("Permission prompt mode (prompt or auto)", classes="config-label")
+                yield Label(
+                    "Permission prompt mode (prompt or auto)", classes="config-label"
+                )
                 yield Input(
                     placeholder=f"Permission mode ({api.get('permission_mode', 'prompt')})",
                     id="cfg-api-permission-mode",
@@ -713,9 +714,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "max_messages": self._int("#cfg-max-messages", 100),
                 "max_tool_iterations": self._int("#cfg-max-tool-iterations", 25),
                 "stream_timeout": self._float("#cfg-stream-timeout", 300.0),
-                "first_chunk_timeout": self._float(
-                    "#cfg-first-chunk-timeout", 600.0
-                ),
+                "first_chunk_timeout": self._float("#cfg-first-chunk-timeout", 600.0),
                 "model_filters": self._val("#cfg-model-filters"),
                 "truncation_max_chars_small": self._int("#cfg-truncation-small", 4000),
                 "truncation_max_chars_large": self._int(
@@ -739,9 +738,7 @@ class ConfigScreen(ModalScreen[dict | None]):
                 "profile": self._val("#cfg-api-profile"),
                 "mode": self._val("#cfg-api-mode"),
                 "permission_mode": self._val("#cfg-api-permission-mode"),
-                "permission_timeout": self._float(
-                    "#cfg-api-permission-timeout", 120.0
-                ),
+                "permission_timeout": self._float("#cfg-api-permission-timeout", 120.0),
             },
             "paths": {
                 "profiles_dir": self._val("#cfg-profiles-dir"),

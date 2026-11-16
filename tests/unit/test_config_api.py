@@ -34,7 +34,9 @@ def test_flat_mapping_covers_every_default_setting():
     invisible to ``GET/PUT /v1/config``."""
     defaults = _leaf_paths(DEFAULT_SETTINGS)
     mapped = _mapped_paths()
-    assert mapped == defaults, f"unmapped: {defaults - mapped}; stale: {mapped - defaults}"
+    assert (
+        mapped == defaults
+    ), f"unmapped: {defaults - mapped}; stale: {mapped - defaults}"
 
 
 def test_flat_to_nested_and_back_round_trips():
