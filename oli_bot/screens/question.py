@@ -4,10 +4,24 @@ from typing import List, Optional
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
+from textual.geometry import Size
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, RadioButton, RadioSet
 
 from ..tools.question import _resolve_recommended
+
+
+class WrappingRadioButton(RadioButton):
+    """A ``RadioButton`` whose label wraps instead of being ellipsized.
+
+    Textual's ``ToggleButton`` (the base of ``RadioButton``) hardcodes
+    ``get_content_height()`` to 1 and defaults to ``nowrap``/``ellipsis``, so
+    long option text is clipped. Overriding the content height from the wrapped
+    render lets the option grow to as many lines as it needs.
+    """
+
+    def get_content_height(self, container: Size, viewport: Size, width: int) -> int:
+        return max(1, len(self.render().wrap(width)))
 
 
 class QuestionScreen(ModalScreen[str | None]):
@@ -24,7 +38,8 @@ class QuestionScreen(ModalScreen[str | None]):
     #question-container {
         width: 90%;
         max-width: 78;
-        height: 80%;
+        height: auto;
+        max-height: 90%;
         border: round $primary;
         background: $surface;
         padding: 1;
@@ -48,10 +63,14 @@ class QuestionScreen(ModalScreen[str | None]):
     .question-text {
         text-style: bold;
         width: 1fr;
+        text-wrap: wrap;
+        text-overflow: fold;
     }
     .question-meta {
         color: $text-muted;
         width: 1fr;
+        text-wrap: wrap;
+        text-overflow: fold;
     }
     RadioSet {
         margin: 0 0 1 0;
@@ -60,6 +79,11 @@ class QuestionScreen(ModalScreen[str | None]):
     }
     RadioSet:focus {
         border: round $primary;
+    }
+    WrappingRadioButton {
+        text-wrap: wrap;
+        text-overflow: fold;
+        height: auto;
     }
     .question-own-input {
         margin: 1 0 1 0;
@@ -89,6 +113,7 @@ class QuestionScreen(ModalScreen[str | None]):
                         yield Label(
                             f"{i + 1}. {q.get('question', '')}",
                             classes="question-text",
+                            markup=False,
                         )
                         if q.get("options"):
                             idx, freeform = _resolve_recommended(
@@ -98,10 +123,11 @@ class QuestionScreen(ModalScreen[str | None]):
                                 yield Label(
                                     f"[Recommended action: {freeform}]",
                                     classes="question-meta",
+                                    markup=False,
                                 )
                             yield RadioSet(
                                 *[
-                                    RadioButton(
+                                    WrappingRadioButton(
                                         str(opt),
                                         id=f"q{i}-opt{j}",
                                     )
