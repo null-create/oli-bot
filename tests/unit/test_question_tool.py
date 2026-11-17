@@ -215,3 +215,45 @@ async def test_question_screen_cancel_returns_none():
         await pilot.press("escape")
         await pilot.pause()
     assert app.result is None
+
+
+# ---------- full question/option text is visible --------------------------------
+
+
+async def test_question_screen_preserves_bracketed_text():
+    question = "Pick [A]/[B] or [1] then press [Enter] to confirm"
+    app = _QuestionHost([{"question": question}])
+    async with app.run_test():
+        label = app.screen.query_one(".question-text")
+        rendered = str(label.render())
+        for token in ("[A]", "[B]", "[1]", "[Enter]"):
+            assert token in rendered
+        assert f"1. {question}" == rendered
+
+
+async def test_question_screen_wraps_long_question():
+    question = "Long question " + "with a great deal of context " * 8
+    app = _QuestionHost([{"question": question}])
+    async with app.run_test(size=(60, 30)):
+        label = app.screen.query_one(".question-text")
+        assert label.size.height > 1
+        assert str(label.render()) == f"1. {question}"
+
+
+async def test_question_screen_wraps_long_option():
+    option = "No, wait until the replicas are fully upgraded and tested in staging first"
+    app = _QuestionHost([{"question": "Proceed?", "options": [option, "Yes"]}])
+    async with app.run_test(size=(60, 30)):
+        radio = app.screen.query_one("#q0-opt0")
+        assert radio.size.height > 1, "long option should wrap onto multiple lines"
+        assert option in str(radio.render())
+
+
+async def test_question_screen_result_keeps_full_bracketed_question():
+    question = "Pick [A]/[B] or choose option [3]?"
+    app = _QuestionHost([{"question": question}])
+    async with app.run_test() as pilot:
+        await pilot.click("#question-confirm")
+        await pilot.pause()
+    assert app.result is not None
+    assert f"Question 1: {question}" in app.result
